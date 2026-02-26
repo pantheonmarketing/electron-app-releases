@@ -136,30 +136,103 @@ app.use(express.static(path.join(BASE_DIR, 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 // ── Health check — detect installed tools ──
+function checkTool(cmd) {
+  try {
+    const out = execSync(cmd, { stdio: 'pipe', timeout: 8000, windowsHide: true, encoding: 'utf-8' });
+    return { ok: true, version: out.trim().split('\n')[0].slice(0, 80) };
+  } catch { return { ok: false }; }
+}
+
 app.get('/api/health', (req, res) => {
   const checks = {};
 
-  // ffmpeg
-  try {
-    execSync(`${FFMPEG_BIN} -version`, { stdio: 'pipe', timeout: 5000, windowsHide: true });
-    checks.ffmpeg = true;
-  } catch { checks.ffmpeg = false; }
+  // ffmpeg (bundled)
+  checks.ffmpeg = checkTool(`${FFMPEG_BIN} -version`).ok;
 
-  // whisper (--help crashes on Windows due to encoding, so just check if binary exists)
-  try {
-    execSync(process.platform === 'win32' ? 'where whisper' : 'which whisper', { stdio: 'pipe', timeout: 5000, windowsHide: true });
-    checks.whisper = true;
-  } catch { checks.whisper = false; }
+  // python
+  checks.python = checkTool('python --version').ok;
+
+  // faster-whisper
+  checks.whisper = checkTool('python -c "import faster_whisper; print(faster_whisper.__version__)"').ok;
 
   // claude CLI
-  try {
-    execSync('claude --version', { stdio: 'pipe', timeout: 5000, windowsHide: true });
-    checks.claude = true;
-  } catch { checks.claude = false; }
+  checks.claude = checkTool('claude --version').ok;
 
-  checks.all_good = checks.ffmpeg && checks.whisper && checks.claude;
+  // yt-dlp (for video transcription)
+  checks.ytdlp = checkTool('yt-dlp --version').ok;
+
+  checks.all_good = checks.ffmpeg && checks.python && checks.whisper && checks.claude && checks.ytdlp;
   checks.version = require('./package.json').version;
   res.json(checks);
+});
+
+// ── Detailed setup check — returns versions + install status ──
+app.get('/api/setup/check', (req, res) => {
+  const deps = {};
+
+  // Python
+  const py = checkTool('python --version');
+  deps.python = { installed: py.ok, version: py.version || null, required: true,
+    description: 'Required for AI transcription',
+    installUrl: 'https://www.python.org/downloads/' };
+
+  // Claude CLI
+  const cl = checkTool('claude --version');
+  deps.claude = { installed: cl.ok, version: cl.version || null, required: true,
+    description: 'Required for AI task generation',
+    installUrl: 'https://claude.ai/download' };
+
+  // faster-whisper (pip)
+  const fw = checkTool('python -c "import faster_whisper; print(faster_whisper.__version__)"');
+  deps.faster_whisper = { installed: fw.ok, version: fw.version || null, required: false,
+    description: 'Fast AI transcription (for Scripter)',
+    pipPackage: 'faster-whisper' };
+
+  // yt-dlp (pip)
+  const yt = checkTool('yt-dlp --version');
+  deps.ytdlp = { installed: yt.ok, version: yt.version || null, required: false,
+    description: 'Download videos from TikTok, YouTube, etc.',
+    pipPackage: 'yt-dlp' };
+
+  // ffmpeg (bundled)
+  const ff = checkTool(`${FFMPEG_BIN} -version`);
+  deps.ffmpeg = { installed: ff.ok, version: ff.version || null, required: true,
+    description: 'Video/audio processing (bundled)', bundled: true };
+
+  const allRequired = deps.python.installed && deps.claude.installed && deps.ffmpeg.installed;
+  const allOptional = deps.faster_whisper.installed && deps.ytdlp.installed;
+
+  res.json({ deps, allRequired, allOptional, allGood: allRequired && allOptional });
+});
+
+// ── Install a pip package ──
+app.post('/api/setup/install', express.json(), async (req, res) => {
+  const { package: pkg } = req.body;
+  const allowed = ['faster-whisper', 'yt-dlp'];
+  if (!pkg || !allowed.includes(pkg)) {
+    return res.status(400).json({ ok: false, error: `Invalid package. Allowed: ${allowed.join(', ')}` });
+  }
+
+  console.log(`[Setup] Installing ${pkg}...`);
+
+  const runCmd = (cmd, opts) => new Promise((resolve, reject) => {
+    const { exec: execCb } = require('child_process');
+    execCb(cmd, opts, (err, stdout, stderr) => {
+      if (err) { err.stderr = stderr; err.stdout = stdout; return reject(err); }
+      resolve({ stdout, stderr });
+    });
+  });
+
+  try {
+    const { stdout, stderr } = await runCmd(`pip install ${pkg}`, {
+      shell: true, encoding: 'utf-8', timeout: 120 * 1000, windowsHide: true
+    });
+    console.log(`[Setup] ${pkg} installed successfully`);
+    res.json({ ok: true, package: pkg, output: stdout.slice(-500) });
+  } catch (err) {
+    console.error(`[Setup] Failed to install ${pkg}:`, err.message?.slice(0, 200));
+    res.status(500).json({ ok: false, error: `Failed to install ${pkg}`, details: (err.stderr || err.message).slice(0, 500) });
+  }
 });
 
 // Mark first-run setup as complete
@@ -1168,24 +1241,50 @@ The "depends_on" array contains the order numbers of steps this step needs outpu
 
 // POST /api/scripter/generate — Generate a video script using a framework
 app.post('/api/scripter/generate', (req, res) => {
-  const { framework, topic, rewriteScript } = req.body;
+  const { framework, topic, rewriteScript, mode, voice, durationSecs } = req.body;
   if (!framework || !topic) return res.status(400).json({ error: 'Framework and topic required' });
 
   const startTime = Date.now();
+  const scriptMode = mode || 'ads';
+  const targetSecs = durationSecs || 30;
+  const wordsLow = Math.round(targetSecs * 2.5);
+  const wordsHigh = Math.round(targetSecs * 3);
 
   // Read the frameworks skill file as system context
   const frameworksPath = path.join(BASE_DIR, 'skills', 'scripter-frameworks.md');
   if (!fs.existsSync(frameworksPath)) return res.status(500).json({ error: 'Frameworks file not found' });
   const frameworksDoc = fs.readFileSync(frameworksPath, 'utf-8');
 
-  let userPrompt = `Generate a complete video ad script using the "${framework}" framework.
+  // Build the mode instruction
+  const modeInstruction = scriptMode === 'social'
+    ? `Generate a viral SOCIAL MEDIA script (organic content for TikTok/Reels/Shorts) using the "${framework}" style.
 
-Topic/Product: ${topic}`;
+This is NOT an ad. The goal is maximum watch time, saves, shares, and comments — NOT selling a product.
+- NO product pitch, NO "link in bio", NO sales CTA
+- End with an ENGAGEMENT prompt: a question, challenge, hot take, "comment if...", or cliffhanger that makes people respond
+- Structure for retention: strong hook (first 2 seconds), curiosity loop or escalating value, satisfying payoff
+- Feel like real content a creator would post, not a brand`
+    : `Generate a complete video ad script using the "${framework}" framework.`;
+
+  let userPrompt = `${modeInstruction}
+
+Topic${scriptMode === 'ads' ? '/Product' : ''}: ${topic}
+
+TARGET LENGTH: ${targetSecs} seconds (~${wordsLow}-${wordsHigh} words). This is important — write the script body to fit this duration when read aloud at a natural pace.`;
+
+  // Voice/persona instruction
+  if (voice) {
+    userPrompt += `
+
+VOICE/PERSONA: Write the entire script in this voice and tone:
+${voice}
+Match the word choice, slang, sentence structure, and energy of this persona. The script should sound like THIS person actually wrote and would say it — not a generic AI voice.`;
+  }
 
   if (rewriteScript) {
     userPrompt += `
 
-REWRITE MODE: Take the following existing script and rewrite it using the "${framework}" framework structure. Preserve the best hooks and proof points but restructure the flow to follow the framework exactly.
+REWRITE MODE: Take the following existing script and rewrite it using the "${framework}" ${scriptMode === 'social' ? 'style' : 'framework structure'}. Preserve the best hooks and proof points but restructure the flow to follow the ${scriptMode === 'social' ? 'style' : 'framework'} exactly.
 
 Existing script to rewrite:
 ---
@@ -1195,7 +1294,7 @@ ${rewriteScript}
 
   userPrompt += `
 
-Output the script in the exact format specified in the system prompt. Include 5 hook variations and all framework sections.`;
+Output the script in the exact format specified in the system prompt. Include 5 hook variations and all ${scriptMode === 'social' ? 'sections' : 'framework sections'}.${scriptMode === 'social' ? ' Use ENGAGEMENT: instead of CTA: for the ending.' : ''}`;
 
   const fullPrompt = `<system>\n${frameworksDoc}\n</system>\n\n<user>\n${userPrompt}\n</user>`;
 
@@ -1209,7 +1308,7 @@ Output the script in the exact format specified in the system prompt. Include 5 
   const catCmd = process.platform === 'win32' ? 'type' : 'cat';
   const cmd = `${catCmd} ${escapedPromptFile} | claude -p --dangerously-skip-permissions --output-format text --model sonnet --max-turns 1`;
 
-  console.log(`[Scripter] Generating ${framework} script for: "${topic.slice(0, 60)}..."`);
+  console.log(`[Scripter] Generating ${scriptMode}/${framework}/${targetSecs}s script for: "${topic.slice(0, 60)}..."`);
 
   try {
     const output = execSync(cmd, {
@@ -1232,6 +1331,88 @@ Output the script in the exact format specified in the system prompt. Include 5 
     res.status(500).json({ ok: false, error: 'Script generation failed', details });
   } finally {
     try { fs.unlinkSync(promptFile); } catch (_) {}
+  }
+});
+
+// POST /api/scripter/transcribe — Download video from URL and transcribe with Whisper
+app.post('/api/scripter/transcribe', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'URL required' });
+
+  const startTime = Date.now();
+  const tmpId = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const tmpDir = path.join(WHISPER_CACHE_DIR, tmpId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  const audioFile = path.join(tmpDir, 'audio.wav');
+
+  console.log(`[Transcribe] Downloading audio from: ${url.slice(0, 80)}...`);
+
+  const runCmd = (cmd, opts) => new Promise((resolve, reject) => {
+    const { exec: execCb } = require('child_process');
+    execCb(cmd, opts, (err, stdout, stderr) => {
+      if (err) { err.stderr = stderr; return reject(err); }
+      resolve({ stdout, stderr });
+    });
+  });
+
+  try {
+    // Step 1: Download audio with yt-dlp (async — doesn't block event loop)
+    const ytCmd = `yt-dlp -x --audio-format wav --no-playlist -o "${audioFile}" "${url}"`;
+    await runCmd(ytCmd, {
+      cwd: tmpDir, shell: true, encoding: 'utf-8',
+      timeout: 120 * 1000, windowsHide: true
+    });
+
+    // yt-dlp sometimes appends the extension, find the actual file
+    let actualAudio = audioFile;
+    if (!fs.existsSync(audioFile)) {
+      const files = fs.readdirSync(tmpDir).filter(f => f.endsWith('.wav'));
+      if (files.length > 0) {
+        actualAudio = path.join(tmpDir, files[0]);
+      } else {
+        throw new Error('Audio download failed — no .wav file produced');
+      }
+    }
+
+    const dlTime = Date.now() - startTime;
+    console.log(`[Transcribe] Downloaded in ${dlTime}ms, transcribing with faster-whisper...`);
+
+    // Step 2: Transcribe with faster-whisper (async — doesn't block event loop)
+    const transcribeScript = path.join(BASE_DIR, 'transcribe.py');
+    const whisperCmd = `python "${transcribeScript}" "${actualAudio}" base`;
+    const whisperEnv = { ...process.env, PYTHONIOENCODING: 'utf-8' };
+    const { stdout: whisperOut } = await runCmd(whisperCmd, {
+      cwd: tmpDir, shell: true, encoding: 'utf-8',
+      timeout: 5 * 60 * 1000, windowsHide: true, env: whisperEnv,
+      maxBuffer: 10 * 1024 * 1024
+    });
+
+    const result = JSON.parse(whisperOut.trim());
+    if (!result.ok) {
+      throw new Error(result.error || 'Transcription failed');
+    }
+
+    const transcript = result.transcript;
+    const totalTime = Date.now() - startTime;
+
+    console.log(`[Transcribe] Done in ${totalTime}ms — ${transcript.length} chars (lang: ${result.language})`);
+
+    res.json({
+      ok: true,
+      transcript,
+      url,
+      language: result.language,
+      duration_ms: totalTime
+    });
+
+  } catch (err) {
+    console.error('[Transcribe] Failed:', err.message?.slice(0, 300));
+    const details = err.stderr ? err.stderr.slice(0, 500) : err.message;
+    res.status(500).json({ ok: false, error: 'Transcription failed', details });
+  } finally {
+    // Clean up temp files
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
   }
 });
 

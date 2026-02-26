@@ -159,8 +159,13 @@ async function init() {
         } catch (_) { tier = 'lifetime'; }
       }
       const health = await api.health();
-      if (!health.claude_cli && tier === 'lifetime') {
-        showServerBanner('⚠ Claude CLI not found — tasks will fail. Install: claude.ai/download', 'warning');
+      if (!health.all_good) {
+        const missing = [];
+        if (!health.claude) missing.push('Claude CLI');
+        if (!health.python) missing.push('Python');
+        if (!health.whisper) missing.push('Whisper');
+        if (!health.ytdlp) missing.push('yt-dlp');
+        showServerBanner('⚠ Missing: ' + missing.join(', ') + ' — click Setup in sidebar to install', 'warning');
       }
     } catch (_) {}
 
