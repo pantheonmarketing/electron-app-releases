@@ -1,0 +1,37 @@
+{
+  "id": "default-purple",
+  "name": "Purple Premium",
+  "description": "Default dark purple theme",
+  "style": {
+    "preset_id": "default-purple",
+    "colors": {
+      "primary": "#7B2FF2",
+      "secondary": "#C084FC",
+      "text": "#ffffff",
+      "background": "#0a0a12"
+    },
+    "font": {
+      "family": "Playfair Display",
+      "size": 48,
+      "weight": 700
+    },
+    "subtitle": {
+      "family": "Inter",
+      "size": 32,
+      "shadow": true,
+      "position": "bottom"
+    },
+    "animation": {
+      "type": "spring",
+      "damping": 18,
+      "stiffness": 120,
+      "mass": 0.7
+    },
+    "video": {
+      "zoom": 1,
+      "offsetX": 0,
+      "offsetY": 0,
+      "layout": "bottom-half"
+    }
+  }
+}

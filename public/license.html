@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Electron — Activate</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500,400&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a14;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .license-container {
+      width: 420px;
+      text-align: center;
+    }
+
+    .logo {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      background: linear-gradient(135deg, #7B2FF2, #C084FC, #E9D5FF);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 48px;
+    }
+
+    .input-group {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .license-input {
+      width: 100%;
+      padding: 16px 20px;
+      font-size: 16px;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 2px;
+      text-align: center;
+      text-transform: uppercase;
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      color: #fff;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .license-input:focus {
+      border-color: rgba(123,47,242,0.5);
+      box-shadow: 0 0 20px rgba(123,47,242,0.15);
+    }
+
+    .license-input::placeholder {
+      color: #444;
+      letter-spacing: 1px;
+      text-transform: none;
+    }
+
+    .name-input {
+      width: 100%;
+      padding: 14px 20px;
+      font-size: 14px;
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      color: #fff;
+      outline: none;
+      transition: all 0.2s;
+      margin-bottom: 24px;
+    }
+
+    .name-input:focus {
+      border-color: rgba(123,47,242,0.3);
+    }
+
+    .name-input::placeholder {
+      color: #444;
+    }
+
+    .activate-btn {
+      width: 100%;
+      padding: 16px;
+      font-size: 16px;
+      font-weight: 600;
+      background: linear-gradient(135deg, #7B2FF2, #9333EA);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .activate-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(123,47,242,0.4);
+    }
+
+    .activate-btn:active {
+      transform: translateY(0);
+    }
+
+    .activate-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .error-msg {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      color: #f87171;
+      font-size: 13px;
+      display: none;
+    }
+
+    .error-msg.show {
+      display: block;
+    }
+
+    .success-msg {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: rgba(34,197,94,0.1);
+      border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 8px;
+      color: #4ade80;
+      font-size: 13px;
+      display: none;
+    }
+
+    .success-msg.show {
+      display: block;
+    }
+
+    .version {
+      margin-top: 32px;
+      font-size: 11px;
+      color: #333;
+    }
+
+    /* Ambient glow */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 50% 50%, rgba(123,47,242,0.06) 0%, transparent 50%);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="license-container">
+    <div class="logo">Electron</div>
+    <div class="subtitle">AI Video Studio by AICO</div>
+
+    <div class="input-group">
+      <input type="text" class="license-input" id="keyInput"
+             placeholder="ELEC-XXXX-XXXX-XXXX"
+             maxlength="19"
+             spellcheck="false"
+             autocomplete="off">
+    </div>
+
+    <input type="text" class="name-input" id="nameInput"
+           placeholder="Your name (optional)"
+           spellcheck="false">
+
+    <button class="activate-btn" id="activateBtn" onclick="activate()">
+      Activate License
+    </button>
+
+    <div class="error-msg" id="errorMsg">
+      Invalid license key. Please check and try again.
+    </div>
+
+    <div class="success-msg" id="successMsg">
+      License activated! Loading app...
+    </div>
+
+    <div class="version" id="versionText"></div>
+  </div>
+
+  <script>
+    // Auto-format key input with dashes
+    const keyInput = document.getElementById('keyInput');
+    keyInput.addEventListener('input', (e) => {
+      let val = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      // Insert dashes: ELEC-XXXX-XXXX-XXXX
+      let formatted = '';
+      for (let i = 0; i < val.length && i < 16; i++) {
+        if (i === 4 || i === 8 || i === 12) formatted += '-';
+        formatted += val[i];
+      }
+      e.target.value = formatted;
+    });
+
+    keyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') activate();
+    });
+
+    async function activate() {
+      const key = keyInput.value.trim().toUpperCase();
+      const name = document.getElementById('nameInput').value.trim();
+      const errorMsg = document.getElementById('errorMsg');
+      const successMsg = document.getElementById('successMsg');
+      const btn = document.getElementById('activateBtn');
+
+      errorMsg.classList.remove('show');
+      successMsg.classList.remove('show');
+
+      if (!key || key.length < 15) {
+        errorMsg.textContent = 'Please enter a valid license key.';
+        errorMsg.classList.add('show');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Validating...';
+
+      try {
+        if (window.electronAPI) {
+          // Running in Electron
+          const result = await window.electronAPI.validateKey(key);
+          if (result && result.valid) {
+            await window.electronAPI.saveLicense(key, name, result.tier || 'basic');
+            successMsg.classList.add('show');
+            setTimeout(() => window.electronAPI.goToApp(), 1000);
+          } else {
+            errorMsg.textContent = 'Invalid license key. Please check and try again.';
+            errorMsg.classList.add('show');
+          }
+        } else {
+          // Running in browser (dev mode) — accept any key for testing
+          successMsg.textContent = 'Dev mode — license accepted. Loading...';
+          successMsg.classList.add('show');
+          setTimeout(() => { window.location.href = '/'; }, 1000);
+        }
+      } catch (err) {
+        errorMsg.textContent = 'Error: ' + err.message;
+        errorMsg.classList.add('show');
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Activate License';
+    }
+
+    // Show version
+    (async () => {
+      if (window.electronAPI) {
+        const ver = await window.electronAPI.getVersion();
+        document.getElementById('versionText').textContent = `v${ver}`;
+      }
+    })();
+
+    // Focus key input on load
+    keyInput.focus();
+  </script>
+</body>
+</html>

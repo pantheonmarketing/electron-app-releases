@@ -1,0 +1,173 @@
+/* ── Reset & Base ── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #0a0a14;
+  color: #e0e0e0;
+  height: 100vh;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.header {
+  background: rgba(10, 10, 20, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 12px 24px 0 24px;
+  flex-shrink: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: 'Satoshi', sans-serif;
+  background: linear-gradient(135deg, #7B2FF2, #C084FC);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 15px rgba(123, 47, 242, 0.4);
+}
+
+.header-right { display: flex; align-items: center; gap: 10px; }
+
+.worker-badge {
+  background: rgba(123, 47, 242, 0.15);
+  border: 1px solid rgba(123, 47, 242, 0.3);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #C084FC;
+  transition: all 0.3s;
+}
+
+.worker-badge.active {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ── Space Tabs ── */
+.space-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.space-tabs::-webkit-scrollbar { display: none; }
+
+.space-tab {
+  padding: 8px 16px;
+  border-radius: 8px 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(255,255,255,0.03);
+  color: #888;
+  border: 1px solid transparent;
+  border-bottom: none;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  position: relative;
+}
+
+.space-tab:hover {
+  background: rgba(255,255,255,0.06);
+  color: #bbb;
+}
+
+.space-tab.active {
+  background: #0a0a14;
+  color: #e0e0e0;
+  border-color: rgba(123, 47, 242, 0.3);
+  border-bottom: 1px solid #0a0a14;
+  margin-bottom: -1px;
+  z-index: 1;
+}
+
+.space-tab .tab-count {
+  background: rgba(255,255,255,0.1);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  text-align: center;
+}
+
+.space-tab.active .tab-count {
+  background: rgba(123, 47, 242, 0.2);
+  color: #C084FC;
+}
+
+.space-tab .tab-settings {
+  opacity: 0;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  transition: opacity 0.15s;
+}
+.space-tab:hover .tab-settings,
+.space-tab.active .tab-settings { opacity: 0.6; }
+.space-tab .tab-settings:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+
+.space-tab-add {
+  padding: 8px 14px;
+  border-radius: 8px 8px 0 0;
+  font-size: 16px;
+  cursor: pointer;
+  background: transparent;
+  color: #555;
+  border: 1px dashed rgba(255,255,255,0.1);
+  border-bottom: none;
+  transition: all 0.2s;
+}
+.space-tab-add:hover {
+  color: #C084FC;
+  border-color: rgba(123, 47, 242, 0.3);
+  background: rgba(123, 47, 242, 0.05);
+}
+
+.space-project-badge {
+  font-size: 10px;
+  color: #666;
+  font-weight: 400;
+}
+
+/* ── Buttons ── */
+.btn {
+  padding: 8px 18px; border-radius: 8px; border: none;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  font-family: 'Satoshi', sans-serif;
+  transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn-primary { background: linear-gradient(135deg, #7B2FF2, #9333EA); color: white; box-shadow: 0 2px 12px rgba(123, 47, 242, 0.3); }
+.btn-primary:hover { box-shadow: 0 4px 20px rgba(123, 47, 242, 0.5); }
+.btn-success { background: linear-gradient(135deg, #059669, #10B981); color: white; box-shadow: 0 2px 12px rgba(16, 185, 129, 0.3); }
+.btn-danger { background: linear-gradient(135deg, #DC2626, #EF4444); color: white; }
+.btn-ghost { background: rgba(255,255,255,0.05); color: #999; border: 1px solid rgba(255,255,255,0.1); }
+.btn-ghost:hover { background: rgba(255,255,255,0.1); color: #ddd; }
+.btn-sm { padding: 4px 10px; font-size: 11px; }

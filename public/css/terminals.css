@@ -1,0 +1,82 @@
+/* ── Agent Terminal ── */
+.terminal-view {
+  display: flex; padding: 12px 16px; flex: 1; flex-direction: column; gap: 10px;
+  min-height: 0; overflow: hidden;
+}
+.terminal-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.terminal-grid {
+  display: grid; gap: 12px; flex: 1; min-height: 0;
+}
+.terminal-grid.layout-1 { grid-template-columns: 1fr; }
+.terminal-grid.layout-2 { grid-template-columns: 1fr 1fr; }
+.terminal-grid.layout-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.terminal-pane {
+  display: flex; flex-direction: column; background: rgba(8, 8, 18, 0.8);
+  border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; overflow: hidden;
+  min-height: 0;
+}
+.terminal-pane-header {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-shrink: 0;
+}
+.terminal-pane-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.terminal-pane-status.active, .terminal-pane-status.idle { background: #4ADE80; box-shadow: 0 0 6px rgba(74,222,128,0.5); }
+.terminal-pane-status.thinking { background: #FBBF24; box-shadow: 0 0 6px rgba(251,191,36,0.5); animation: pulse-status 1s infinite; }
+.terminal-pane-status.dead { background: #F87171; }
+@keyframes pulse-status { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.terminal-pane-name { font-size: 13px; font-weight: 600; color: #ddd; flex: 1; }
+.terminal-pane-skill {
+  font-size: 10px; padding: 2px 8px; border-radius: 10px;
+  background: rgba(123,47,242,0.2); color: #C084FC; border: 1px solid rgba(123,47,242,0.3);
+}
+.terminal-pane-kill {
+  background: none; border: none; cursor: pointer; font-size: 14px;
+  color: #666; transition: color 0.2s;
+}
+.terminal-pane-kill:hover { color: #F87171; }
+.terminal-output {
+  flex: 1; overflow-y: auto; padding: 12px; font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 13px; line-height: 1.5; color: #d4d4d4; white-space: pre-wrap;
+  word-break: break-word; min-height: 0;
+}
+.terminal-output::-webkit-scrollbar { width: 6px; }
+.terminal-output::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+.terminal-input-bar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: rgba(255,255,255,0.03); border-top: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+.terminal-input-bar span { color: #7B2FF2; font-weight: 700; font-family: monospace; }
+.terminal-input-bar input {
+  flex: 1; background: transparent; border: none; color: #ddd;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 13px;
+  outline: none;
+}
+.terminal-input-bar input::placeholder { color: #444; }
+.terminal-input-bar input:disabled { opacity: 0.3; }
+.terminal-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  flex: 1; color: #555; gap: 16px; text-align: center;
+}
+.terminal-empty-icon { font-size: 48px; opacity: 0.3; }
+.terminal-empty-text { font-size: 15px; }
+.layout-btn {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px; padding: 4px 10px; color: #888; cursor: pointer;
+  font-size: 12px; transition: all 0.2s;
+}
+.layout-btn:hover { border-color: rgba(123,47,242,0.4); color: #C084FC; }
+.layout-btn.active { background: rgba(123,47,242,0.15); border-color: rgba(123,47,242,0.4); color: #C084FC; }
+.view-toggle {
+  display: flex; background: rgba(255,255,255,0.05); border-radius: 8px;
+  overflow: hidden; border: 1px solid rgba(255,255,255,0.08);
+}
+.view-toggle button {
+  background: none; border: none; padding: 6px 14px; color: #888;
+  cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s;
+}
+.view-toggle button:hover { color: #ccc; }
+.view-toggle button.active { background: rgba(123,47,242,0.2); color: #C084FC; }

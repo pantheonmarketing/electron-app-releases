@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Task Manager</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500,400&f[]=archivo@600,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- CSS (extracted from inline styles) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/board.css">
+  <link rel="stylesheet" href="css/modals.css">
+  <link rel="stylesheet" href="css/terminals.css">
+  <link rel="stylesheet" href="css/workflows.css">
+  <link rel="stylesheet" href="css/reel-master.css">
+  <link rel="stylesheet" href="css/heygen.css">
+  <link rel="stylesheet" href="css/scripter.css">
+</head>
+<body>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══ Sidebar ═══ -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-brand" title="AICO Studio">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-item active" id="nav-board" data-view="board" data-tooltip="Board" onclick="switchView('board')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span class="sidebar-label">Studio</span>
+    </div>
+    <div class="sidebar-item" id="nav-terminals" data-view="terminals" data-tooltip="Terminals" onclick="switchView('terminals')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      <span class="sidebar-label">Shell</span>
+      <span class="sidebar-badge" id="terminalCountBadge" data-count="0">0</span>
+    </div>
+    <div class="sidebar-item" id="nav-workflows" data-view="workflows" data-tooltip="Workflows" onclick="switchView('workflows')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      <span class="sidebar-label">Flow</span>
+    </div>
+    <div class="sidebar-item" id="nav-reelmaster" data-view="reelmaster" data-tooltip="Reel Master" onclick="switchView('reelmaster')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+      <span class="sidebar-label">Reels</span>
+    </div>
+    <div class="sidebar-item" id="nav-scripter" data-view="scripter" data-tooltip="Scripter" onclick="switchView('scripter')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      <span class="sidebar-label">Script</span>
+    </div>
+    <div class="sidebar-item" id="nav-heygen" data-view="heygen" data-tooltip="Create" onclick="switchView('heygen')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+      <span class="sidebar-label">Create</span>
+    </div>
+  </nav>
+  <div class="sidebar-spacer"></div>
+  <nav class="sidebar-nav" style="margin-bottom:8px;">
+    <div class="sidebar-item" data-tooltip="Schedules" onclick="openSchedules()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </div>
+    <div class="sidebar-item" data-tooltip="History" onclick="openHistory()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg>
+    </div>
+    <div class="sidebar-item" data-tooltip="Check for Updates" onclick="checkAppUpdate()" id="updateBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+    </div>
+    <div class="sidebar-item" data-tooltip="Reset All" onclick="resetAll()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </div>
+  </nav>
+</div>
+
+<!-- ═══ App Shell ═══ -->
+<div class="app-shell">
+
+<!-- Server Status Banner -->
+<div class="server-banner" id="serverBanner">
+  <span id="serverBannerText">⚠ Cannot reach server — retrying...</span>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-top">
+    <h1>Claude Task Manager</h1>
+    <div class="header-right">
+      <div class="worker-badge" id="tierBadge" onclick="toggleTierTest()" style="cursor:pointer;display:none;" title="Click to switch tier (testing only)"></div>
+      <div class="worker-badge" id="workerBadge">0 workers active</div>
+    </div>
+  </div>
+  <div class="space-tabs" id="spaceTabs"></div>
+</div>
+
+<!-- Content Area -->
+<div class="content-area" id="contentArea">
+
+  <!-- ═══ View: Board ═══ -->
+  <div class="view view-board view-active" id="boardView">
+    <div class="space-info" id="spaceInfo" style="display:none;"></div>
+    <div class="board" id="board">
+      <div class="column col-pending">
+        <div class="column-header">
+          <div class="column-title"><span>Pending</span><span class="column-count" id="count-pending">0</span></div>
+        </div>
+        <div class="column-cards" id="col-pending" ondragover="onDragOver(event)" ondrop="onDrop(event,'pending')" ondragleave="onDragLeave(event)"></div>
+      </div>
+      <div class="column col-running">
+        <div class="column-header">
+          <div class="column-title"><span>Running</span><span class="column-count" id="count-running">0</span></div>
+        </div>
+        <div class="column-cards" id="col-running" ondragover="onDragOver(event)" ondrop="onDrop(event,'running')" ondragleave="onDragLeave(event)"></div>
+      </div>
+      <div class="column col-done">
+        <div class="column-header">
+          <div class="column-title"><span>Done</span><span class="column-count" id="count-done">0</span></div>
+          <div class="column-actions">
+            <button onclick="archiveAllDone()" title="Archive all done tasks">📁 Archive</button>
+          </div>
+        </div>
+        <div class="done-filter" id="doneFilter">
+          <button class="done-filter-btn active" onclick="setDoneFilter('recent')" id="filterRecent">Recent</button>
+          <button class="done-filter-btn" onclick="setDoneFilter('all')" id="filterAll">All</button>
+        </div>
+        <div class="column-cards" id="col-done" ondragover="onDragOver(event)" ondrop="onDrop(event,'done')" ondragleave="onDragLeave(event)"></div>
+      </div>
+      <div class="column col-failed">
+        <div class="column-header">
+          <div class="column-title"><span>Failed</span><span class="column-count" id="count-failed">0</span></div>
+          <div class="column-actions">
+            <button onclick="archiveAllFailed()" title="Archive all failed tasks">📁 Archive</button>
+          </div>
+        </div>
+        <div class="column-cards" id="col-failed" ondragover="onDragOver(event)" ondrop="onDrop(event,'failed')" ondragleave="onDragLeave(event)"></div>
+      </div>
+    </div>
+    <div class="runner-bar">
+      <button class="btn btn-primary" onclick="openAddModal()">+ New Task</button>
+      <button class="btn btn-taskmaster" onclick="openTaskMaster()">🧠 Task Master</button>
+      <div style="width:1px;height:24px;background:rgba(255,255,255,0.1);"></div>
+      <button class="btn btn-success" onclick="runWorkers()" id="runBtn">▶ Run All</button>
+      <button class="btn btn-danger btn-sm" onclick="stopWorkers()" id="stopBtn" style="display:none;">Stop</button>
+      <span class="terminal-hint" id="terminalHint"></span>
+      <div class="runner-status" id="runnerStatus">Ready</div>
+    </div>
+  </div><!-- /view-board -->
+
+  <!-- ═══ View: Terminals ═══ -->
+  <div class="view view-terminals" id="terminalViewWrapper">
+    <div class="terminal-view" id="terminalView">
+      <div class="terminal-toolbar">
+        <button class="btn btn-primary btn-sm" onclick="openNewTerminalModal()">+ New Terminal</button>
+        <div style="flex:1;"></div>
+        <span style="color:#666;font-size:12px;">Layout:</span>
+        <button class="layout-btn active" data-layout="1" onclick="setTerminalLayout(1)">▣ 1</button>
+        <button class="layout-btn" data-layout="2" onclick="setTerminalLayout(2)">▥ 2</button>
+        <button class="layout-btn" data-layout="4" onclick="setTerminalLayout(4)">▦ 4</button>
+      </div>
+      <div class="terminal-grid layout-1" id="terminalGrid">
+        <div class="terminal-empty" id="terminalEmpty">
+          <div class="terminal-empty-icon">💻</div>
+          <div class="terminal-empty-text">No terminals open<br><span style="font-size:13px;color:#444;">Click a task's 💬 button or "+ New Terminal" to chat with Claude</span></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /view-terminals -->
+
+  <!-- View: Workflows -->
+  <div class="view view-workflows" id="workflowView">
+    <!-- Workflow List -->
+    <div class="wf-list-container" id="wfListContainer">
+      <div class="wf-list-header">
+        <span class="wf-list-title">Workflows</span>
+        <button class="btn btn-primary" onclick="wfNewWorkflow()">+ New Workflow</button>
+      </div>
+      <div class="wf-list" id="wfList"></div>
+    </div>
+
+    <!-- Canvas (editing a workflow) -->
+    <div class="wf-canvas-container" id="wfCanvasContainer">
+      <div class="wf-toolbar">
+        <button class="wf-toolbar-back" onclick="wfBackToList()" title="Back to list">←</button>
+        <input type="text" class="wf-toolbar-icon" id="wfToolbarIcon" value="⚡" maxlength="2">
+        <input type="text" class="wf-toolbar-name" id="wfToolbarName" placeholder="Workflow name...">
+        <div class="wf-toolbar-spacer"></div>
+        <button class="btn btn-ghost btn-sm" onclick="wfSave()">💾 Save</button>
+        <button class="btn btn-success btn-sm" onclick="wfRun()">▶ Run</button>
+      </div>
+      <!-- Exec bar (shown during workflow execution) -->
+      <div class="wf-exec-bar" id="wfExecBar" style="display:none;">
+        <span class="wf-exec-status" id="wfExecStatus">⏳ Running...</span>
+        <span class="wf-exec-progress" id="wfExecProgress"></span>
+        <button class="btn-stop" onclick="wfStopExec()">⏹ Stop</button>
+      </div>
+      <div class="wf-canvas" id="wfCanvas">
+        <div class="wf-grid-bg" id="wfGridBg"></div>
+        <svg class="wf-svg" id="wfSvg"></svg>
+      </div>
+      <!-- Right-side detail panel -->
+      <div class="wf-panel" id="wfPanel">
+        <div class="wf-panel-header">
+          <span class="wf-panel-header-icon" id="wfPanelIcon"></span>
+          <div class="wf-panel-header-info">
+            <div class="wf-panel-header-title" id="wfPanelTitle"></div>
+            <div class="wf-panel-header-sub" id="wfPanelSub"></div>
+          </div>
+          <button class="wf-panel-close" onclick="wfClosePanel()">×</button>
+        </div>
+        <div class="wf-panel-body" id="wfPanelBody"></div>
+        <div class="wf-panel-footer">
+          <button class="btn btn-sm" onclick="wfDeleteSelectedNode()" style="width:100%;background:rgba(239,68,68,0.15);color:#F87171;border:1px solid rgba(239,68,68,0.3);">Remove Node</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Template picker overlay -->
+    <div class="wf-picker-backdrop" id="wfPickerBackdrop" onclick="wfClosePicker()"></div>
+    <div class="wf-picker" id="wfPicker">
+      <h3>Add a Step</h3>
+      <div class="wf-picker-grid" id="wfPickerGrid"></div>
+    </div>
+  </div><!-- /view-workflows -->
+
+  <!-- ═══ View: Reel Master ═══ -->
+  <div class="view view-reelmaster" id="reelmasterView">
+    <!-- Project List (landing) -->
+    <div class="rm-landing" id="rmLanding">
+      <div class="rm-landing-header">
+        <span class="rm-landing-title">🎬 Reel Master</span>
+        <button class="btn btn-primary" onclick="rmNewProject()">+ New Reel</button>
+      </div>
+      <div class="rm-project-list" id="rmProjectList"></div>
+    </div>
+
+    <!-- Studio (active project) -->
+    <div class="rm-studio" id="rmStudio" style="display:none;">
+      <div class="rm-studio-toolbar">
+        <button class="rm-toolbar-back" onclick="rmBackToList()" title="Back to projects">←</button>
+        <input type="text" class="rm-toolbar-name" id="rmProjectName" placeholder="Reel name..." onchange="rmSaveProject()">
+        <div class="rm-mode-toggle" id="rmModeToggle">
+          <button class="rm-mode-btn active" data-mode="full" onclick="rmSetMode('full')">Full Video</button>
+          <button class="rm-mode-btn" data-mode="split" onclick="rmSetMode('split')">Split Screen</button>
+          <button class="rm-mode-btn" data-mode="youtube" onclick="rmSetMode('youtube')">YouTube</button>
+        </div>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" onclick="rmSaveProject()">💾 Save</button>
+        <button class="btn btn-primary btn-sm" onclick="rmRender()">🎬 Render</button>
+      </div>
+
+      <!-- Step indicators -->
+      <div class="rm-steps" id="rmSteps">
+        <div class="rm-step active" data-step="upload" onclick="rmGoStep('upload')">
+          <span class="rm-step-num">1</span><span class="rm-step-label">Upload</span>
+        </div>
+        <div class="rm-step-line"></div>
+        <div class="rm-step" data-step="whisper" onclick="rmGoStep('whisper')">
+          <span class="rm-step-num">2</span><span class="rm-step-label">Transcribe</span>
+        </div>
+        <div class="rm-step-line"></div>
+        <div class="rm-step" data-step="scenes" onclick="rmGoStep('scenes')">
+          <span class="rm-step-num">3</span><span class="rm-step-label">Scenes</span>
+        </div>
+        <div class="rm-step-line"></div>
+        <div class="rm-step" data-step="customize" onclick="rmGoStep('customize')">
+          <span class="rm-step-num">4</span><span class="rm-step-label">Customize</span>
+        </div>
+        <div class="rm-step-line"></div>
+        <div class="rm-step" data-step="preview" onclick="rmGoStep('preview')">
+          <span class="rm-step-num">5</span><span class="rm-step-label">Preview</span>
+        </div>
+      </div>
+
+      <!-- Step panels -->
+      <div class="rm-panels" id="rmPanels">
+
+        <!-- Step 1: Upload -->
+        <div class="rm-panel rm-panel-active" id="rmPanelUpload">
+          <div class="rm-upload-zone" id="rmUploadZone"
+               ondragover="event.preventDefault(); this.classList.add('dragover')"
+               ondragleave="this.classList.remove('dragover')"
+               ondrop="event.preventDefault(); this.classList.remove('dragover'); rmHandleFiles(event.dataTransfer.files)">
+            <div class="rm-upload-icon">📁</div>
+            <div class="rm-upload-text">Drop video clips, images, or audio here</div>
+            <div class="rm-upload-sub">MP4, MOV, WebM, JPG, PNG, MP3, WAV — max 500MB each</div>
+            <button class="btn btn-primary" onclick="document.getElementById('rmFileInput').click()">Browse Files</button>
+            <input type="file" id="rmFileInput" multiple accept="video/*,image/*,audio/*" style="display:none;" onchange="rmHandleFiles(this.files); this.value=''">
+          </div>
+          <div class="rm-clip-list" id="rmClipList"></div>
+          <div class="rm-step-actions">
+            <div style="flex:1;"></div>
+            <button class="btn btn-primary" onclick="rmGoStep('whisper')" id="rmNextWhisper" disabled>Next: Transcribe →</button>
+          </div>
+        </div>
+
+        <!-- Step 2: Whisper -->
+        <div class="rm-panel" id="rmPanelWhisper">
+          <div class="rm-whisper-header">
+            <h3 style="margin:0; color:#e0e0e0; font-size:16px;">Transcription</h3>
+            <button class="btn btn-primary btn-sm" onclick="rmTranscribeAll()" id="rmTranscribeAllBtn">🎙 Transcribe All Clips</button>
+          </div>
+          <div class="rm-whisper-list" id="rmWhisperList"></div>
+          <div class="rm-step-actions">
+            <button class="btn btn-ghost" onclick="rmGoStep('upload')">← Back</button>
+            <div style="flex:1;"></div>
+            <button class="btn btn-primary" onclick="rmGoStep('scenes')" id="rmNextScenes" disabled>Next: Scenes →</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Scenes -->
+        <div class="rm-panel" id="rmPanelScenes">
+          <div class="rm-scenes-header">
+            <h3 style="margin:0; color:#e0e0e0; font-size:16px;">Scene Timeline</h3>
+            <div style="display:flex; gap:8px;" id="rmScenesActions">
+              <button class="btn btn-ghost btn-sm" onclick="rmGenerateScenes()">🔄 Auto-Generate</button>
+              <button class="btn btn-ghost btn-sm" onclick="rmRegenerateScenes()" id="rmRegenBtn" style="display:none; color:#FBBF24;">♻ Regenerate</button>
+            </div>
+          </div>
+          <div class="rm-timeline" id="rmTimeline"></div>
+          <div class="rm-step-actions">
+            <button class="btn btn-ghost" onclick="rmGoStep('whisper')">← Back</button>
+            <div style="flex:1;"></div>
+            <button class="btn btn-primary" onclick="rmGoStep('customize')">Next: Customize →</button>
+          </div>
+        </div>
+
+        <!-- Step 4: Customize -->
+        <div class="rm-panel" id="rmPanelCustomize">
+          <div class="rm-preset-bar" id="rmPresetBar"></div>
+          <div class="rm-customize-with-preview">
+            <div class="rm-customize-controls">
+              <div class="rm-customize-tabs" id="rmCustomizeTabs">
+                <div class="rm-customize-tab active" onclick="rmSwitchTab('music')">🎵 Music</div>
+                <div class="rm-customize-tab" onclick="rmSwitchTab('colors')">🎨 Colors</div>
+                <div class="rm-customize-tab" onclick="rmSwitchTab('text')">✏️ Text</div>
+                <div class="rm-customize-tab" onclick="rmSwitchTab('video')">📐 Video</div>
+                <div class="rm-customize-tab" onclick="rmSwitchTab('animations')">✨ Animations</div>
+              </div>
+              <div class="rm-customize-body" id="rmCustomizeBody"></div>
+            </div>
+            <div class="rm-customize-live-preview" id="rmLivePreviewWrap"></div>
+          </div>
+          <div class="rm-step-actions">
+            <button class="btn btn-ghost" onclick="rmGoStep('scenes')">← Back</button>
+            <div style="flex:1;"></div>
+            <button class="btn btn-primary" onclick="rmGoStep('preview')">Next: Preview →</button>
+          </div>
+        </div>
+
+        <!-- Step 5: Preview -->
+        <div class="rm-panel" id="rmPanelPreview">
+          <div class="rm-preview-container" id="rmPreviewContainer"></div>
+          <div class="rm-render-config">
+            <div>
+              <h4>Remotion Working Directory</h4>
+              <p>Path to your Remotion project folder (where src/index.ts lives)</p>
+              <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+                <input type="text" class="rm-render-dir-input" id="rmRenderDir" style="margin-top:0; flex:1;"
+                       placeholder="Click 'Choose Folder' or paste a path..."
+                       value="C:\Users\yoniw\Downloads\fb-story-promo">
+                <button class="btn btn-primary btn-sm" onclick="rmBrowseFolder()" style="white-space:nowrap; flex-shrink:0;">📁 Choose Folder</button>
+              </div>
+            </div>
+          </div>
+          <div class="rm-step-actions">
+            <button class="btn btn-ghost" onclick="rmGoStep('customize')">← Back</button>
+            <div style="flex:1;"></div>
+            <button class="btn btn-success" onclick="rmRender()">🎬 Render Final Video</button>
+          </div>
+        </div>
+
+      </div><!-- /rm-panels -->
+    </div><!-- /rm-studio -->
+  </div><!-- /view-reelmaster -->
+
+  <!-- ═══ View: Scripter ═══ -->
+  <div class="view view-scripter" id="scripterView">
+    <div class="scr-container">
+      <!-- Left Panel: Inputs -->
+      <div class="scr-left">
+        <div class="scr-title">Scripter</div>
+
+        <div class="scr-label">Choose Framework</div>
+        <div class="scr-fw-grid" id="scrFrameworkGrid"></div>
+
+        <div class="scr-label">Topic / Brief</div>
+        <textarea class="scr-textarea" id="scrTopic" placeholder="What's this video about? Describe your product, service, or topic..."></textarea>
+
+        <div class="scr-label">Rewrite Script (optional)</div>
+        <textarea class="scr-textarea scr-textarea-sm" id="scrRewrite" placeholder="Paste an existing script to rewrite it in the chosen framework..."></textarea>
+
+        <button class="scr-generate-btn" id="scrGenerateBtn" onclick="scrGenerate()">Generate Script</button>
+      </div>
+
+      <!-- Right Panel: Output -->
+      <div class="scr-right">
+        <div class="scr-output-header">
+          <div class="scr-output-title">Your Script</div>
+        </div>
+
+        <div id="scrOutput">
+          <div class="scr-empty-state" id="scrEmptyState">
+            <div class="scr-empty-icon">✍️</div>
+            <div class="scr-empty-text">Pick a framework & describe your topic</div>
+            <div class="scr-empty-sub">Your script will appear here</div>
+          </div>
+        </div>
+
+        <div class="scr-history-section">
+          <div class="scr-history-title">Recent Scripts</div>
+          <div id="scrHistoryList"></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /view-scripter -->
+
+  <!-- ═══ View: HeyGen Creator ═══ -->
+  <div class="view view-heygen" id="heygenView">
+    <!-- Setup banner (no API key) -->
+    <div class="hg-setup-banner" id="hgSetupBanner" style="display:none;">
+      <div class="hg-setup-content">
+        <div class="hg-setup-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:#7B2FF2;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        </div>
+        <h2>Connect HeyGen</h2>
+        <p>Enter your HeyGen API key to start creating AI avatar videos</p>
+        <button class="btn btn-primary" onclick="hgOpenSettings()">Add API Key</button>
+      </div>
+    </div>
+
+    <!-- Landing: project list -->
+    <div class="hg-landing" id="hgLanding">
+      <div class="hg-landing-header">
+        <span class="hg-landing-title">AI Video Creator</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="hg-credits-badge" id="hgCreditsDisplay" style="display:none;"></span>
+          <button class="btn btn-ghost btn-sm" onclick="hgOpenSettings()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Settings
+          </button>
+          <button class="btn btn-primary" onclick="hgNewProject()">+ New Video</button>
+        </div>
+      </div>
+      <div class="hg-project-list" id="hgProjectList"></div>
+      <div class="hg-load-more-wrap" id="hgLoadMoreWrap" style="display:none;">
+        <button class="btn btn-ghost" onclick="hgLoadMore()">Load More</button>
+      </div>
+      <div class="hg-empty" id="hgEmptyState" style="display:none;">
+        <div class="hg-empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        </div>
+        <p class="hg-empty-text">No completed videos yet</p>
+        <button class="btn btn-primary" onclick="hgNewProject()">Create your first video</button>
+      </div>
+    </div>
+
+    <!-- Studio: 3-step creator -->
+    <div class="hg-studio" id="hgStudio" style="display:none;">
+      <div class="hg-studio-toolbar">
+        <button class="hg-toolbar-back" onclick="hgBackToList()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <input type="text" class="hg-toolbar-name" id="hgProjectName" placeholder="Video name..." onchange="hgSaveProject()">
+        <div style="flex:1;"></div>
+        <button class="btn btn-primary btn-sm" id="hgGenerateBtn" onclick="hgGenerate()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Generate Video
+        </button>
+      </div>
+
+      <!-- Step indicators -->
+      <div class="hg-steps" id="hgSteps">
+        <div class="hg-step active" data-step="avatar" onclick="hgGoStep('avatar')">
+          <span class="hg-step-num">1</span><span class="hg-step-label">Avatar & Voice</span>
+        </div>
+        <div class="hg-step-arrow">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="hg-step" data-step="script" onclick="hgGoStep('script')">
+          <span class="hg-step-num">2</span><span class="hg-step-label">Script</span>
+        </div>
+        <div class="hg-step-arrow">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="hg-step" data-step="generate" onclick="hgGoStep('generate')">
+          <span class="hg-step-num">3</span><span class="hg-step-label">Generate</span>
+        </div>
+      </div>
+
+      <!-- Step panels container -->
+      <div class="hg-panels">
+        <!-- Step 1: Avatar & Voice -->
+        <div class="hg-panel hg-panel-active" id="hgPanelAvatar">
+          <div class="hg-panel-scroll">
+            <div class="hg-panel-section">
+              <h3>Choose Avatar</h3>
+              <input type="text" class="hg-search" id="hgAvatarSearch" placeholder="Search avatars..." oninput="hgFilterAvatars()">
+              <div class="hg-avatar-grid" id="hgAvatarGrid">
+                <div class="hg-loading">Loading avatars...</div>
+              </div>
+            </div>
+            <div class="hg-panel-section">
+              <h3>Choose Voice</h3>
+              <input type="text" class="hg-search" id="hgVoiceSearch" placeholder="Search voices..." oninput="hgFilterVoices()">
+              <select class="hg-select" id="hgVoiceSelect" onchange="hgSelectVoice()">
+                <option value="">Loading voices...</option>
+              </select>
+              <div class="hg-voice-preview-row">
+                <button class="btn btn-ghost btn-sm" id="hgVoicePreviewBtn" onclick="hgPreviewVoice()" disabled>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  Preview
+                </button>
+                <span class="hg-voice-info" id="hgVoiceInfo"></span>
+              </div>
+              <audio id="hgVoiceAudio" style="display:none;"></audio>
+            </div>
+            <div class="hg-panel-section">
+              <h3>Dimensions</h3>
+              <div class="hg-dimension-btns" id="hgDimensionBtns">
+                <button class="hg-dim-btn active" data-w="1920" data-h="1080" onclick="hgSetDimension(this)">
+                  <span class="hg-dim-icon">▬</span> 16:9
+                </button>
+                <button class="hg-dim-btn" data-w="1080" data-h="1920" onclick="hgSetDimension(this)">
+                  <span class="hg-dim-icon">▮</span> 9:16
+                </button>
+                <button class="hg-dim-btn" data-w="1080" data-h="1080" onclick="hgSetDimension(this)">
+                  <span class="hg-dim-icon">■</span> 1:1
+                </button>
+              </div>
+            </div>
+            <div class="hg-panel-nav">
+              <div></div>
+              <button class="btn btn-primary" onclick="hgGoStep('script')">Next: Script →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Script -->
+        <div class="hg-panel" id="hgPanelScript">
+          <div class="hg-panel-scroll">
+            <div class="hg-panel-section" style="flex:1;display:flex;flex-direction:column;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <h3 style="margin:0;">Write Your Script</h3>
+                <div style="position:relative;" id="hgScriptLoaderWrap">
+                  <button class="btn btn-ghost btn-sm" onclick="hgToggleScriptLoader()" id="hgLoadScriptBtn">Load Script ▾</button>
+                  <div class="hg-script-loader-dropdown" id="hgScriptLoaderDropdown" style="display:none;"></div>
+                </div>
+              </div>
+              <textarea class="hg-script-input" id="hgScriptInput" placeholder="Type what the avatar should say..." oninput="hgUpdateCharCount()"></textarea>
+              <div class="hg-script-meta">
+                <span id="hgCharCount">0 / 5,000</span>
+                <span id="hgEstDuration">~0 min</span>
+              </div>
+            </div>
+            <div class="hg-panel-nav">
+              <button class="btn btn-ghost" onclick="hgGoStep('avatar')">← Back</button>
+              <button class="btn btn-primary" onclick="hgGoStep('generate')">Next: Generate →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Generate & Preview -->
+        <div class="hg-panel" id="hgPanelGenerate">
+          <div class="hg-panel-scroll">
+            <div class="hg-gen-mode" id="hgGenMode">
+              <button class="hg-mode-btn active" data-mode="browser" onclick="hgSetGenMode('browser')">
+                <span class="hg-mode-icon">🌐</span>
+                <span class="hg-mode-label">Browser</span>
+                <span class="hg-mode-desc">Free (Creator plan)</span>
+              </button>
+              <button class="hg-mode-btn" data-mode="api" onclick="hgSetGenMode('api')">
+                <span class="hg-mode-icon">⚡</span>
+                <span class="hg-mode-label">API</span>
+                <span class="hg-mode-desc">Uses credits</span>
+              </button>
+            </div>
+            <div class="hg-cookies-box" id="hgCookiesBox">
+              <div class="hg-cookies-header">
+                <label>HeyGen Cookies</label>
+                <span class="hg-cookies-status" id="hgCookiesStatus"></span>
+              </div>
+              <textarea id="hgCookiesInput" class="hg-cookies-input" rows="4"
+                placeholder='Paste cookies from app.heygen.com here (JSON array from browser DevTools → Application → Cookies → right-click → Copy all as JSON)'></textarea>
+              <small style="color:#666;font-size:11px;">One-time setup. Saved per project. Agent uses these to skip login.</small>
+            </div>
+            <div class="hg-summary" id="hgSummary"></div>
+            <div class="hg-progress" id="hgProgress" style="display:none;">
+              <div class="hg-progress-spinner"></div>
+              <span class="hg-progress-text" id="hgProgressText">Submitting to HeyGen...</span>
+              <span class="hg-progress-sub" id="hgProgressSub">This may take several minutes</span>
+            </div>
+            <div class="hg-video-container" id="hgVideoContainer" style="display:none;">
+              <video id="hgVideoPlayer" controls></video>
+              <div class="hg-video-actions">
+                <a class="btn btn-primary" id="hgDownloadBtn" download>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download
+                </a>
+                <button class="btn btn-ghost" onclick="hgSendToReelMaster()">Edit in Reel Master →</button>
+              </div>
+            </div>
+            <div class="hg-panel-nav">
+              <button class="btn btn-ghost" onclick="hgGoStep('script')">← Back</button>
+              <button class="btn btn-primary" id="hgGenerateBtn2" onclick="hgGenerate()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Generate Video
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /view-heygen -->
+
+  <!-- Image Search Modal (Multi-source) -->
+  <div class="rm-img-search-backdrop" id="rmImgSearchBackdrop" onclick="rmCloseImageSearch()"></div>
+  <div class="rm-img-search-modal" id="rmImgSearchModal">
+    <div class="rm-img-search-header">
+      <h3>Search</h3>
+      <div class="rm-img-source-tabs" id="rmImgSourceTabs">
+        <button class="rm-img-source-tab active" onclick="rmSwitchImageSource('pexels')">Pexels</button>
+        <button class="rm-img-source-tab" onclick="rmSwitchImageSource('pixabay')">Pixabay</button>
+        <button class="rm-img-source-tab" onclick="rmSwitchImageSource('google')">Google</button>
+        <button class="rm-img-source-tab" onclick="rmSwitchImageSource('ai')" style="color:#C084FC;font-weight:600;">AI Generate</button>
+      </div>
+      <input class="rm-img-search-input" id="rmImgSearchInput" placeholder="Search images..."
+             onkeydown="if(event.key==='Enter') rmSearchImages()">
+      <button class="rm-img-search-close" onclick="rmCloseImageSearch()">&times;</button>
+    </div>
+    <div class="rm-img-search-grid" id="rmImgSearchGrid">
+      <div class="rm-img-search-empty">Type a keyword and press Enter to search</div>
+    </div>
+  </div>
+
+</div><!-- /content-area -->
+</div><!-- /app-shell -->
+
+<!-- New Terminal Modal -->
+<div class="modal-overlay" id="newTerminalModal">
+  <div class="modal" style="width:420px;">
+    <h2>New Terminal</h2>
+    <div class="form-group">
+      <label>Name</label>
+      <input type="text" id="ntName" placeholder="e.g. Content Writer">
+    </div>
+    <div class="form-group">
+      <label>Skill <span style="color:#555;font-weight:400;">(optional)</span></label>
+      <select id="ntSkill"><option value="">None (general)</option></select>
+    </div>
+    <div class="form-group">
+      <label>Model</label>
+      <select id="ntModel">
+        <option value="sonnet">Sonnet (default)</option>
+        <option value="opus">Opus (powerful)</option>
+        <option value="haiku">Haiku (fast)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Working Directory <span style="color:#555;font-weight:400;">(optional)</span></label>
+      <input type="text" id="ntWorkDir" placeholder="Uses current space directory if blank">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeNewTerminalModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createNewTerminal()">Launch Terminal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Task Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h2 id="modalTitle">New Task</h2>
+    <input type="hidden" id="editTaskId">
+    <div class="form-group">
+      <label>Task Description</label>
+      <textarea id="taskInput" placeholder="What should Claude do?"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Skill <button class="btn-inline-refresh" onclick="refreshSkills()" title="Scan for new skills">🔄</button></label>
+        <select id="skillInput" onchange="onSkillChange()"><option value="">None (general)</option></select>
+        <div id="skillContextHint" style="display:none;margin-top:6px;padding:6px 10px;background:rgba(123,47,242,0.08);border:1px solid rgba(123,47,242,0.2);border-radius:6px;font-size:11px;color:#C084FC;"></div>
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select id="priorityInput">
+          <option value="1">1 - Urgent</option>
+          <option value="2">2 - High</option>
+          <option value="3">3 - Medium</option>
+          <option value="5" selected>5 - Normal</option>
+          <option value="10">10 - Low</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Model</label>
+        <select id="modelInput">
+          <option value="sonnet" selected>Sonnet</option>
+          <option value="opus">Opus</option>
+          <option value="haiku">Haiku</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Max Turns</label>
+        <input type="number" id="turnsInput" value="25" min="1" max="100">
+      </div>
+    </div>
+    <details id="contextDetails" style="margin-bottom:16px;">
+      <summary style="cursor:pointer;font-size:12px;color:#888;user-select:none;">Advanced: Extra Context <span id="contextSummary" style="color:#4ADE80;"></span></summary>
+      <div style="margin-top:10px;">
+        <div style="font-size:11px;color:#666;margin-bottom:8px;">Space context is auto-included. Add extra files here if needed for this specific task.</div>
+        <div class="form-group">
+          <label>Extra Context Files / Folders <span style="color:#666;font-weight:400;text-transform:none;">(one per line)</span></label>
+          <textarea id="contextInput" placeholder="C:\path\to\extra\file.md" style="min-height:60px;font-size:12px;font-family:'SF Mono',Monaco,monospace;"></textarea>
+        </div>
+      </div>
+    </details>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeAddModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTask()">Add Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Result Modal -->
+<div class="modal-overlay" id="resultModal">
+  <div class="modal" style="width:720px;max-width:90vw;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 id="resultTitle">Task Result</h2>
+      <button class="btn btn-ghost btn-sm" onclick="copyResult()" id="copyBtn" title="Copy to clipboard" style="font-size:12px;">📋 Copy</button>
+    </div>
+    <div class="result-content" id="resultContent" style="max-height:500px;">Loading...</div>
+    <div class="follow-up-section" id="followUpSection" style="display:none;">
+      <textarea id="followUpInput" rows="2" placeholder="Follow up instruction... (e.g. 'go ahead and generate the screenshots')"></textarea>
+      <button class="follow-up-btn" onclick="submitFollowUp()" id="followUpBtn">▶ Follow Up</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeResultModal()">Close</button>
+      <button class="btn btn-primary btn-sm" onclick="retryTask()" id="retryBtn" style="display:none;">Retry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Template Variable Popup -->
+<div class="modal-overlay" id="templatePopup">
+  <div class="modal" style="width:420px;">
+    <h2 id="templatePopupTitle">Quick Action</h2>
+    <div id="templatePopupFields"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeTemplatePopup()">Cancel</button>
+      <button class="btn btn-success" onclick="submitTemplate()" id="templateSubmitBtn">Create & Run ▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- Space Settings Modal -->
+<div class="modal-overlay" id="spaceModal">
+  <div class="modal" style="width:560px;">
+    <h2 id="spaceModalTitle">Space Settings</h2>
+    <div class="form-group">
+      <label>Space Name</label>
+      <input type="text" id="spaceNameInput" placeholder="My Project Space">
+    </div>
+    <div class="form-group">
+      <label>Linked Project</label>
+      <select id="spaceProjectInput" onchange="onSpaceProjectChange()">
+        <option value="">None (general workspace)</option>
+      </select>
+    </div>
+    <div id="spaceProjectInfo" style="display:none;margin-bottom:16px;padding:10px;background:rgba(123,47,242,0.05);border:1px solid rgba(123,47,242,0.15);border-radius:8px;font-size:12px;">
+    </div>
+    <div class="form-group">
+      <label>Working Directory</label>
+      <input type="text" id="spaceWorkdirInput" placeholder="C:\Users\...\project-folder" style="font-size:12px;font-family:'SF Mono',Monaco,monospace;">
+    </div>
+    <div class="form-group">
+      <label>Context Files / Folders <span style="color:#666;font-weight:400;text-transform:none;">(one per line, auto-included for all tasks)</span></label>
+      <textarea id="spaceContextInput" placeholder="C:\path\to\.env.vercel&#10;C:\path\to\memory\folder" style="min-height:60px;font-size:12px;font-family:'SF Mono',Monaco,monospace;"></textarea>
+    </div>
+    <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;margin-top:8px;">
+      <h3 style="font-size:13px;color:#C084FC;margin-bottom:10px;">Project Profiles</h3>
+      <div style="font-size:11px;color:#666;margin-bottom:10px;">Create reusable project profiles to quickly set up spaces.</div>
+      <div id="projectListInSpace" style="margin-bottom:12px;max-height:160px;overflow-y:auto;"></div>
+      <details style="margin-bottom:8px;">
+        <summary style="cursor:pointer;font-size:12px;color:#888;user-select:none;">+ Add New Project Profile</summary>
+        <div style="margin-top:10px;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Short ID</label>
+              <input type="text" id="projIdInput" placeholder="my-project" style="font-size:12px;">
+            </div>
+            <div class="form-group">
+              <label>Display Name</label>
+              <input type="text" id="projNameInput" placeholder="My Cool Project" style="font-size:12px;">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Working Directory</label>
+            <input type="text" id="projWorkdirInput" placeholder="C:\Users\...\project-folder" style="font-size:12px;font-family:'SF Mono',Monaco,monospace;">
+          </div>
+          <div class="form-group">
+            <label>Context Files / Folders <span style="color:#666;font-weight:400;text-transform:none;">(one per line)</span></label>
+            <textarea id="projContextInput" placeholder="C:\path\to\.env.vercel" style="min-height:40px;font-size:12px;font-family:'SF Mono',Monaco,monospace;"></textarea>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="addProject()">Save Profile</button>
+        </div>
+      </details>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" onclick="deleteCurrentSpace()" id="deleteSpaceBtn" style="margin-right:auto;">Delete Space</button>
+      <button class="btn btn-ghost" onclick="closeSpaceModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSpaceSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Task Master Modal -->
+<div class="modal-overlay" id="taskMasterModal">
+  <div class="modal" style="width:640px;max-width:95vw;">
+    <!-- State 1: Goal Input -->
+    <div id="tmInput">
+      <h2 style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:22px;">🧠</span> Task Master
+      </h2>
+      <p style="color:#888;font-size:13px;margin-bottom:16px;">
+        Describe your goal and I'll create a plan with the right skills and agents assigned.
+      </p>
+      <div class="form-group">
+        <label>What do you want to accomplish?</label>
+        <textarea id="tmGoalInput" rows="4"
+          placeholder="e.g. Create a buyer's loop: research latest trends, analyze viral angles, write posts, generate thumbnails, build a landing page, write an email sequence"
+          style="font-size:14px;line-height:1.6;"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeTaskMaster()">Cancel</button>
+        <button class="btn btn-taskmaster" onclick="generatePlan()" id="tmPlanBtn">🧠 Plan It</button>
+      </div>
+    </div>
+
+    <!-- State 2: Loading -->
+    <div id="tmLoading" style="display:none;text-align:center;padding:48px 20px;">
+      <div class="spinner" style="width:36px;height:36px;margin:0 auto 20px;border-width:3px;"></div>
+      <div style="color:#C084FC;font-size:16px;font-weight:600;">Planning your workflow...</div>
+      <div style="color:#666;font-size:13px;margin-top:8px;">
+        <span id="tmElapsed">0s</span> — analyzing goal &amp; matching skills
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="cancelPlan()" style="margin-top:24px;">Cancel</button>
+    </div>
+
+    <!-- State 3: Plan Review -->
+    <div id="tmReview" style="display:none;">
+      <h2 id="tmPlanName" style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:22px;">🧠</span> <span id="tmPlanNameText">Plan Review</span>
+      </h2>
+      <p id="tmPlanDesc" style="color:#888;font-size:13px;margin-bottom:16px;"></p>
+
+      <div id="tmPlanSteps" style="margin-bottom:16px;max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:0;"></div>
+
+      <div class="plan-estimate" id="tmEstimate" style="margin-bottom:16px;"></div>
+
+      <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="saveAsRoutine()" style="margin-right:auto;" title="Save this plan as a reusable routine">💾 Save as Routine</button>
+        <button class="btn btn-ghost" onclick="closeTaskMaster()">Cancel</button>
+        <button class="btn btn-success" onclick="approvePlan()">✅ Approve &amp; Run</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- History / Archive Modal -->
+<div class="modal-overlay" id="historyModal">
+  <div class="modal" style="width:720px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;">
+    <h2 style="display:flex;align-items:center;gap:8px;">
+      <span>📁</span> Task History
+      <span id="historyCount" style="font-size:13px;color:#888;font-weight:400;margin-left:auto;"></span>
+    </h2>
+    <input type="text" class="history-search" id="historySearch" placeholder="Search tasks by description, skill, or plan name..." oninput="renderHistory()">
+    <div class="history-filters" id="historyFilters"></div>
+    <div style="flex:1;overflow-y:auto;" id="historyList"></div>
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="btn btn-ghost" onclick="closeHistory()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Schedules Modal -->
+<div class="modal-overlay" id="schedulesModal">
+  <div class="modal" style="width:680px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;">
+    <!-- List View -->
+    <div id="scheduleListView">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="display:flex;align-items:center;gap:8px;"><span>🕐</span> Scheduled Routines</h2>
+        <button class="btn btn-primary btn-sm" onclick="showScheduleForm()">+ New Schedule</button>
+      </div>
+      <div id="scheduleList" style="flex:1;overflow-y:auto;"></div>
+      <div style="font-size:11px;color:#555;margin-top:12px;" id="scheduleTzInfo"></div>
+    </div>
+
+    <!-- Create/Edit Form -->
+    <div id="scheduleFormView" style="display:none;">
+      <h2 id="scheduleFormTitle">New Schedule</h2>
+      <input type="hidden" id="editScheduleId">
+
+      <div class="form-group">
+        <label>Routine to run</label>
+        <select id="scheduleRoutineSelect" style="width:100%;padding:8px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e0e0e0;font-size:13px;">
+          <option value="">Select a routine...</option>
+        </select>
+      </div>
+
+      <div class="schedule-form-row">
+        <div class="form-group">
+          <label>Time</label>
+          <input type="time" id="scheduleTimeInput" value="09:00" style="width:100%;padding:8px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e0e0e0;font-size:13px;">
+        </div>
+        <div class="form-group">
+          <label>Days</label>
+          <select id="scheduleDaysInput" onchange="onScheduleDaysChange()" style="width:100%;padding:8px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e0e0e0;font-size:13px;">
+            <option value="daily">Every day</option>
+            <option value="weekdays" selected>Weekdays (Mon-Fri)</option>
+            <option value="weekends">Weekends (Sat-Sun)</option>
+            <option value="custom">Custom days...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="day-picker" id="customDayPicker" style="display:none;">
+        <button type="button" class="day-btn" data-day="0" onclick="toggleScheduleDay(this)">Sun</button>
+        <button type="button" class="day-btn" data-day="1" onclick="toggleScheduleDay(this)">Mon</button>
+        <button type="button" class="day-btn" data-day="2" onclick="toggleScheduleDay(this)">Tue</button>
+        <button type="button" class="day-btn" data-day="3" onclick="toggleScheduleDay(this)">Wed</button>
+        <button type="button" class="day-btn" data-day="4" onclick="toggleScheduleDay(this)">Thu</button>
+        <button type="button" class="day-btn" data-day="5" onclick="toggleScheduleDay(this)">Fri</button>
+        <button type="button" class="day-btn" data-day="6" onclick="toggleScheduleDay(this)">Sat</button>
+      </div>
+
+      <div style="font-size:11px;color:#555;padding:8px 12px;background:rgba(255,255,255,0.02);border-radius:6px;margin-bottom:16px;">
+        Space: <span style="color:#C084FC;" id="scheduleSpaceNote">...</span>
+        <span id="scheduleFormTz" style="margin-left:12px;"></span>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="hideScheduleForm()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSchedule()">Save Schedule</button>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.06);padding-top:12px;" id="scheduleListActions">
+      <button class="btn btn-ghost" onclick="closeSchedules()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Save Routine Modal (sub-modal for Task Master) -->
+<div class="modal-overlay" id="saveRoutineModal">
+  <div class="modal" style="width:400px;">
+    <h2>Save as Routine</h2>
+    <p style="color:#888;font-size:13px;margin-bottom:16px;">
+      This plan will appear in Quick Actions for one-click reuse.
+    </p>
+    <div class="form-group">
+      <label>Routine Name</label>
+      <input type="text" id="routineNameInput" placeholder="e.g. Buyer's Loop Campaign">
+    </div>
+    <div class="form-group">
+      <label>Icon <span style="color:#666;font-weight:400;">(emoji)</span></label>
+      <input type="text" id="routineIconInput" value="🧠" style="width:60px;text-align:center;font-size:20px;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeSaveRoutineModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmSaveRoutine()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Routine Builder Modal -->
+<div class="modal-overlay" id="routineBuilderModal">
+  <div class="modal" style="width:520px;max-height:85vh;overflow-y:auto;">
+    <h2 id="rbTitle">Build a Routine</h2>
+    <input type="hidden" id="rbEditId">
+
+    <div class="form-row" style="gap:10px;">
+      <div class="form-group" style="flex:1;">
+        <label>Name</label>
+        <input type="text" id="rbName" placeholder="e.g. Morning Content Batch">
+      </div>
+      <div class="form-group" style="flex:0 0 70px;">
+        <label>Icon</label>
+        <input type="text" id="rbIcon" value="⚡" style="text-align:center;font-size:20px;">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Description <span style="color:#555;font-weight:400;">(optional)</span></label>
+      <input type="text" id="rbDescription" placeholder="What does this routine do?">
+    </div>
+
+    <div class="form-group">
+      <label>Steps</label>
+      <div id="rbSteps"></div>
+      <div class="rb-add-step" id="rbAddStepBtn" onclick="rbShowTemplatePicker()">+ Add Step</div>
+      <div id="rbTemplatePicker" style="display:none;">
+        <div class="rb-template-picker" id="rbTemplateGrid"></div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeRoutineBuilder()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRoutineBuilder()">Save Routine</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ HeyGen Settings Modal ═══ -->
+<div class="modal-overlay" id="hgSettingsModal">
+  <div class="modal" style="width:480px;">
+    <h2>HeyGen Settings</h2>
+    <div class="form-group">
+      <label>API Key</label>
+      <div style="display:flex;gap:8px;">
+        <input type="password" id="hgApiKeyInput" placeholder="Enter your HeyGen API key" style="flex:1;">
+        <button class="btn btn-ghost btn-sm" onclick="hgToggleKeyVisibility()" id="hgToggleKeyBtn" style="white-space:nowrap;">Show</button>
+      </div>
+      <small style="color:#666;font-size:11px;margin-top:6px;display:block;">Get your key from app.heygen.com → Settings → API</small>
+    </div>
+    <div style="border-top:1px solid rgba(255,255,255,0.06);margin:16px 0;padding-top:16px;">
+      <label style="font-size:13px;font-weight:600;color:#ccc;margin-bottom:8px;display:block;">Browser Login (for free generation)</label>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label style="font-size:12px;color:#888;">Email</label>
+        <input type="email" id="hgLoginEmail" placeholder="your@email.com">
+      </div>
+      <div class="form-group" style="margin-bottom:4px;">
+        <label style="font-size:12px;color:#888;">Password</label>
+        <input type="password" id="hgLoginPassword" placeholder="HeyGen password">
+      </div>
+      <small style="color:#666;font-size:11px;display:block;">Stored locally. Used by the browser agent to log in if session expires.</small>
+    </div>
+    <div id="hgSettingsStatus" style="font-size:13px;margin:12px 0;display:none;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="hgTestConnection()" id="hgTestBtn">Test Connection</button>
+      <div style="flex:1;"></div>
+      <button class="btn btn-ghost" onclick="document.getElementById('hgSettingsModal').classList.remove('active')">Cancel</button>
+      <button class="btn btn-primary" onclick="hgSaveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Tier Gating (Basic vs Lifetime) ═══ -->
+<style>
+  /* Upgrade overlay on locked views */
+  .tier-lock-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 15, 26, 0.85);
+    backdrop-filter: blur(6px);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .tier-lock-overlay { display: none; }
+  .tier-locked .tier-lock-overlay { display: flex; }
+  .tier-lock-icon { font-size: 48px; opacity: 0.6; }
+  .tier-lock-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #C084FC;
+  }
+  .tier-lock-desc {
+    font-size: 14px;
+    color: #888;
+    text-align: center;
+    max-width: 360px;
+    line-height: 1.6;
+  }
+  .tier-upgrade-btn {
+    margin-top: 8px;
+    padding: 14px 32px;
+    font-size: 15px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #7B2FF2, #9333EA);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tier-upgrade-btn:hover {
+    box-shadow: 0 6px 24px rgba(123, 47, 242, 0.4);
+    transform: translateY(-1px);
+  }
+  /* Locked action buttons (New Task, Run All, Quick Actions, etc.) */
+  .tier-btn-locked {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+    position: relative;
+  }
+  /* Non-blocking upgrade banner inside locked views */
+  .tier-view-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 12px 20px;
+    background: rgba(123, 47, 242, 0.08);
+    border: 1px solid rgba(123,47,242,0.15);
+    border-radius: 12px;
+    margin: 8px 12px 16px;
+    font-size: 13px;
+    font-family: 'Satoshi', sans-serif;
+    color: #bbb;
+    flex-shrink: 0;
+  }
+
+  /* Upgrade modal */
+  .tier-upgrade-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  .tier-upgrade-modal.show { display: flex; }
+  .tier-upgrade-box {
+    background: rgba(13, 13, 22, 0.95);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 48px 40px;
+    max-width: 480px;
+    text-align: center;
+    backdrop-filter: blur(20px);
+  }
+  .tier-upgrade-box h2 {
+    font-size: 24px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #7B2FF2, #C084FC);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 16px;
+  }
+  .tier-upgrade-features {
+    text-align: left;
+    margin: 20px 0;
+    font-size: 14px;
+    color: #ccc;
+    line-height: 2;
+  }
+  .tier-upgrade-features span { color: #4ade80; margin-right: 8px; }
+  .tier-upgrade-box .tier-lock-desc { margin-bottom: 8px; }
+  .tier-close-btn {
+    margin-top: 16px;
+    padding: 10px 24px;
+    font-size: 13px;
+    background: rgba(255,255,255,0.06);
+    color: #aaa;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+</style>
+
+<!-- Lock overlays injected into views -->
+<div id="tierUpgradeModal" class="tier-upgrade-modal" onclick="if(event.target===this)closeTierModal()">
+  <div class="tier-upgrade-box">
+    <h2>Upgrade to Lifetime</h2>
+    <p class="tier-lock-desc">Unlock the full power of the AI Task Manager with all features.</p>
+    <div class="tier-upgrade-features">
+      <div><span>✓</span> AI Task Board — automate any workflow with Claude</div>
+      <div><span>✓</span> Agent Terminals — interactive chat sessions</div>
+      <div><span>✓</span> Visual Workflows — drag-and-drop automation</div>
+      <div><span>✓</span> Task Master — AI project planning</div>
+      <div><span>✓</span> Schedules & Routines — run tasks on autopilot</div>
+      <div><span>✓</span> Reel Master — already included in your plan</div>
+    </div>
+    <a href="https://aicreatorworkshop.com/upgrade" target="_blank" class="tier-upgrade-btn" style="display:inline-block;text-decoration:none;">Get Lifetime Access</a>
+    <br>
+    <button class="tier-close-btn" onclick="closeTierModal()">Maybe Later</button>
+  </div>
+</div>
+
+<!-- ═══ Update Modal ═══ -->
+<style>
+  .update-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+  }
+  .update-modal.show { display: flex; }
+  .update-box {
+    background: #1a1a2e;
+    border: 1px solid rgba(123,47,242,0.3);
+    border-radius: 16px;
+    padding: 36px 32px;
+    width: 400px;
+    text-align: center;
+  }
+  .update-box h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #C084FC;
+    margin-bottom: 12px;
+  }
+  .update-box p {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .update-box .update-version {
+    font-family: monospace;
+    color: #4ade80;
+    font-size: 16px;
+    margin-bottom: 20px;
+  }
+  .update-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 16px 0;
+    display: none;
+  }
+  .update-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #7B2FF2, #C084FC);
+    border-radius: 4px;
+    transition: width 0.3s;
+    width: 0%;
+  }
+  .update-btn {
+    padding: 12px 28px;
+    font-size: 14px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #7B2FF2, #9333EA);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin: 4px;
+  }
+  .update-btn:hover { box-shadow: 0 4px 16px rgba(123,47,242,0.4); }
+  .update-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .update-btn-ghost {
+    padding: 10px 20px;
+    font-size: 13px;
+    background: rgba(255,255,255,0.06);
+    color: #aaa;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    cursor: pointer;
+    margin: 4px;
+  }
+  .sidebar-item .update-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    background: #4ade80;
+    border-radius: 50%;
+    display: none;
+  }
+  #updateBtn { position: relative; }
+</style>
+
+<div id="updateModal" class="update-modal" onclick="if(event.target===this)closeUpdateModal()">
+  <div class="update-box">
+    <h3 id="updateTitle">Check for Updates</h3>
+    <p id="updateMessage">Click below to check if a newer version is available.</p>
+    <div class="update-version" id="updateVersion" style="display:none;"></div>
+    <div class="update-progress-bar" id="updateProgressBar">
+      <div class="update-progress-fill" id="updateProgressFill"></div>
+    </div>
+    <div id="updateActions">
+      <button class="update-btn" id="updateActionBtn" onclick="handleUpdateAction()">Check for Updates</button>
+      <button class="update-btn-ghost" onclick="closeUpdateModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── App Update System ──
+let updateState = 'idle'; // idle, checking, available, downloading, ready
+
+function closeUpdateModal() {
+  document.getElementById('updateModal').classList.remove('show');
+}
+
+function checkAppUpdate() {
+  document.getElementById('updateModal').classList.add('show');
+  if (updateState === 'ready') {
+    showUpdateReady();
+  } else if (updateState === 'available') {
+    showUpdateAvailable(window._updateInfo);
+  } else {
+    // Reset to check state
+    updateState = 'idle';
+    document.getElementById('updateTitle').textContent = 'Check for Updates';
+    document.getElementById('updateMessage').textContent = 'Click below to check if a newer version is available.';
+    document.getElementById('updateVersion').style.display = 'none';
+    document.getElementById('updateProgressBar').style.display = 'none';
+    document.getElementById('updateActionBtn').textContent = 'Check for Updates';
+    document.getElementById('updateActionBtn').disabled = false;
+  }
+}
+
+async function handleUpdateAction() {
+  const btn = document.getElementById('updateActionBtn');
+
+  if (updateState === 'idle' || updateState === 'checking') {
+    // Check for updates
+    updateState = 'checking';
+    btn.textContent = 'Checking...';
+    btn.disabled = true;
+    document.getElementById('updateMessage').textContent = 'Connecting to update server...';
+
+    if (window.electronAPI && window.electronAPI.checkForUpdate) {
+      await window.electronAPI.checkForUpdate();
+      // Results come via events (onUpdateAvailable / onUpdateNotAvailable)
+    } else {
+      document.getElementById('updateMessage').textContent = 'Updates are only available in the desktop app.';
+      btn.textContent = 'Not Available';
+      btn.disabled = true;
+    }
+  } else if (updateState === 'available') {
+    // Download update
+    updateState = 'downloading';
+    btn.textContent = 'Downloading...';
+    btn.disabled = true;
+    document.getElementById('updateProgressBar').style.display = 'block';
+    if (window.electronAPI) window.electronAPI.downloadUpdate();
+  } else if (updateState === 'ready') {
+    // Install and restart
+    if (window.electronAPI) window.electronAPI.installUpdate();
+  }
+}
+
+function showUpdateAvailable(data) {
+  updateState = 'available';
+  window._updateInfo = data;
+  document.getElementById('updateTitle').textContent = 'Update Available!';
+  document.getElementById('updateMessage').textContent = 'A new version is ready to download.';
+  document.getElementById('updateVersion').textContent = 'v' + data.version;
+  document.getElementById('updateVersion').style.display = 'block';
+  document.getElementById('updateActionBtn').textContent = 'Download Update';
+  document.getElementById('updateActionBtn').disabled = false;
+  // Show green dot on sidebar
+  showUpdateDot(true);
+}
+
+function showUpdateReady() {
+  updateState = 'ready';
+  document.getElementById('updateTitle').textContent = 'Ready to Install';
+  document.getElementById('updateMessage').textContent = 'The update has been downloaded. Restart the app to apply it.';
+  document.getElementById('updateProgressBar').style.display = 'none';
+  document.getElementById('updateActionBtn').textContent = 'Restart & Update';
+  document.getElementById('updateActionBtn').disabled = false;
+}
+
+function showUpdateDot(show) {
+  let dot = document.getElementById('updateDot');
+  if (!dot) {
+    dot = document.createElement('div');
+    dot.className = 'update-dot';
+    dot.id = 'updateDot';
+    document.getElementById('updateBtn').appendChild(dot);
+  }
+  dot.style.display = show ? 'block' : 'none';
+}
+
+// Listen for update events from Electron
+if (window.electronAPI) {
+  if (window.electronAPI.onUpdateAvailable) {
+    window.electronAPI.onUpdateAvailable((data) => {
+      showUpdateAvailable(data);
+    });
+  }
+  if (window.electronAPI.onUpdateNotAvailable) {
+    window.electronAPI.onUpdateNotAvailable(() => {
+      updateState = 'idle';
+      document.getElementById('updateTitle').textContent = 'You\'re Up to Date';
+      document.getElementById('updateMessage').textContent = 'You\'re running the latest version.';
+      document.getElementById('updateActionBtn').textContent = 'Check Again';
+      document.getElementById('updateActionBtn').disabled = false;
+    });
+  }
+  if (window.electronAPI.onUpdateProgress) {
+    window.electronAPI.onUpdateProgress((data) => {
+      document.getElementById('updateProgressFill').style.width = data.percent + '%';
+      document.getElementById('updateActionBtn').textContent = 'Downloading... ' + data.percent + '%';
+    });
+  }
+  if (window.electronAPI.onUpdateDownloaded) {
+    window.electronAPI.onUpdateDownloaded(() => {
+      showUpdateReady();
+    });
+  }
+  if (window.electronAPI.onUpdateError) {
+    window.electronAPI.onUpdateError((msg) => {
+      updateState = 'idle';
+      document.getElementById('updateTitle').textContent = 'Update Error';
+      document.getElementById('updateMessage').textContent = msg || 'Could not check for updates. Try again later.';
+      document.getElementById('updateActionBtn').textContent = 'Try Again';
+      document.getElementById('updateActionBtn').disabled = false;
+    });
+  }
+}
+</script>
+
+<script>
+// ── Tier Gating System ──
+window.APP_TIER = 'lifetime'; // default: unlocked (overridden below)
+
+function closeTierModal() {
+  document.getElementById('tierUpgradeModal').classList.remove('show');
+}
+function showTierModal() {
+  document.getElementById('tierUpgradeModal').classList.add('show');
+}
+
+async function initTierGating() {
+  // Fetch tier
+  try {
+    if (window.electronAPI && window.electronAPI.getLicenseTier) {
+      window.APP_TIER = await window.electronAPI.getLicenseTier();
+    } else {
+      const resp = await fetch('/api/license-tier');
+      const data = await resp.json();
+      window.APP_TIER = data.tier || 'lifetime';
+    }
+  } catch (e) {
+    window.APP_TIER = 'lifetime'; // default to unlocked on error
+  }
+
+  // Hide CLI warning for basic users (they don't need Claude)
+  if (window.APP_TIER === 'basic') {
+    const banner = document.getElementById('serverBanner');
+    if (banner) banner.className = 'server-banner';
+  }
+
+  if (window.APP_TIER === 'lifetime') return; // Nothing to lock
+
+  // ── Basic users can SEE everything, but action buttons are locked ──
+  // They can navigate freely to Board, Terminals, Workflows — but can't
+  // create tasks, run skills, open terminals, or execute workflows.
+
+  // Lock action buttons that require Lifetime
+  document.querySelectorAll('.btn-primary, .btn-success, .btn-taskmaster').forEach(btn => {
+    const text = btn.textContent.trim();
+    if (text.includes('New Task') || text.includes('Task Master') || text.includes('Run All') || text.includes('Stop All')) {
+      btn.classList.add('tier-btn-locked');
+      btn.addEventListener('click', (e) => {
+        if (window.APP_TIER === 'basic') { e.preventDefault(); e.stopPropagation(); showTierModal(); }
+      }, true);
+    }
+  });
+
+  // Lock Quick Actions (routines bar) — clicking shows upgrade modal
+  document.querySelectorAll('.routine-chip, .template-chip').forEach(chip => {
+    chip.classList.add('tier-btn-locked');
+    chip.addEventListener('click', (e) => {
+      if (window.APP_TIER === 'basic') { e.preventDefault(); e.stopPropagation(); showTierModal(); }
+    }, true);
+  });
+
+  // ── Add upgrade banner inside locked views (not blocking — just a top banner) ──
+  ['boardView', 'terminalViewWrapper', 'workflowView'].forEach(viewId => {
+    const view = document.getElementById(viewId);
+    if (!view) return;
+    const banner = document.createElement('div');
+    banner.className = 'tier-view-banner';
+    banner.innerHTML = `
+      <span>This feature requires <strong>Lifetime</strong> access.</span>
+      <button class="tier-upgrade-btn" onclick="showTierModal()" style="padding:8px 20px;font-size:13px;">Upgrade</button>
+    `;
+    view.insertBefore(banner, view.firstChild);
+  });
+
+  // ── Intercept workflow actions ──
+  const origWfShowPicker = window.wfShowPicker;
+  const origWfAddNode = window.wfAddNode;
+  const origWfRun = window.wfRun;
+  const origWfRunDirect = window.wfRunDirect;
+  const origWfSave = window.wfSave;
+  window.wfShowPicker = function() {
+    if (window.APP_TIER === 'basic') { showTierModal(); return; }
+    if (origWfShowPicker) origWfShowPicker();
+  };
+  window.wfAddNode = function(t) {
+    if (window.APP_TIER === 'basic') { showTierModal(); return; }
+    if (origWfAddNode) origWfAddNode(t);
+  };
+  window.wfRun = function() {
+    if (window.APP_TIER === 'basic') { showTierModal(); return; }
+    if (origWfRun) return origWfRun();
+  };
+  window.wfRunDirect = function(r) {
+    if (window.APP_TIER === 'basic') { showTierModal(); return; }
+    if (origWfRunDirect) return origWfRunDirect(r);
+  };
+  window.wfSave = function() {
+    if (window.APP_TIER === 'basic') { showTierModal(); return; }
+    if (origWfSave) return origWfSave();
+  };
+
+  // ── Intercept terminal actions ──
+  const origOpenTerminal = window.openTerminal;
+  const origNewTerminal = window.newTerminal;
+  if (window.openTerminal) {
+    window.openTerminal = function() {
+      if (window.APP_TIER === 'basic') { showTierModal(); return; }
+      origOpenTerminal.apply(this, arguments);
+    };
+  }
+  if (window.newTerminal) {
+    window.newTerminal = function() {
+      if (window.APP_TIER === 'basic') { showTierModal(); return; }
+      origNewTerminal.apply(this, arguments);
+    };
+  }
+
+  // ── Intercept bottom nav ──
+  const origOpenSchedules = window.openSchedules;
+  const origOpenHistory = window.openHistory;
+  window.openSchedules = function() {
+    if (window.APP_TIER === 'basic') { showTierModal(); return; }
+    origOpenSchedules();
+  };
+  window.openHistory = function() {
+    if (window.APP_TIER === 'basic') { showTierModal(); return; }
+    origOpenHistory();
+  };
+
+  // ── Auto-switch to Reel Master for basic users ──
+  if (typeof switchView === 'function') {
+    switchView('reelmaster');
+  }
+}
+
+// ── Tier test toggle (for admin testing) ──
+function updateTierBadge() {
+  const badge = document.getElementById('tierBadge');
+  if (!badge) return;
+  if (window.APP_TIER === 'basic') {
+    badge.textContent = 'Basic Plan — click to test Lifetime';
+    badge.style.background = 'rgba(255,255,255,0.06)';
+    badge.style.color = '#888';
+  } else {
+    badge.textContent = 'Lifetime Plan — click to test Basic';
+    badge.style.background = 'rgba(123,47,242,0.2)';
+    badge.style.color = '#C084FC';
+  }
+  badge.style.display = 'block';
+}
+
+function toggleTierTest() {
+  const newTier = window.APP_TIER === 'basic' ? 'lifetime' : 'basic';
+  window.APP_TIER = newTier;
+
+  // Remove all lock state
+  document.querySelectorAll('.tier-btn-locked').forEach(el => el.classList.remove('tier-btn-locked'));
+  document.querySelectorAll('.tier-view-banner').forEach(el => el.remove());
+
+  // Hide/show CLI banner
+  const cliBanner = document.getElementById('serverBanner');
+  if (newTier === 'basic' && cliBanner) cliBanner.className = 'server-banner';
+
+  // Re-apply if switched to basic
+  if (newTier === 'basic') {
+    // Lock action buttons
+    document.querySelectorAll('.btn-primary, .btn-success, .btn-taskmaster').forEach(btn => {
+      const text = btn.textContent.trim();
+      if (text.includes('New Task') || text.includes('Task Master') || text.includes('Run All') || text.includes('Stop All')) {
+        btn.classList.add('tier-btn-locked');
+      }
+    });
+    // Lock Quick Actions
+    document.querySelectorAll('.routine-chip, .template-chip').forEach(chip => {
+      chip.classList.add('tier-btn-locked');
+    });
+    // Add upgrade banners to views
+    ['boardView', 'terminalViewWrapper', 'workflowView'].forEach(viewId => {
+      const view = document.getElementById(viewId);
+      if (!view) return;
+      const banner = document.createElement('div');
+      banner.className = 'tier-view-banner';
+      banner.innerHTML = `
+        <span>This feature requires <strong>Lifetime</strong> access.</span>
+        <button class="tier-upgrade-btn" onclick="showTierModal()" style="padding:8px 20px;font-size:13px;">Upgrade</button>
+      `;
+      view.insertBefore(banner, view.firstChild);
+    });
+    switchView('reelmaster');
+  }
+
+  updateTierBadge();
+}
+
+// Run after all JS loads
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    initTierGating().then(() => updateTierBadge());
+  }, 200);
+});
+</script>
+
+<!-- JS (extracted from inline script) -->
+<script src="js/api.js"></script>
+<script src="js/board.js"></script>
+<script src="js/tasks.js"></script>
+<script src="js/templates.js"></script>
+<script src="js/terminals.js"></script>
+<script src="js/taskmaster.js"></script>
+<script src="js/workflows.js"></script>
+<script src="js/reel-master.js"></script>
+<script src="js/heygen.js"></script>
+<script src="js/scripter.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

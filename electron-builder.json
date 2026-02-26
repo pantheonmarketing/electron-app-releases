@@ -1,0 +1,64 @@
+{
+  "appId": "com.aico.electron",
+  "productName": "Electron",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "electron-main.js",
+    "electron-preload.js",
+    "server.js",
+    "worker.js",
+    "add-task.js",
+    "status.js",
+    "run.js",
+    "lib/**",
+    "public/**",
+    "skills/**",
+    "reel-presets/**",
+    "package.json",
+    ".env",
+    "node_modules/**"
+  ],
+  "extraResources": [
+    {
+      "from": "templates.json",
+      "to": "templates.json"
+    }
+  ],
+  "win": {
+    "target": "nsis",
+    "extraResources": [
+      {
+        "from": "bin/win/ffmpeg.exe",
+        "to": "bin/ffmpeg.exe"
+      }
+    ]
+  },
+  "mac": {
+    "target": "dmg",
+    "category": "public.app-category.productivity",
+    "extraResources": [
+      {
+        "from": "bin/mac/ffmpeg",
+        "to": "bin/ffmpeg"
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  },
+  "dmg": {
+    "contents": [
+      { "x": 130, "y": 220 },
+      { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+    ]
+  },
+  "asar": true,
+  "publish": {
+    "provider": "github",
+    "owner": "pantheonmarketing",
+    "repo": "electron-app-releases"
+  }
+}

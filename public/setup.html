@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Electron — Setup</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500,400&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a14;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .setup-container {
+      max-width: 600px;
+      width: 100%;
+      padding: 48px;
+    }
+    .logo {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, #7B2FF2, #C084FC);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #888;
+      font-size: 14px;
+      margin-bottom: 36px;
+    }
+    .version {
+      color: #555;
+      font-size: 12px;
+      font-family: monospace;
+      margin-top: 4px;
+    }
+    .check-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 20px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      transition: all 0.3s;
+    }
+    .check-item.ok { border-color: rgba(34,197,94,0.2); }
+    .check-item.fail { border-color: rgba(239,68,68,0.2); }
+    .check-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check-icon.ok { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .check-icon.fail { background: rgba(239,68,68,0.15); color: #f87171; }
+    .check-icon.loading { background: rgba(255,255,255,0.06); color: #888; }
+    .check-body { flex: 1; }
+    .check-name { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+    .check-desc { font-size: 12px; color: #888; line-height: 1.5; }
+    .check-fix {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .check-item.fail .check-fix { display: block; }
+    .check-fix code {
+      background: rgba(123,47,242,0.15);
+      color: #C084FC;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+    }
+    .check-fix a {
+      color: #C084FC;
+      text-decoration: underline;
+    }
+    .btn {
+      padding: 14px 28px;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+      width: 100%;
+      margin-top: 24px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #7B2FF2, #9333EA);
+      color: #fff;
+    }
+    .btn-primary:hover { box-shadow: 0 4px 20px rgba(123,47,242,0.4); }
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .btn-ghost {
+      background: rgba(255,255,255,0.06);
+      color: #aaa;
+      border: 1px solid rgba(255,255,255,0.1);
+      margin-top: 10px;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.1); }
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="setup-container">
+    <div class="logo">Electron Setup</div>
+    <p class="subtitle">Checking your system for required tools...</p>
+    <div class="version" id="versionLine"></div>
+
+    <div class="check-item" id="check-ffmpeg">
+      <div class="check-icon loading" id="icon-ffmpeg"><span class="spinner"></span></div>
+      <div class="check-body">
+        <div class="check-name">FFmpeg</div>
+        <div class="check-desc">Required for audio extraction from video clips</div>
+        <div class="check-fix">
+          FFmpeg is bundled with this app. If this check fails, try reinstalling.<br><br>
+          Or install manually: <a href="https://ffmpeg.org/download.html" target="_blank">ffmpeg.org/download</a><br>
+          Windows: <code>winget install Gyan.FFmpeg</code>
+        </div>
+      </div>
+    </div>
+
+    <div class="check-item" id="check-whisper">
+      <div class="check-icon loading" id="icon-whisper"><span class="spinner"></span></div>
+      <div class="check-body">
+        <div class="check-name">Whisper</div>
+        <div class="check-desc">AI speech-to-text for automatic subtitles</div>
+        <div class="check-fix">
+          Whisper requires Python 3.8+. Install steps:<br><br>
+          1. Install Python: <a href="https://python.org/downloads" target="_blank">python.org/downloads</a><br>
+          2. Open Command Prompt and run:<br>
+          <code>pip install openai-whisper</code><br><br>
+          Then click "Re-check" below.
+        </div>
+      </div>
+    </div>
+
+    <div class="check-item" id="check-claude">
+      <div class="check-icon loading" id="icon-claude"><span class="spinner"></span></div>
+      <div class="check-body">
+        <div class="check-name">Claude CLI</div>
+        <div class="check-desc">AI agent for automated task execution</div>
+        <div class="check-fix">
+          Install Claude CLI:<br><br>
+          1. Open Command Prompt and run:<br>
+          <code>npm install -g @anthropic-ai/claude-code</code><br>
+          2. Then log in:<br>
+          <code>claude login</code><br><br>
+          Then click "Re-check" below.
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="continueBtn" disabled onclick="goToApp()">
+      Checking...
+    </button>
+    <button class="btn btn-ghost" onclick="runChecks()">Re-check</button>
+  </div>
+
+  <script>
+    async function runChecks() {
+      const btn = document.getElementById('continueBtn');
+      btn.disabled = true;
+      btn.textContent = 'Checking...';
+
+      // Reset icons to loading
+      ['ffmpeg', 'whisper', 'claude'].forEach(id => {
+        document.getElementById(`icon-${id}`).className = 'check-icon loading';
+        document.getElementById(`icon-${id}`).innerHTML = '<span class="spinner"></span>';
+        document.getElementById(`check-${id}`).className = 'check-item';
+      });
+
+      try {
+        const resp = await fetch('/api/health');
+        const data = await resp.json();
+
+        if (data.version) {
+          document.getElementById('versionLine').textContent = 'v' + data.version;
+        }
+
+        setCheck('ffmpeg', data.ffmpeg);
+        setCheck('whisper', data.whisper);
+        setCheck('claude', data.claude);
+
+        if (data.all_good) {
+          btn.disabled = false;
+          btn.textContent = 'Launch App →';
+        } else {
+          btn.disabled = false;
+          btn.textContent = 'Skip & Launch Anyway →';
+        }
+      } catch (e) {
+        btn.textContent = 'Connection error — Retry';
+        btn.disabled = false;
+      }
+    }
+
+    function setCheck(id, ok) {
+      const icon = document.getElementById(`icon-${id}`);
+      const item = document.getElementById(`check-${id}`);
+      icon.className = 'check-icon ' + (ok ? 'ok' : 'fail');
+      icon.innerHTML = ok ? '✓' : '✗';
+      item.className = 'check-item ' + (ok ? 'ok' : 'fail');
+    }
+
+    async function goToApp() {
+      await fetch('/api/setup-complete', { method: 'POST' }).catch(() => {});
+      window.location.href = '/';
+    }
+
+    runChecks();
+  </script>
+</body>
+</html>

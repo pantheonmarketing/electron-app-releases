@@ -1,0 +1,349 @@
+{
+  "templates": [
+    {
+      "id": "write-fb-post",
+      "name": "Write FB Post",
+      "icon": "✏️",
+      "skill": "jonny-writer",
+      "model": "sonnet",
+      "prompt_template": "Write a Facebook post about: {topic}",
+      "variables": [
+        {
+          "name": "topic",
+          "label": "What's the post about?",
+          "placeholder": "e.g. why AI agents are the future",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "create-stories",
+      "name": "Create Story Slides",
+      "icon": "📱",
+      "skill": "fb-stories",
+      "model": "sonnet",
+      "prompt_template": "Create {count} story slides about: {topic}",
+      "variables": [
+        {
+          "name": "topic",
+          "label": "Topic",
+          "placeholder": "e.g. how I made $1k/day with AI",
+          "required": true
+        },
+        {
+          "name": "count",
+          "label": "Number of slides",
+          "placeholder": "3",
+          "default": "3",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "check-youtube",
+      "name": "Check YouTube",
+      "icon": "📺",
+      "skill": "youtube-tracker",
+      "model": "haiku",
+      "prompt_template": "Check if there are any new videos on the YouTube channels and send updates to Telegram",
+      "variables": []
+    },
+    {
+      "id": "research-news",
+      "name": "AI News Research",
+      "icon": "🔍",
+      "skill": "ai-news",
+      "model": "sonnet",
+      "prompt_template": "Research the latest trending AI news relevant to AI influencer business. Focus on: {focus}",
+      "variables": [
+        {
+          "name": "focus",
+          "label": "Focus area (optional)",
+          "placeholder": "e.g. video generation, agents",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "send-broadcast",
+      "name": "Email Broadcast",
+      "icon": "📧",
+      "skill": "kit-broadcast",
+      "model": "sonnet",
+      "prompt_template": "Write and send an email broadcast about: {topic}",
+      "variables": [
+        {
+          "name": "topic",
+          "label": "Email topic",
+          "placeholder": "e.g. new workshop replay available",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "generate-image",
+      "name": "Generate AI Image",
+      "icon": "🎨",
+      "skill": "iv4",
+      "model": "sonnet",
+      "prompt_template": "Generate an ultra-realistic AI influencer image. Style: {style}. Scene: {scene}",
+      "variables": [
+        {
+          "name": "style",
+          "label": "Image style",
+          "placeholder": "e.g. casual selfie, professional headshot, lifestyle",
+          "required": true
+        },
+        {
+          "name": "scene",
+          "label": "Scene description",
+          "placeholder": "e.g. coffee shop in Bangkok, gym mirror selfie",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "story-video",
+      "name": "FB Story Video",
+      "icon": "🎬",
+      "skill": "fb-story-video",
+      "model": "sonnet",
+      "prompt_template": "Create a FB Story promo video about: {topic}",
+      "variables": [
+        {
+          "name": "topic",
+          "label": "Video topic",
+          "placeholder": "e.g. new course launch, testimonial highlight",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "faceless-reel",
+      "name": "Faceless Reel",
+      "icon": "🎞️",
+      "skill": "faceless-reel",
+      "model": "sonnet",
+      "prompt_template": "Create a faceless reel about: {topic}. Style: {style}",
+      "variables": [
+        {
+          "name": "topic",
+          "label": "Reel topic",
+          "placeholder": "e.g. 5 AI tools nobody talks about",
+          "required": true
+        },
+        {
+          "name": "style",
+          "label": "Vibe/mood (optional)",
+          "placeholder": "e.g. moody, motivational, dark aesthetic",
+          "default": "moody aesthetic",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "create-ad",
+      "name": "Create Video Ad",
+      "icon": "📢",
+      "skill": "adcreator",
+      "model": "sonnet",
+      "prompt_template": "Create a 30s video ad for: {product}. Angle: {angle}",
+      "variables": [
+        {
+          "name": "product",
+          "label": "Product/offer",
+          "placeholder": "e.g. AI Influencer Academy $9/mo",
+          "required": true
+        },
+        {
+          "name": "angle",
+          "label": "Ad angle/framework",
+          "placeholder": "e.g. PAS, CROWD, DISRUPT, FOUNDER",
+          "default": "PAS",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "manage-fb-ads",
+      "name": "Manage FB Ads",
+      "icon": "💰",
+      "skill": "fb-ads",
+      "model": "sonnet",
+      "prompt_template": "Manage Facebook Ads: {action}",
+      "variables": [
+        {
+          "name": "action",
+          "label": "What to do",
+          "placeholder": "e.g. create new campaign, check performance, replace video",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "fb-comments",
+      "name": "FB Auto Comments",
+      "icon": "💬",
+      "skill": "fb-comments",
+      "model": "sonnet",
+      "prompt_template": "Reply to comments on the Facebook post: {post_url}. Mode: {mode}",
+      "variables": [
+        {
+          "name": "post_url",
+          "label": "Post URL",
+          "placeholder": "e.g. https://facebook.com/...",
+          "required": true
+        },
+        {
+          "name": "mode",
+          "label": "Reply mode",
+          "placeholder": "reply-only, reply+dm-all, reply+dm-selected",
+          "default": "reply-only",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "skool-post",
+      "name": "Post to Skool",
+      "icon": "🏫",
+      "skill": "skool-poster",
+      "model": "sonnet",
+      "prompt_template": "Create and post in the Skool community about: {topic}. Post type: {type}",
+      "variables": [
+        {
+          "name": "topic",
+          "label": "Post topic",
+          "placeholder": "e.g. weekly challenge, value drop, welcome post",
+          "required": true
+        },
+        {
+          "name": "type",
+          "label": "Post type (optional)",
+          "placeholder": "e.g. challenge, announcement, value-drop, poll",
+          "default": "value-drop",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "create-lesson",
+      "name": "Course Lesson",
+      "icon": "🎓",
+      "skill": "youtube-creator",
+      "model": "sonnet",
+      "prompt_template": "Create an AICO course lesson video about: {topic}",
+      "variables": [
+        {
+          "name": "topic",
+          "label": "Lesson topic",
+          "placeholder": "e.g. how to set up your first AI agent",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "edit-longform",
+      "name": "Add Subtitles",
+      "icon": "📝",
+      "skill": "longform-editor",
+      "model": "sonnet",
+      "prompt_template": "Add professional word-synced subtitles to the video: {video_path}. Style: {style}",
+      "variables": [
+        {
+          "name": "video_path",
+          "label": "Video file path",
+          "placeholder": "e.g. C:/Users/yoniw/Downloads/video.mp4",
+          "required": true
+        },
+        {
+          "name": "style",
+          "label": "Subtitle style (optional)",
+          "placeholder": "e.g. white+purple, yellow, boxed, word-pop",
+          "default": "white+purple highlight",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "reddit-research",
+      "name": "Reddit Research",
+      "icon": "🔴",
+      "skill": "reddit-researcher",
+      "model": "sonnet",
+      "prompt_template": "Research Reddit for AI topics relevant to: {topic}",
+      "variables": [
+        {
+          "name": "topic",
+          "label": "Research topic",
+          "placeholder": "e.g. AI influencer tools, content automation",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "check-instagram",
+      "name": "Check Instagram",
+      "icon": "📸",
+      "skill": "instagram-tracker",
+      "model": "sonnet",
+      "prompt_template": "Check for new Instagram posts/reels and send updates to Telegram",
+      "variables": []
+    },
+    {
+      "id": "manage-course",
+      "name": "Manage Course",
+      "icon": "📚",
+      "skill": "course-manager",
+      "model": "sonnet",
+      "prompt_template": "Manage the AICO course: {action}",
+      "variables": [
+        {
+          "name": "action",
+          "label": "What to do",
+          "placeholder": "e.g. add new lesson, update video, add resources",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "build-webinar",
+      "name": "Build Webinar Page",
+      "icon": "🌐",
+      "skill": "webinar-page",
+      "model": "sonnet",
+      "prompt_template": "Build or update the webinar landing page: {action}",
+      "variables": [
+        {
+          "name": "action",
+          "label": "What to build/update",
+          "placeholder": "e.g. new registration page, update copy, add countdown",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "routines": [
+    {
+      "id": "morning-content-batch",
+      "name": "Morning Content Batch",
+      "icon": "⚡",
+      "description": "",
+      "tasks": [
+        {
+          "template_id": "write-fb-post",
+          "variables": {
+            "topic": "why AI creators will replace content creators by 2027"
+          }
+        },
+        {
+          "template_id": "create-stories",
+          "variables": {
+            "count": "4",
+            "topic": "{{prev}}"
+          }
+        }
+      ]
+    }
+  ]
+}

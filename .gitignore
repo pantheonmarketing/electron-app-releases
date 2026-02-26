@@ -1,0 +1,25 @@
+node_modules/
+results/
+logs/
+tasks.json
+tasks.json.bak
+tasks.json.tmp
+projects.json
+nul
+*.log
+dist/
+.env
+uploads/
+whisper-cache/
+heygen-projects/
+reel-projects/
+workflow-runs.json
+.tasks.lock
+schedules.json
+schedules.json.bak
+.rcedit-cache/
+.superdesign/
+
+# Large binaries (bundled during build, not tracked in git)
+bin/win/ffmpeg.exe
+bin/mac/ffmpeg

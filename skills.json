@@ -1,0 +1,102 @@
+{
+  "jonny-writer": {
+    "file": "skills/jonny-writer-skill.md",
+    "description": "Write Facebook posts in Jonny's voice",
+    "context": []
+  },
+  "ai-news": {
+    "file": "skills/ai-news-researcher-skill.md",
+    "description": "Research trending AI news",
+    "context": []
+  },
+  "iv4": {
+    "file": "skills/iv4-skill.md",
+    "description": "Generate ultra-realistic AI influencer images",
+    "context": []
+  },
+  "kit-broadcast": {
+    "file": "skills/kit-broadcast-skill.md",
+    "description": "Write and send Kit email broadcasts",
+    "context": [],
+    "context_notes": "Needs CONVERTKIT_API_KEY — add your .env file path to context after setup"
+  },
+  "fb-stories": {
+    "file": "skills/fb-story-slides-skill.md",
+    "description": "Create FB/IG story slide carousels",
+    "context": []
+  },
+  "fb-story-video": {
+    "file": "skills/fb-story-video-skill.md",
+    "description": "Create FB story promo videos with Remotion",
+    "context": []
+  },
+  "faceless-reel": {
+    "file": "skills/faceless-reel-skill.md",
+    "description": "Create faceless reels in @ineffable_ai22 style",
+    "context": []
+  },
+  "adcreator": {
+    "file": "skills/adcreator-skill.md",
+    "description": "Create FB/IG video ads with Remotion",
+    "context": [
+      "skills/ad-script-frameworks.md"
+    ],
+    "context_notes": "Uses ad-script-frameworks.md for script selection"
+  },
+  "fb-ads": {
+    "file": "skills/fb-ads-manager-skill.md",
+    "description": "Manage FB Ads via browser automation",
+    "context": []
+  },
+  "fb-comments": {
+    "file": "skills/fb-auto-comment-skill.md",
+    "description": "Auto-reply to FB comments + DMs",
+    "context": []
+  },
+  "skool-poster": {
+    "file": "skills/skool-poster-skill.md",
+    "description": "Post in Skool communities",
+    "context": []
+  },
+  "youtube-creator": {
+    "file": "skills/youtube-creator-skill.md",
+    "description": "Create AICO lesson videos with Remotion",
+    "context": []
+  },
+  "youtube-tracker": {
+    "file": "skills/youtube-tracker-skill.md",
+    "description": "Monitor YouTube channels for new videos",
+    "context": [],
+    "context_notes": "Needs TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID — add your .env and tracker files to context after setup"
+  },
+  "longform-editor": {
+    "file": "skills/longform-editor-skill.md",
+    "description": "Add pro subtitles to long-form videos",
+    "context": []
+  },
+  "reddit-researcher": {
+    "file": "skills/reddit-researcher-skill.md",
+    "description": "Research AI topics on Reddit",
+    "context": []
+  },
+  "webinar-page": {
+    "file": "skills/webinar-page-skill.md",
+    "description": "Build webinar landing pages",
+    "context": []
+  },
+  "instagram-tracker": {
+    "file": "skills/instagram-tracker-skill.md",
+    "description": "Monitors Instagram accounts via Apify scraper",
+    "context": []
+  },
+  "course-manager": {
+    "file": "skills/course-manager-skill.md",
+    "description": "Add/update AICO course lessons",
+    "context": []
+  },
+  "heygen-studio": {
+    "file": "skills/heygen-studio-skill.md",
+    "description": "Generate HeyGen videos via browser automation (free, uses Creator plan)",
+    "context": []
+  }
+}
