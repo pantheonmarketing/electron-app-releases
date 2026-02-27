@@ -1,0 +1,54 @@
+name: Build Mac DMG
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach DMG to (e.g. v1.4.0)'
+        required: true
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download ffmpeg for macOS
+        run: |
+          mkdir -p bin/mac
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip" -o ffmpeg.zip
+          unzip ffmpeg.zip -d bin/mac/
+          chmod +x bin/mac/ffmpeg
+
+      - name: Build Mac DMG
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --mac --publish never
+
+      - name: Get release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload DMG to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DMG_FILE=$(ls dist/*.dmg | head -1)
+          echo "Uploading $DMG_FILE to release ${{ steps.tag.outputs.tag }}"
+          gh release upload "${{ steps.tag.outputs.tag }}" "$DMG_FILE" --clobber
