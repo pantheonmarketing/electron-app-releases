@@ -278,7 +278,6 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 
 // License tier middleware (Electron only)
 const LIFETIME_ONLY_PREFIXES = [
-  '/api/tasks', '/api/run', '/api/stop', '/api/reset',
   '/api/plan', '/api/routines', '/api/schedules',
   '/api/terminal', '/api/workflow-runs', '/api/workers',
 ];
