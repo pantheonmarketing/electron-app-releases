@@ -572,6 +572,64 @@ async function retryTask() { if (currentResultTaskId) { await api.moveTask(curre
 
 // ── Runner ──
 let runningLock = false;
+
+function writeDebug(lines) {
+  const panel = document.getElementById('debugPanel');
+  const content = document.getElementById('debugContent');
+  if (!panel || !content) return;
+  panel.style.display = 'block';
+  const timestamp = new Date().toLocaleTimeString();
+  let html = `<span style="color:#666">[${timestamp}]</span>\n`;
+  for (const line of lines) {
+    let color = '#aaa';
+    if (line.includes('ERROR') || line.includes('failed') || line.includes('not found')) color = '#F87171';
+    else if (line.includes('OK') || line.includes('succeeded') || line.includes('launched')) color = '#4ADE80';
+    else if (line.includes('WARNING')) color = '#FBBF24';
+    else if (line.includes('APP_DIR') || line.includes('BASE_DIR') || line.includes('Worker script')) color = '#C084FC';
+    html += `<span style="color:${color}">${escHtml(line)}</span>\n`;
+  }
+  content.innerHTML = html;
+  // Auto-scroll
+  panel.scrollTop = panel.scrollHeight;
+}
+
+async function showRunDebug() {
+  writeDebug(['Fetching diagnostics from /api/run/debug ...']);
+  try {
+    const res = await fetch('/api/run/debug');
+    const data = await res.json();
+    const lines = [];
+    lines.push('=== ENVIRONMENT ===');
+    lines.push(`APP_DIR: ${data.APP_DIR}`);
+    lines.push(`BASE_DIR: ${data.BASE_DIR}`);
+    lines.push(`LOGS_DIR: ${data.LOGS_DIR}`);
+    lines.push(`IS_WIN: ${data.IS_WIN} | IS_MAC: ${data.IS_MAC} | ELECTRON: ${data.ELECTRON_MODE}`);
+    lines.push('');
+    lines.push('=== FILES ===');
+    lines.push(`worker.js: ${data.workerScript} (exists: ${data.workerExists})`);
+    lines.push(`skills.json: ${data.skillsFile} (exists: ${data.skillsExists})`);
+    lines.push(`tasks.json: ${data.tasksFile} (exists: ${data.tasksExists})`);
+    lines.push('');
+    lines.push('=== TOOLS ===');
+    lines.push(`Node: ${data.nodeVersion}`);
+    lines.push(`Claude CLI: ${data.claudeVersion}`);
+    if (data.powershellVersion) lines.push(`PowerShell: ${data.powershellVersion}`);
+    lines.push(`launchWorkerProcess: ${data.launchWorkerProcessType}`);
+    lines.push('');
+    lines.push('=== TASKS ===');
+    lines.push(`Total: ${data.taskCount} | Pending: ${data.pendingCount} | Running: ${data.runningCount}`);
+    lines.push(`Active workers: ${data.activeWorkers.length > 0 ? data.activeWorkers.map(w => w.id).join(', ') : 'none'}`);
+    if (data.recentBatFiles && data.recentBatFiles.length > 0) {
+      lines.push('');
+      lines.push('=== RECENT BAT FILES ===');
+      data.recentBatFiles.forEach(f => lines.push(`  ${f}`));
+    }
+    writeDebug(lines);
+  } catch (e) {
+    writeDebug(['ERROR: Could not reach /api/run/debug', e.message]);
+  }
+}
+
 async function runWorkers() {
   if (runningLock) return; // Prevent double-click
   const btn = document.getElementById('runBtn');
@@ -580,7 +638,6 @@ async function runWorkers() {
   btn.textContent = '⏳ Starting...';
   try {
     const result = await api.run(); // smart auto-workers — server calculates optimal count
-    console.log('[RunAll] Server response:', JSON.stringify(result, null, 2));
 
     if (result.ok) {
       document.getElementById('runnerStatus').textContent = `Running ${result.pending} task${result.pending > 1 ? 's' : ''} (${result.workers} worker${result.workers > 1 ? 's' : ''})`;
@@ -590,21 +647,13 @@ async function runWorkers() {
       document.getElementById('runnerStatus').textContent = result.message || result.error || 'Error';
     }
 
-    // Show debug info if present
+    // Always show debug info in panel when present
     if (result.debug && result.debug.length > 0) {
-      console.log('[RunAll] Debug log from server:');
-      result.debug.forEach(line => console.log('  ' + line));
-      // Show debug toast if launch failed
-      if (!result.ok || result.workers === 0) {
-        const debugSummary = result.debug.filter(l => l.includes('ERROR') || l.includes('failed') || l.includes('not found')).join('\n');
-        if (debugSummary) {
-          showToast('Debug: ' + debugSummary, 'error');
-        }
-      }
+      writeDebug(result.debug);
     }
   } catch (e) {
-    console.error('[RunAll] Exception:', e);
     document.getElementById('runnerStatus').textContent = 'Failed to start workers: ' + e.message;
+    writeDebug(['EXCEPTION calling /api/run:', e.message]);
   } finally {
     btn.disabled = false;
     btn.textContent = '▶ Run All';
