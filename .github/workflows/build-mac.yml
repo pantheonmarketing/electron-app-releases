@@ -48,10 +48,37 @@ jobs:
             echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Upload DMG to release
+      - name: Generate latest-mac.yml
+        run: |
+          DMG_FILE=$(ls dist/*.dmg | head -1)
+          DMG_NAME=$(basename "$DMG_FILE")
+          VERSION=$(echo "${{ steps.tag.outputs.tag }}" | sed 's/^v//')
+          SIZE=$(stat -f%z "$DMG_FILE")
+          SHA=$(shasum -a 512 "$DMG_FILE" | awk '{print $1}' | xxd -r -p | base64)
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+
+          cat > dist/latest-mac.yml << EOF
+          version: ${VERSION}
+          files:
+            - url: ${DMG_NAME}
+              sha512: ${SHA}
+              size: ${SIZE}
+          path: ${DMG_NAME}
+          sha512: ${SHA}
+          releaseDate: '${DATE}'
+          EOF
+
+          # Remove leading whitespace from heredoc
+          sed -i '' 's/^          //' dist/latest-mac.yml
+          echo "Generated latest-mac.yml:"
+          cat dist/latest-mac.yml
+
+      - name: Upload DMG and latest-mac.yml to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DMG_FILE=$(ls dist/*.dmg | head -1)
           echo "Uploading $DMG_FILE to release ${{ steps.tag.outputs.tag }}"
           gh release upload "${{ steps.tag.outputs.tag }}" "$DMG_FILE" --clobber
+          echo "Uploading latest-mac.yml"
+          gh release upload "${{ steps.tag.outputs.tag }}" "dist/latest-mac.yml" --clobber
