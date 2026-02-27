@@ -414,6 +414,19 @@ details[open] .advanced-toggle::before { transform: rotate(90deg); }
   transform: translateY(-1px);
 }
 
+.btn-live {
+  background: linear-gradient(135deg, #F59E0B, #EF4444);
+  color: white;
+  border: none;
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.35);
+  font-weight: 600;
+}
+.btn-live:hover {
+  background: linear-gradient(135deg, #FBBF24, #F87171);
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.5);
+  transform: translateY(-1px);
+}
+
 .plan-step {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.06);

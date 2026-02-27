@@ -1,6 +1,8 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const shared = require('../lib/shared');
-const { readTasks, writeTasks } = require('../lib/helpers');
+const { readTasks, writeTasks, readSkills } = require('../lib/helpers');
 const router = express.Router();
 
 router.get('/terminal/sessions', (req, res) => {
@@ -13,6 +15,72 @@ router.post('/terminal/sessions', (req, res) => {
     const session = shared.terminalManager.createSession({ name, workingDir, skill, model });
     res.json({ ok: true, session });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Live Task: create session + inject skill + send first message ──
+// MUST be registered before :id routes to avoid matching "live" as an id
+router.post('/terminal/sessions/live', (req, res) => {
+  const { name, workingDir, skill, model, task, context } = req.body;
+  if (!task) return res.status(400).json({ error: 'task is required' });
+
+  try {
+    // Create session
+    const session = shared.terminalManager.createSession({
+      name: name || 'Live Task',
+      workingDir: workingDir || null,
+      skill: skill || null,
+      model: model || 'sonnet'
+    });
+
+    // Build the first message with skill injection
+    let firstMessage = '';
+
+    // 1. Inject skill content if specified
+    if (skill) {
+      const allSkills = readSkills();
+      const skillEntry = allSkills[skill];
+      if (skillEntry && skillEntry.file) {
+        const resolvePath = (p) => path.isAbsolute(p) ? p : path.join(shared.BASE_DIR, p);
+        const skillFile = resolvePath(skillEntry.file);
+        if (fs.existsSync(skillFile)) {
+          const skillContent = fs.readFileSync(skillFile, 'utf-8');
+          firstMessage += `<skill-instructions>\n${skillContent}\n</skill-instructions>\n\n`;
+        }
+      }
+    }
+
+    // 2. Inject context files (max 80KB total)
+    if (context && context.length > 0) {
+      const MAX_CTX = 80000;
+      let ctxContent = '';
+      for (const p of context) {
+        if (ctxContent.length >= MAX_CTX) break;
+        try {
+          const resolved = path.isAbsolute(p) ? p : path.join(shared.BASE_DIR, p);
+          if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+            const content = fs.readFileSync(resolved, 'utf-8');
+            const available = MAX_CTX - ctxContent.length;
+            ctxContent += `\n--- ${p} ---\n${content.slice(0, available)}\n`;
+          }
+        } catch (_) {}
+      }
+      if (ctxContent) {
+        firstMessage += `<project-context>\n${ctxContent}\n</project-context>\n\n`;
+      }
+    }
+
+    // 3. Add the actual task instruction
+    firstMessage += `<task>\n${task}\n</task>`;
+
+    // Send first message after a brief delay (let SSE connect first)
+    setTimeout(() => {
+      try { shared.terminalManager.sendInput(session.id, firstMessage); } catch (_) {}
+    }, 500);
+
+    res.json({ ok: true, session });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.get('/terminal/sessions/:id', (req, res) => {

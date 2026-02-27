@@ -297,6 +297,76 @@ async function saveTask() {
   await refresh();
 }
 
+async function goLive() {
+  const taskText = document.getElementById('taskInput').value.trim();
+  if (!taskText) return alert('Enter a task description');
+
+  const skill = document.getElementById('skillInput').value || null;
+  const model = document.getElementById('modelInput').value || 'sonnet';
+  const space = getActiveSpace();
+  const workingDir = space.working_dir || null;
+
+  // Merge context: space context + extra context
+  const extraCtxRaw = document.getElementById('contextInput').value.trim();
+  const extraContext = extraCtxRaw ? extraCtxRaw.split('\n').map(l => l.trim()).filter(Boolean) : [];
+  const spaceContext = space.context || [];
+  const normalize = p => p.replace(/\\/g, '/').toLowerCase();
+  const seen = new Set();
+  const mergedContext = [];
+  for (const p of [...spaceContext, ...extraContext]) {
+    const key = normalize(p);
+    if (!seen.has(key)) { seen.add(key); mergedContext.push(p); }
+  }
+
+  // Get skill name for the session title
+  const skillObj = skills.find(s => s.name === skill);
+  const skillLabel = skillObj ? (skillObj.display_name || skillObj.name) : '';
+  const sessionName = skillLabel
+    ? `${skillLabel}: ${taskText.substring(0, 40)}`
+    : taskText.substring(0, 50);
+
+  closeAddModal();
+
+  try {
+    const result = await safeFetch('/api/terminal/sessions/live', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: sessionName,
+        workingDir,
+        skill,
+        model,
+        task: taskText,
+        context: mergedContext.length > 0 ? mergedContext : undefined
+      })
+    });
+    const data = await result.json();
+
+    if (data.ok) {
+      // Switch to terminal view and add the pane
+      switchView('terminals');
+      addTerminalPane(data.session);
+      document.getElementById('terminalEmpty').style.display = 'none';
+
+      // Show the Shell nav item if hidden
+      const navTerminals = document.getElementById('nav-terminals');
+      if (navTerminals) navTerminals.style.display = '';
+
+      // Auto-adjust layout
+      const paneCount = Object.keys(terminalSessions).length;
+      if (paneCount === 2 && terminalLayout === 1) setTerminalLayout(2);
+      if (paneCount >= 3 && terminalLayout < 4) setTerminalLayout(4);
+
+      updateTerminalBadge();
+      showToast('Live session started — Claude is working...', 'success');
+    } else {
+      showToast('Failed to start live session: ' + (data.error || 'Unknown'), 'error');
+    }
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
 async function deleteTask(id) {
   if (!confirm('Delete this task?')) return;
   const res = await api.deleteTask(id);
