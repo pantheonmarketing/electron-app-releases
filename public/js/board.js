@@ -277,8 +277,10 @@ async function deleteProject(id) {
 
 // ── Elapsed Timer ──
 function formatElapsed(startIso) {
-  if (!startIso) return '0:00';
-  const sec = Math.floor((Date.now() - new Date(startIso).getTime()) / 1000);
+  if (!startIso || startIso === 'null' || startIso === 'undefined') return '0:00';
+  const ms = Date.now() - new Date(startIso).getTime();
+  if (isNaN(ms)) return '0:00';
+  const sec = Math.floor(ms / 1000);
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
