@@ -529,12 +529,23 @@ async function submitFollowUp() {
     prevResult = '... (truncated) ...\n' + prevResult.slice(-4000);
   }
 
+  // For chained follow-ups: extract just the original instruction, not the full chain
+  let parentDescription = parentTask.task || '';
+  const followUpMatch = parentDescription.match(/Follow-up instruction:\n([\s\S]+)$/);
+  if (followUpMatch) {
+    // This parent was itself a follow-up — only keep its follow-up instruction
+    parentDescription = followUpMatch[1].trim();
+  }
+  if (parentDescription.length > 1000) {
+    parentDescription = parentDescription.slice(0, 1000) + '\n... (truncated)';
+  }
+
   // Build the combined task description
   const combinedTask = [
     `This is a follow-up to task #${parentTask.id}.`,
     ``,
     `Previous task description:`,
-    parentTask.task,
+    parentDescription,
     ``,
     `Previous output:`,
     `---`,

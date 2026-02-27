@@ -10,9 +10,13 @@
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 12px;
-  min-width: 300px; max-width: 340px;
+  min-width: 260px; max-width: 380px;
   flex: 1; display: flex; flex-direction: column;
 }
+
+/* Empty columns shrink, columns with cards grow */
+.column.col-empty { flex: 0.3; min-width: 180px; }
+.column.col-empty .column-cards { min-height: 60px; }
 
 .column-header {
   padding: 14px 16px; display: flex; align-items: center;

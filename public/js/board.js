@@ -304,8 +304,13 @@ function renderBoard() {
 
   Object.entries(columns).forEach(([status, items]) => {
     const el = document.getElementById(`col-${status}`);
+    const colEl = el.closest('.column');
     const totalCount = items.length;
     document.getElementById(`count-${status}`).textContent = totalCount;
+
+    // Empty columns shrink to give more room to columns with tasks
+    if (totalCount === 0) { colEl.classList.add('col-empty'); }
+    else { colEl.classList.remove('col-empty'); }
 
     // Apply "recent" filter to done column — show latest 10 by default
     let displayItems = items;
