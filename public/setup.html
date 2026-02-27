@@ -15,11 +15,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 24px;
     }
     .setup-container {
-      max-width: 600px;
+      max-width: 620px;
       width: 100%;
-      padding: 48px;
     }
     .logo {
       font-size: 32px;
@@ -33,67 +33,123 @@
     .subtitle {
       color: #888;
       font-size: 14px;
-      margin-bottom: 36px;
+      margin-bottom: 8px;
     }
     .version {
       color: #555;
       font-size: 12px;
       font-family: monospace;
-      margin-top: 4px;
+      margin-bottom: 32px;
     }
-    .check-item {
+
+    /* Stats bar */
+    .stats {
       display: flex;
-      align-items: flex-start;
-      gap: 16px;
-      padding: 20px;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat {
+      flex: 1;
+      text-align: center;
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .stat-num { font-size: 22px; font-weight: 700; }
+    .stat-num.green { color: #4ade80; }
+    .stat-num.red { color: #f87171; }
+    .stat-num.purple { color: #C084FC; }
+    .stat-label { font-size: 11px; color: #666; margin-top: 2px; }
+
+    /* Dependency cards */
+    .dep-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
       background: rgba(255,255,255,0.03);
       border: 1px solid rgba(255,255,255,0.06);
       border-radius: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       transition: all 0.3s;
     }
-    .check-item.ok { border-color: rgba(34,197,94,0.2); }
-    .check-item.fail { border-color: rgba(239,68,68,0.2); }
-    .check-icon {
-      width: 28px;
-      height: 28px;
+    .dep-card.ok { border-color: rgba(34,197,94,0.2); }
+    .dep-card.missing { border-color: rgba(239,68,68,0.15); }
+    .dep-card.installing { border-color: rgba(123,47,242,0.3); }
+
+    .dep-icon {
+      width: 36px; height: 36px;
       border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: bold;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: bold;
       flex-shrink: 0;
-      margin-top: 2px;
     }
-    .check-icon.ok { background: rgba(34,197,94,0.15); color: #4ade80; }
-    .check-icon.fail { background: rgba(239,68,68,0.15); color: #f87171; }
-    .check-icon.loading { background: rgba(255,255,255,0.06); color: #888; }
-    .check-body { flex: 1; }
-    .check-name { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
-    .check-desc { font-size: 12px; color: #888; line-height: 1.5; }
-    .check-fix {
+    .dep-icon.ok { background: rgba(34,197,94,0.12); color: #4ade80; }
+    .dep-icon.missing { background: rgba(239,68,68,0.1); color: #f87171; }
+    .dep-icon.loading { background: rgba(255,255,255,0.06); color: #888; }
+    .dep-icon.installing { background: rgba(123,47,242,0.15); color: #C084FC; }
+
+    .dep-info { flex: 1; min-width: 0; }
+    .dep-name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+    .dep-name .badge {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge.required { background: rgba(239,68,68,0.15); color: #f87171; }
+    .badge.optional { background: rgba(255,255,255,0.06); color: #666; }
+    .badge.bundled { background: rgba(34,197,94,0.1); color: #4ade80; }
+    .dep-desc { font-size: 12px; color: #777; margin-top: 2px; }
+    .dep-version { font-size: 11px; color: #555; font-family: monospace; margin-top: 2px; }
+
+    .dep-action { flex-shrink: 0; }
+
+    .btn-install {
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: linear-gradient(135deg, #7B2FF2, #9333EA);
+      color: #fff;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-install:hover { box-shadow: 0 2px 12px rgba(123,47,242,0.4); }
+    .btn-install:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+    .btn-install.installing {
+      background: rgba(123,47,242,0.2);
+      color: #C084FC;
+    }
+
+    /* Install result message */
+    .install-msg {
       display: none;
-      margin-top: 12px;
-      padding: 12px;
-      background: rgba(255,255,255,0.04);
+      margin-top: 8px;
+      padding: 10px 14px;
       border-radius: 8px;
       font-size: 12px;
-      line-height: 1.6;
+      line-height: 1.5;
     }
-    .check-item.fail .check-fix { display: block; }
-    .check-fix code {
-      background: rgba(123,47,242,0.15);
-      color: #C084FC;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-family: 'Courier New', monospace;
+    .install-msg.success {
+      display: block;
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.15);
+      color: #4ade80;
     }
-    .check-fix a {
-      color: #C084FC;
-      text-decoration: underline;
+    .install-msg.error {
+      display: block;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.15);
+      color: #f87171;
     }
+
+    /* Bottom buttons */
     .btn {
       padding: 14px 28px;
       font-size: 15px;
@@ -103,18 +159,14 @@
       cursor: pointer;
       transition: all 0.15s;
       width: 100%;
-      margin-top: 24px;
+      margin-top: 20px;
     }
     .btn-primary {
       background: linear-gradient(135deg, #7B2FF2, #9333EA);
       color: #fff;
     }
     .btn-primary:hover { box-shadow: 0 4px 20px rgba(123,47,242,0.4); }
-    .btn-primary:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-      box-shadow: none;
-    }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
     .btn-ghost {
       background: rgba(255,255,255,0.06);
       color: #aaa;
@@ -122,14 +174,37 @@
       margin-top: 10px;
     }
     .btn-ghost:hover { background: rgba(255,255,255,0.1); }
+
+    .install-all-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .install-all-row .btn-install {
+      padding: 10px 20px;
+      font-size: 13px;
+    }
+
+    .note {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: rgba(123,47,242,0.06);
+      border: 1px solid rgba(123,47,242,0.12);
+      border-radius: 10px;
+      font-size: 12px;
+      color: #999;
+      line-height: 1.6;
+    }
+    .note strong { color: #C084FC; }
+
     .spinner {
       display: inline-block;
-      width: 14px;
-      height: 14px;
+      width: 14px; height: 14px;
       border: 2px solid rgba(255,255,255,0.2);
-      border-top-color: #fff;
+      border-top-color: #C084FC;
       border-radius: 50%;
       animation: spin 0.6s linear infinite;
+      vertical-align: middle;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
@@ -137,52 +212,33 @@
 <body>
   <div class="setup-container">
     <div class="logo">AI CEO Setup</div>
-    <p class="subtitle">Checking your system for required tools...</p>
+    <p class="subtitle">Let's make sure everything is ready to go</p>
     <div class="version" id="versionLine"></div>
 
-    <div class="check-item" id="check-ffmpeg">
-      <div class="check-icon loading" id="icon-ffmpeg"><span class="spinner"></span></div>
-      <div class="check-body">
-        <div class="check-name">FFmpeg</div>
-        <div class="check-desc">Required for audio extraction from video clips</div>
-        <div class="check-fix">
-          FFmpeg is bundled with this app. If this check fails, try reinstalling.<br><br>
-          Or install manually: <a href="https://ffmpeg.org/download.html" target="_blank">ffmpeg.org/download</a><br>
-          Windows: <code>winget install Gyan.FFmpeg</code>
-        </div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-num purple" id="statTotal">-</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num green" id="statReady">-</div>
+        <div class="stat-label">Ready</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num red" id="statMissing">-</div>
+        <div class="stat-label">Missing</div>
       </div>
     </div>
 
-    <div class="check-item" id="check-whisper">
-      <div class="check-icon loading" id="icon-whisper"><span class="spinner"></span></div>
-      <div class="check-body">
-        <div class="check-name">Faster Whisper</div>
-        <div class="check-desc">AI speech-to-text for automatic subtitles</div>
-        <div class="check-fix">
-          Requires Python 3.8+. Install steps:<br><br>
-          1. Install Python: <a href="https://python.org/downloads" target="_blank">python.org/downloads</a><br>
-          2. Open Command Prompt and run:<br>
-          <code>python -m pip install faster-whisper</code><br><br>
-          Then click "Re-check" below.
-        </div>
-      </div>
+    <div id="depsList"></div>
+
+    <div id="installAllRow" class="install-all-row" style="display:none;">
+      <button class="btn-install" onclick="installAllMissing()" id="installAllBtn">
+        Install All Missing
+      </button>
     </div>
 
-    <div class="check-item" id="check-claude">
-      <div class="check-icon loading" id="icon-claude"><span class="spinner"></span></div>
-      <div class="check-body">
-        <div class="check-name">Claude CLI</div>
-        <div class="check-desc">AI agent for automated task execution</div>
-        <div class="check-fix">
-          Install Claude CLI:<br><br>
-          1. Open Command Prompt and run:<br>
-          <code>npm install -g @anthropic-ai/claude-code</code><br>
-          2. Then log in:<br>
-          <code>claude login</code><br><br>
-          Then click "Re-check" below.
-        </div>
-      </div>
-    </div>
+    <div id="noteArea"></div>
 
     <button class="btn btn-primary" id="continueBtn" disabled onclick="goToApp()">
       Checking...
@@ -191,53 +247,215 @@
   </div>
 
   <script>
+    let depsData = {};
+    let platform = 'win';
+
+    // Friendly display names and install package mappings
+    const DEP_META = {
+      ffmpeg:         { label: 'FFmpeg',          pkg: null },
+      node:           { label: 'Node.js',         pkg: null },
+      claude:         { label: 'Claude AI',       pkg: 'claude-cli' },
+      python:         { label: 'Python',          pkg: 'python' },
+      faster_whisper: { label: 'Subtitles (Whisper)', pkg: 'faster-whisper' },
+      ytdlp:          { label: 'Video Downloader', pkg: 'yt-dlp' },
+    };
+
+    // Preferred display order
+    const DEP_ORDER = ['ffmpeg', 'claude', 'node', 'python', 'faster_whisper', 'ytdlp'];
+
     async function runChecks() {
       const btn = document.getElementById('continueBtn');
       btn.disabled = true;
       btn.textContent = 'Checking...';
-
-      // Reset icons to loading
-      ['ffmpeg', 'whisper', 'claude'].forEach(id => {
-        document.getElementById(`icon-${id}`).className = 'check-icon loading';
-        document.getElementById(`icon-${id}`).innerHTML = '<span class="spinner"></span>';
-        document.getElementById(`check-${id}`).className = 'check-item';
-      });
+      document.getElementById('depsList').innerHTML = '<div style="text-align:center;padding:24px;color:#666;"><span class="spinner"></span>&nbsp; Scanning your system...</div>';
+      document.getElementById('installAllRow').style.display = 'none';
+      document.getElementById('noteArea').innerHTML = '';
 
       try {
-        const resp = await fetch('/api/health');
+        const resp = await fetch('/api/setup/check');
         const data = await resp.json();
+        depsData = data.deps || {};
+        platform = data.deps?.platform || 'win';
 
-        if (data.version) {
-          document.getElementById('versionLine').textContent = 'v' + data.version;
-        }
+        // Version
+        try {
+          const hResp = await fetch('/api/health');
+          const hData = await hResp.json();
+          if (hData.version) document.getElementById('versionLine').textContent = 'v' + hData.version;
+        } catch(_) {}
 
-        setCheck('ffmpeg', data.ffmpeg);
-        setCheck('whisper', data.whisper);
-        setCheck('claude', data.claude);
-
-        if (data.all_good) {
-          btn.disabled = false;
-          btn.textContent = 'Launch App →';
-        } else {
-          btn.disabled = false;
-          btn.textContent = 'Skip & Launch Anyway →';
-        }
+        renderDeps(data);
       } catch (e) {
-        btn.textContent = 'Connection error — Retry';
+        document.getElementById('depsList').innerHTML = '<div style="text-align:center;padding:24px;color:#f87171;">Could not connect to the app server. Try restarting.</div>';
+        btn.textContent = 'Retry';
         btn.disabled = false;
       }
     }
 
-    function setCheck(id, ok) {
-      const icon = document.getElementById(`icon-${id}`);
-      const item = document.getElementById(`check-${id}`);
-      icon.className = 'check-icon ' + (ok ? 'ok' : 'fail');
-      icon.innerHTML = ok ? '✓' : '✗';
-      item.className = 'check-item ' + (ok ? 'ok' : 'fail');
+    function renderDeps(data) {
+      const deps = data.deps || {};
+      const list = document.getElementById('depsList');
+      list.innerHTML = '';
+
+      let ready = 0, missing = 0, total = 0, missingInstallable = 0;
+
+      for (const key of DEP_ORDER) {
+        const dep = deps[key];
+        if (!dep) continue;
+        total++;
+        if (dep.installed) { ready++; } else { missing++; if (DEP_META[key]?.pkg && dep.canAutoInstall !== false) missingInstallable++; }
+
+        const card = document.createElement('div');
+        card.className = 'dep-card ' + (dep.installed ? 'ok' : 'missing');
+        card.id = 'card-' + key;
+
+        const isRequired = dep.required;
+        const isBundled = dep.bundled;
+        const badgeClass = isBundled ? 'bundled' : isRequired ? 'required' : 'optional';
+        const badgeText = isBundled ? 'Bundled' : isRequired ? 'Required' : 'Optional';
+
+        let actionHtml = '';
+        if (!dep.installed && DEP_META[key]?.pkg && dep.canAutoInstall !== false) {
+          actionHtml = `<div class="dep-action"><button class="btn-install" id="installBtn-${key}" onclick="installDep('${key}')">Install</button></div>`;
+        } else if (!dep.installed) {
+          actionHtml = `<div class="dep-action" style="font-size:11px;color:#666;">Manual install needed</div>`;
+        }
+
+        card.innerHTML = `
+          <div class="dep-icon ${dep.installed ? 'ok' : 'missing'}" id="depIcon-${key}">
+            ${dep.installed ? '✓' : '✗'}
+          </div>
+          <div class="dep-info">
+            <div class="dep-name">
+              ${DEP_META[key]?.label || key}
+              <span class="badge ${badgeClass}">${badgeText}</span>
+            </div>
+            <div class="dep-desc">${dep.description || ''}</div>
+            ${dep.version ? `<div class="dep-version">${dep.version}</div>` : ''}
+            <div class="install-msg" id="msg-${key}"></div>
+          </div>
+          ${actionHtml}
+        `;
+        list.appendChild(card);
+      }
+
+      // Stats
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statReady').textContent = ready;
+      document.getElementById('statMissing').textContent = missing;
+
+      // Install all button
+      if (missingInstallable > 1) {
+        document.getElementById('installAllRow').style.display = 'flex';
+      } else {
+        document.getElementById('installAllRow').style.display = 'none';
+      }
+
+      // Notes
+      const noteArea = document.getElementById('noteArea');
+      if (!deps.claude?.installed) {
+        noteArea.innerHTML = `<div class="note">
+          <strong>Note:</strong> After installing Claude AI, you'll need to open a terminal and run <code style="background:rgba(123,47,242,0.15);color:#C084FC;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:12px;">claude login</code> once to connect your account.
+        </div>`;
+      }
+
+      // Continue button
+      const btn = document.getElementById('continueBtn');
+      if (data.allRequired) {
+        btn.disabled = false;
+        btn.textContent = missing === 0 ? 'Launch App →' : 'Continue to App →';
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Skip & Launch Anyway →';
+      }
+    }
+
+    async function installDep(key) {
+      const pkg = DEP_META[key]?.pkg;
+      if (!pkg) return;
+
+      const installBtn = document.getElementById('installBtn-' + key);
+      const card = document.getElementById('card-' + key);
+      const icon = document.getElementById('depIcon-' + key);
+      const msg = document.getElementById('msg-' + key);
+
+      // Set installing state
+      if (installBtn) {
+        installBtn.disabled = true;
+        installBtn.className = 'btn-install installing';
+        installBtn.innerHTML = '<span class="spinner"></span> Installing...';
+      }
+      card.className = 'dep-card installing';
+      icon.className = 'dep-icon installing';
+      icon.innerHTML = '<span class="spinner"></span>';
+      msg.className = 'install-msg';
+      msg.style.display = 'none';
+
+      try {
+        const resp = await fetch('/api/setup/install', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ package: pkg }),
+        });
+        const data = await resp.json();
+
+        if (data.ok) {
+          msg.className = 'install-msg success';
+          msg.textContent = data.message || 'Installed successfully!';
+          // Re-check this specific dep
+          setTimeout(() => runChecks(), 1500);
+        } else {
+          msg.className = 'install-msg error';
+          msg.textContent = data.error || 'Installation failed.';
+          if (data.details) msg.textContent += ' ' + data.details;
+          // Reset button
+          if (installBtn) {
+            installBtn.disabled = false;
+            installBtn.className = 'btn-install';
+            installBtn.innerHTML = 'Retry';
+          }
+          card.className = 'dep-card missing';
+          icon.className = 'dep-icon missing';
+          icon.innerHTML = '✗';
+        }
+      } catch (e) {
+        msg.className = 'install-msg error';
+        msg.textContent = 'Network error — could not install.';
+        if (installBtn) {
+          installBtn.disabled = false;
+          installBtn.className = 'btn-install';
+          installBtn.innerHTML = 'Retry';
+        }
+        card.className = 'dep-card missing';
+        icon.className = 'dep-icon missing';
+        icon.innerHTML = '✗';
+      }
+    }
+
+    async function installAllMissing() {
+      const btn = document.getElementById('installAllBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Installing...';
+
+      for (const key of DEP_ORDER) {
+        const dep = depsData[key];
+        if (dep && !dep.installed && DEP_META[key]?.pkg && dep.canAutoInstall !== false) {
+          await installDep(key);
+          // Small delay between installs
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+
+      btn.disabled = false;
+      btn.innerHTML = 'Install All Missing';
+      runChecks();
     }
 
     async function goToApp() {
       await fetch('/api/setup-complete', { method: 'POST' }).catch(() => {});
+      if (window.electronAPI && window.electronAPI.setupDone) {
+        await window.electronAPI.setupDone().catch(() => {});
+      }
       window.location.href = '/';
     }
 
