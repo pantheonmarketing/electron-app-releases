@@ -14,7 +14,10 @@ const path = require('path');
 
 const WORKER_ID = process.argv[2] || '1';
 const TARGET_TASK_ID = process.argv[3] || null;  // Optional: run only this specific task
-const BASE_DIR = __dirname;
+// In packaged Electron, __dirname points inside app.asar (read-only, bundled files).
+// The actual user data (tasks.json, skills.json, results/) lives in AppData/Roaming.
+// Server passes the correct path via WORKER_BASE_DIR env var.
+const BASE_DIR = process.env.WORKER_BASE_DIR || __dirname;
 const TASKS_FILE = path.join(BASE_DIR, 'tasks.json');
 const SKILLS_FILE = path.join(BASE_DIR, 'skills.json');
 const RESULTS_DIR = path.join(BASE_DIR, 'results');

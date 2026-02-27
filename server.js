@@ -66,6 +66,7 @@ function launchWorkerProcess(workerScript, workerId, taskId, cleanEnv) {
       '@echo off',
       `title Claude ${label}`,
       'set CLAUDECODE=',
+      `set WORKER_BASE_DIR=${BASE_DIR}`,
       `cd /d "${BASE_DIR}"`,
       `node "${workerScript}" ${safeWorkerId}${safeTaskId ? ' ' + safeTaskId : ''}`,
     ].join('\r\n');
@@ -107,7 +108,7 @@ function launchWorkerProcess(workerScript, workerId, taskId, cleanEnv) {
     if (taskId) args.push(taskId);
     log(`Spawning: node ${args.join(' ')}`);
     const child = spawn('node', args, {
-      cwd: BASE_DIR, env: { ...cleanEnv, CLAUDECODE: '' }, detached: true, stdio: 'ignore',
+      cwd: BASE_DIR, env: { ...cleanEnv, CLAUDECODE: '', WORKER_BASE_DIR: BASE_DIR }, detached: true, stdio: 'ignore',
     });
     child.unref();
     log(`Spawned PID ${child.pid}`);
