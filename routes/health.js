@@ -66,7 +66,7 @@ router.post('/setup/install', express.json(), async (req, res) => {
     });
   });
   try {
-    const { stdout } = await runCmd(`pip install ${pkg}`, {
+    const { stdout } = await runCmd(`python -m pip install ${pkg}`, {
       shell: true, encoding: 'utf-8', timeout: 120 * 1000, windowsHide: true
     });
     console.log(`[Setup] ${pkg} installed successfully`);
