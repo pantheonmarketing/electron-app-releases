@@ -198,13 +198,38 @@ if (IS_PACKAGED_ELECTRON) {
       try { fs.copyFileSync(path.join(bundleStoryPresetsDir, f), path.join(STORY_PRESETS_DIR, f)); } catch (_) {}
     }
   }
+  // Always update skills.json from bundle (contains full skill registry with metadata)
+  // This ensures new skills added in app updates are available immediately
+  const bundledSkillsJson = path.join(APP_DIR, 'skills.json');
+  if (fs.existsSync(bundledSkillsJson)) {
+    try {
+      const bundled = JSON.parse(fs.readFileSync(bundledSkillsJson, 'utf-8'));
+      const local = fs.existsSync(shared.SKILLS_FILE)
+        ? JSON.parse(fs.readFileSync(shared.SKILLS_FILE, 'utf-8'))
+        : {};
+      // Merge: bundled entries are the base, local entries override (preserves user customizations)
+      const merged = { ...bundled, ...local };
+      // But ensure all bundled skills are present (in case local had them deleted)
+      for (const [name, info] of Object.entries(bundled)) {
+        if (!merged[name]) merged[name] = info;
+      }
+      fs.writeFileSync(shared.SKILLS_FILE, JSON.stringify(merged, null, 2));
+      console.log(`[Server] Skills registry: ${Object.keys(merged).length} skills (${Object.keys(bundled).length} bundled)`);
+    } catch (e) {
+      console.error(`[Server] Failed to merge skills.json: ${e.message}`);
+    }
+  }
+
+  // Always extract skills from bundle to BASE_DIR (overwrite to keep up to date with app updates)
   const bundleSkillsDir = path.join(APP_DIR, 'skills');
   const destSkillsDir = path.join(BASE_DIR, 'skills');
-  if (fs.existsSync(bundleSkillsDir) && !fs.existsSync(destSkillsDir)) {
-    fs.mkdirSync(destSkillsDir, { recursive: true });
+  if (fs.existsSync(bundleSkillsDir)) {
+    if (!fs.existsSync(destSkillsDir)) fs.mkdirSync(destSkillsDir, { recursive: true });
+    let extracted = 0;
     for (const f of fs.readdirSync(bundleSkillsDir)) {
-      try { fs.copyFileSync(path.join(bundleSkillsDir, f), path.join(destSkillsDir, f)); } catch (_) {}
+      try { fs.copyFileSync(path.join(bundleSkillsDir, f), path.join(destSkillsDir, f)); extracted++; } catch (_) {}
     }
+    console.log(`[Server] Extracted ${extracted} skill files to ${destSkillsDir}`);
   }
 
   // Extract worker.js from app.asar to BASE_DIR so plain `node` can execute it.

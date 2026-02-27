@@ -1938,8 +1938,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-check for updates (after 3s to not slow startup)
   setTimeout(checkForAppUpdate, 3000);
 
-  // Sync skills from online registry (after 5s)
-  setTimeout(syncOnlineSkills, 5000);
+  // Sync skills from online registry (after 2s, non-blocking)
+  setTimeout(syncOnlineSkills, 2000);
 });
 
 async function loadAppVersion() {
