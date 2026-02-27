@@ -376,13 +376,16 @@
           <div class="rm-preview-container" id="rmPreviewContainer"></div>
           <div class="rm-render-config">
             <div>
-              <h4>Remotion Working Directory</h4>
-              <p>Path to your Remotion project folder (where src/index.ts lives)</p>
-              <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-                <input type="text" class="rm-render-dir-input" id="rmRenderDir" style="margin-top:0; flex:1;"
-                       placeholder="Click 'Choose Folder' or paste a path..."
-                       value="">
-                <button class="btn btn-primary btn-sm" onclick="rmBrowseFolder()" style="white-space:nowrap; flex-shrink:0;">📁 Choose Folder</button>
+              <h4>Remotion Project</h4>
+              <div id="rmRemotionStatus" style="margin-top:8px;">
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <input type="text" class="rm-render-dir-input" id="rmRenderDir" style="margin-top:0; flex:1;"
+                         placeholder="No Remotion project configured yet"
+                         value="">
+                  <button class="btn btn-primary btn-sm" id="rmSetupBtn" onclick="rmSetupRemotion()" style="white-space:nowrap; flex-shrink:0;">Setup Remotion</button>
+                  <button class="btn btn-ghost btn-sm" onclick="rmBrowseFolder()" style="white-space:nowrap; flex-shrink:0;" title="Choose a custom folder">📁</button>
+                </div>
+                <p style="margin-top:6px; font-size:11px; color:#666;">Click "Setup Remotion" to auto-create a project, or choose your own folder.</p>
               </div>
             </div>
           </div>

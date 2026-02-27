@@ -955,4 +955,139 @@ router.post('/reel/projects/:projectId/preview-studio', (req, res) => {
   res.json({ ok: true, message: 'Remotion Studio launching on localhost:3000', config_path: configPath });
 });
 
+// ── One-click Remotion project setup ──
+router.post('/reel/setup-remotion', async (req, res) => {
+  const remotionDir = path.join(shared.BASE_DIR, 'remotion-project');
+  const srcDir = path.join(remotionDir, 'src');
+  const publicDir = path.join(remotionDir, 'public');
+
+  // If already set up, just return the path
+  if (fs.existsSync(path.join(remotionDir, 'package.json')) && fs.existsSync(path.join(srcDir, 'index.ts'))) {
+    return res.json({ ok: true, path: remotionDir, message: 'Remotion project already set up' });
+  }
+
+  try {
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.mkdirSync(publicDir, { recursive: true });
+
+    // package.json
+    fs.writeFileSync(path.join(remotionDir, 'package.json'), JSON.stringify({
+      name: "aiceo-remotion",
+      version: "1.0.0",
+      scripts: {
+        studio: "remotion studio src/index.ts",
+        render: "remotion render src/index.ts MainComp out/video.mp4"
+      },
+      dependencies: {
+        "@remotion/cli": "^4.0.0",
+        "@remotion/player": "^4.0.0",
+        "remotion": "^4.0.0",
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0"
+      },
+      devDependencies: {
+        "typescript": "^5.0.0",
+        "@types/react": "^18.0.0"
+      }
+    }, null, 2));
+
+    // tsconfig.json
+    fs.writeFileSync(path.join(remotionDir, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: {
+        target: "ES2018",
+        module: "commonjs",
+        jsx: "react-jsx",
+        strict: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true
+      },
+      include: ["src/**/*"]
+    }, null, 2));
+
+    // src/index.ts — Composition entry point
+    fs.writeFileSync(path.join(srcDir, 'index.ts'), `import {registerRoot} from 'remotion';
+import {RemotionRoot} from './Root';
+
+registerRoot(RemotionRoot);
+`);
+
+    // src/Root.tsx — Root component with composition
+    fs.writeFileSync(path.join(srcDir, 'Root.tsx'), `import React from 'react';
+import {Composition} from 'remotion';
+import {MainComp} from './MainComp';
+
+export const RemotionRoot: React.FC = () => {
+  return (
+    <>
+      <Composition
+        id="MainComp"
+        component={MainComp}
+        durationInFrames={30 * 30}
+        fps={30}
+        width={1080}
+        height={1920}
+      />
+    </>
+  );
+};
+`);
+
+    // src/MainComp.tsx — Main component that reads config
+    fs.writeFileSync(path.join(srcDir, 'MainComp.tsx'), `import React from 'react';
+import {AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
+
+export const MainComp: React.FC = () => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const sec = (frame / fps).toFixed(1);
+
+  return (
+    <AbsoluteFill style={{
+      backgroundColor: '#0a0a14',
+      justifyContent: 'center',
+      alignItems: 'center',
+      fontFamily: 'Inter, sans-serif',
+    }}>
+      <div style={{
+        fontSize: 48,
+        fontWeight: 'bold',
+        background: 'linear-gradient(135deg, #7B2FF2, #C084FC)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        textAlign: 'center',
+      }}>
+        AI CEO Remotion
+      </div>
+      <div style={{color: '#888', fontSize: 24, marginTop: 20}}>
+        Frame {frame} | {sec}s
+      </div>
+      <div style={{color: '#555', fontSize: 16, marginTop: 40, maxWidth: 600, textAlign: 'center', lineHeight: 1.6}}>
+        This is the starter template. When you render from Reel Master,
+        it will generate the full video components here automatically.
+      </div>
+    </AbsoluteFill>
+  );
+};
+`);
+
+    // Install dependencies
+    console.log('[ReelMaster] Installing Remotion dependencies...');
+    const { execSync } = require('child_process');
+    execSync('npm install', {
+      cwd: remotionDir,
+      shell: true,
+      timeout: 3 * 60 * 1000,
+      windowsHide: true,
+      stdio: 'pipe'
+    });
+
+    console.log('[ReelMaster] Remotion project set up at:', remotionDir);
+    res.json({ ok: true, path: remotionDir, message: 'Remotion project created and dependencies installed' });
+  } catch (err) {
+    console.error('[ReelMaster] Remotion setup failed:', err.message);
+    res.status(500).json({ ok: false, error: 'Setup failed: ' + err.message });
+  }
+});
+
 module.exports = router;

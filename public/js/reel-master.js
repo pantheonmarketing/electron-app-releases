@@ -2137,6 +2137,30 @@ async function rmBrowseFolder() {
   btn.disabled = false;
 }
 
+// ── One-click Remotion Setup ──
+async function rmSetupRemotion() {
+  const btn = document.getElementById('rmSetupBtn');
+  const origText = btn.textContent;
+  btn.textContent = 'Setting up...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/reel/setup-remotion', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok && data.path) {
+      document.getElementById('rmRenderDir').value = data.path;
+      btn.textContent = 'Ready';
+      btn.style.background = '#059669';
+      showToast(data.message || 'Remotion project ready!', 'success');
+    } else {
+      throw new Error(data.error || 'Setup failed');
+    }
+  } catch (e) {
+    showToast('Setup failed: ' + e.message, 'error');
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+}
+
 // ── Render ──
 async function rmRender() {
   if (!rmCurrentProject) return;
