@@ -580,15 +580,31 @@ async function runWorkers() {
   btn.textContent = '⏳ Starting...';
   try {
     const result = await api.run(); // smart auto-workers — server calculates optimal count
+    console.log('[RunAll] Server response:', JSON.stringify(result, null, 2));
+
     if (result.ok) {
       document.getElementById('runnerStatus').textContent = `Running ${result.pending} task${result.pending > 1 ? 's' : ''} (${result.workers} worker${result.workers > 1 ? 's' : ''})`;
       document.getElementById('stopBtn').style.display = '';
       startPolling();
     } else {
-      document.getElementById('runnerStatus').textContent = result.message || 'Error';
+      document.getElementById('runnerStatus').textContent = result.message || result.error || 'Error';
+    }
+
+    // Show debug info if present
+    if (result.debug && result.debug.length > 0) {
+      console.log('[RunAll] Debug log from server:');
+      result.debug.forEach(line => console.log('  ' + line));
+      // Show debug toast if launch failed
+      if (!result.ok || result.workers === 0) {
+        const debugSummary = result.debug.filter(l => l.includes('ERROR') || l.includes('failed') || l.includes('not found')).join('\n');
+        if (debugSummary) {
+          showToast('Debug: ' + debugSummary, 'error');
+        }
+      }
     }
   } catch (e) {
-    document.getElementById('runnerStatus').textContent = 'Failed to start workers';
+    console.error('[RunAll] Exception:', e);
+    document.getElementById('runnerStatus').textContent = 'Failed to start workers: ' + e.message;
   } finally {
     btn.disabled = false;
     btn.textContent = '▶ Run All';

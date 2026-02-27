@@ -54,6 +54,8 @@ function openInFolder(filePath) {
 }
 
 function launchWorkerProcess(workerScript, workerId, taskId, cleanEnv) {
+  const log = (msg) => console.log(`[LaunchWorker] ${msg}`);
+
   if (IS_WIN) {
     // Sanitize workerId and taskId to prevent command injection in .bat files
     const safeWorkerId = String(workerId).replace(/[^a-zA-Z0-9_-]/g, '');
@@ -67,24 +69,48 @@ function launchWorkerProcess(workerScript, workerId, taskId, cleanEnv) {
       `cd /d "${BASE_DIR}"`,
       `node "${workerScript}" ${safeWorkerId}${safeTaskId ? ' ' + safeTaskId : ''}`,
     ].join('\r\n');
+
+    log(`Writing bat file: ${batFile}`);
+    log(`Bat content: cd /d "${BASE_DIR}" && node "${workerScript}" ${safeWorkerId}${safeTaskId ? ' ' + safeTaskId : ''}`);
     fs.writeFileSync(batFile, batContent);
+    log(`Bat file written OK (${batContent.length} bytes)`);
+
+    // Check node is accessible
+    try {
+      const nodeVer = execSync('node --version', { encoding: 'utf-8', timeout: 5000, windowsHide: true }).trim();
+      log(`Node version: ${nodeVer}`);
+    } catch (e) {
+      log(`WARNING: node --version failed: ${e.message}`);
+    }
+
     try {
       const psCmd = `powershell -NoProfile -Command "Start-Process cmd -ArgumentList '/c','\\\"${batFile.replace(/\\/g, '\\\\')}\\\"' -WindowStyle Hidden"`;
+      log(`Trying PowerShell: ${psCmd.slice(0, 150)}...`);
       execSync(psCmd, { cwd: BASE_DIR, env: cleanEnv, shell: true, stdio: 'ignore', windowsHide: true });
+      log(`PowerShell launch succeeded`);
       return true;
-    } catch (_) {
+    } catch (psErr) {
+      log(`PowerShell launch failed: ${psErr.message}`);
       try {
-        execSync(`start /min "Claude ${label}" cmd /c "${batFile}"`, { cwd: BASE_DIR, env: cleanEnv, shell: true, stdio: 'ignore', windowsHide: true });
+        const startCmd = `start /min "Claude ${label}" cmd /c "${batFile}"`;
+        log(`Trying fallback start cmd: ${startCmd.slice(0, 150)}...`);
+        execSync(startCmd, { cwd: BASE_DIR, env: cleanEnv, shell: true, stdio: 'ignore', windowsHide: true });
+        log(`Fallback start cmd succeeded`);
         return true;
-      } catch (_2) { return false; }
+      } catch (startErr) {
+        log(`Fallback start cmd also failed: ${startErr.message}`);
+        return false;
+      }
     }
   } else {
     const args = [workerScript, workerId];
     if (taskId) args.push(taskId);
+    log(`Spawning: node ${args.join(' ')}`);
     const child = spawn('node', args, {
       cwd: BASE_DIR, env: { ...cleanEnv, CLAUDECODE: '' }, detached: true, stdio: 'ignore',
     });
     child.unref();
+    log(`Spawned PID ${child.pid}`);
     return true;
   }
 }

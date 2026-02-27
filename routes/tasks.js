@@ -206,6 +206,79 @@ router.get('/tasks/:id/live-log', (req, res) => {
   res.type('text/plain').send(last30);
 });
 
+// Debug endpoint — check worker launch environment
+router.get('/run/debug', (req, res) => {
+  const { execSync } = require('child_process');
+  const debug = {};
+
+  // Check paths
+  debug.APP_DIR = shared.APP_DIR;
+  debug.BASE_DIR = shared.BASE_DIR;
+  debug.LOGS_DIR = shared.LOGS_DIR;
+  debug.IS_WIN = shared.IS_WIN;
+  debug.IS_MAC = shared.IS_MAC;
+  debug.ELECTRON_MODE = !!process.env.ELECTRON_MODE;
+
+  // Check worker.js exists
+  const path = require('path');
+  const workerScript = path.join(shared.APP_DIR, 'worker.js');
+  debug.workerScript = workerScript;
+  debug.workerExists = require('fs').existsSync(workerScript);
+
+  // Check skills.json exists (worker needs it)
+  debug.skillsFile = shared.SKILLS_FILE;
+  debug.skillsExists = require('fs').existsSync(shared.SKILLS_FILE);
+
+  // Check tasks.json
+  debug.tasksFile = shared.TASKS_FILE;
+  debug.tasksExists = require('fs').existsSync(shared.TASKS_FILE);
+  const tasks = readTasks();
+  debug.taskCount = tasks.length;
+  debug.pendingCount = tasks.filter(t => t.status === 'pending').length;
+  debug.runningCount = tasks.filter(t => t.status === 'running').length;
+
+  // Check launchWorkerProcess
+  debug.launchWorkerProcessType = typeof shared.launchWorkerProcess;
+
+  // Check node is reachable
+  try {
+    debug.nodeVersion = execSync('node --version', { encoding: 'utf-8', timeout: 5000, windowsHide: true }).trim();
+  } catch (e) {
+    debug.nodeVersion = 'ERROR: ' + e.message;
+  }
+
+  // Check claude CLI
+  try {
+    debug.claudeVersion = execSync('claude --version', { encoding: 'utf-8', timeout: 10000, windowsHide: true }).trim();
+  } catch (e) {
+    debug.claudeVersion = 'ERROR: ' + e.message;
+  }
+
+  // Check PowerShell (Windows)
+  if (shared.IS_WIN) {
+    try {
+      debug.powershellVersion = execSync('powershell -NoProfile -Command "$PSVersionTable.PSVersion.ToString()"', { encoding: 'utf-8', timeout: 5000, windowsHide: true }).trim();
+    } catch (e) {
+      debug.powershellVersion = 'ERROR: ' + e.message;
+    }
+  }
+
+  // Check active workers
+  debug.activeWorkers = [...shared.activeWorkers.entries()].map(([k, v]) => ({ id: k, ...v }));
+
+  // Check recent bat files
+  if (shared.IS_WIN) {
+    try {
+      const files = require('fs').readdirSync(shared.LOGS_DIR).filter(f => f.startsWith('launch-worker-'));
+      debug.recentBatFiles = files.slice(-5);
+    } catch (_) {
+      debug.recentBatFiles = [];
+    }
+  }
+
+  res.json(debug);
+});
+
 router.post('/stop', (req, res) => {
   shared.activeWorkers.clear();
   res.json({ ok: true, message: 'Worker tracking cleared. Close terminal windows manually if still open.' });
