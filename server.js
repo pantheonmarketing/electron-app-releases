@@ -206,6 +206,18 @@ if (IS_PACKAGED_ELECTRON) {
       try { fs.copyFileSync(path.join(bundleSkillsDir, f), path.join(destSkillsDir, f)); } catch (_) {}
     }
   }
+
+  // Extract worker.js from app.asar to BASE_DIR so plain `node` can execute it.
+  // Electron's patched fs can read from .asar, but spawned `node` processes cannot.
+  // Always overwrite to ensure the latest version is used after updates.
+  const workerSrc = path.join(APP_DIR, 'worker.js');
+  const workerDest = path.join(BASE_DIR, 'worker.js');
+  try {
+    fs.copyFileSync(workerSrc, workerDest);
+    console.log(`[Server] Extracted worker.js to ${workerDest}`);
+  } catch (e) {
+    console.error(`[Server] Failed to extract worker.js: ${e.message}`);
+  }
 }
 
 // ── User environment variables ──

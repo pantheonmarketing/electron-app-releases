@@ -606,7 +606,9 @@ async function showRunDebug() {
     lines.push(`IS_WIN: ${data.IS_WIN} | IS_MAC: ${data.IS_MAC} | ELECTRON: ${data.ELECTRON_MODE}`);
     lines.push('');
     lines.push('=== FILES ===');
-    lines.push(`worker.js: ${data.workerScript} (exists: ${data.workerExists})`);
+    lines.push(`worker.js bundled: ${data.workerBundled} (exists: ${data.workerBundledExists})`);
+    lines.push(`worker.js extracted: ${data.workerExtracted} (exists: ${data.workerExtractedExists})`);
+    lines.push(`worker.js using: ${data.workerUsing}`);
     lines.push(`skills.json: ${data.skillsFile} (exists: ${data.skillsExists})`);
     lines.push(`tasks.json: ${data.tasksFile} (exists: ${data.tasksExists})`);
     lines.push('');

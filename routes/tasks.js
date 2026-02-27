@@ -135,7 +135,8 @@ router.post('/tasks/:id/run', (req, res) => {
   const cleanEnv = { ...process.env };
   delete cleanEnv.CLAUDECODE;
   const workerId = `S${req.params.id}`;
-  const workerScript = path.join(shared.APP_DIR, 'worker.js');
+  const extractedWorker = path.join(shared.BASE_DIR, 'worker.js');
+  const workerScript = fs.existsSync(extractedWorker) ? extractedWorker : path.join(shared.APP_DIR, 'worker.js');
   if (shared.launchWorkerProcess(workerScript, workerId, req.params.id, cleanEnv)) {
     shared.activeWorkers.set(workerId, { startedAt: new Date().toISOString(), taskId: req.params.id });
     console.log(`[Server] Launched single-task worker for #${req.params.id}`);
@@ -219,11 +220,14 @@ router.get('/run/debug', (req, res) => {
   debug.IS_MAC = shared.IS_MAC;
   debug.ELECTRON_MODE = !!process.env.ELECTRON_MODE;
 
-  // Check worker.js exists
-  const path = require('path');
-  const workerScript = path.join(shared.APP_DIR, 'worker.js');
-  debug.workerScript = workerScript;
-  debug.workerExists = require('fs').existsSync(workerScript);
+  // Check worker.js exists (both bundled and extracted)
+  const bundledWorker = path.join(shared.APP_DIR, 'worker.js');
+  const extractedW = path.join(shared.BASE_DIR, 'worker.js');
+  debug.workerBundled = bundledWorker;
+  debug.workerBundledExists = fs.existsSync(bundledWorker);
+  debug.workerExtracted = extractedW;
+  debug.workerExtractedExists = fs.existsSync(extractedW);
+  debug.workerUsing = fs.existsSync(extractedW) ? 'extracted (BASE_DIR)' : 'bundled (APP_DIR/asar)';
 
   // Check skills.json exists (worker needs it)
   debug.skillsFile = shared.SKILLS_FILE;
