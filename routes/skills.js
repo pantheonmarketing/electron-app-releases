@@ -234,4 +234,89 @@ router.post('/skills/:name/chat', (req, res) => {
   res.json({ ok: true, sessionId });
 });
 
+// ── Online Skills Sync ──
+// Fetches latest skills.json + skill .md files from GitHub repo
+const SKILLS_REPO = 'pantheonmarketing/electron-app-releases';
+const SKILLS_BRANCH = 'main';
+const RAW_BASE = `https://raw.githubusercontent.com/${SKILLS_REPO}/${SKILLS_BRANCH}`;
+
+async function fetchText(url) {
+  // Use dynamic import for fetch (Node 18+) or fallback to https
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': 'AI-CEO-Studio' } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        return fetchText(res.headers.location).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => resolve(data));
+    }).on('error', reject);
+  });
+}
+
+router.post('/skills/sync-online', async (req, res) => {
+  try {
+    // 1. Fetch the master skills.json from GitHub
+    const remoteSkillsRaw = await fetchText(`${RAW_BASE}/skills.json`);
+    const remoteSkills = JSON.parse(remoteSkillsRaw);
+
+    // 2. Load local skills.json
+    const localSkills = readSkills();
+    let updated = 0;
+    const updatedNames = [];
+
+    // 3. Ensure local skills/ directory exists
+    const localSkillsDir = path.join(shared.BASE_DIR, 'skills');
+    if (!fs.existsSync(localSkillsDir)) fs.mkdirSync(localSkillsDir, { recursive: true });
+
+    // 4. For each remote skill, update registry + download .md file
+    for (const [name, remoteInfo] of Object.entries(remoteSkills)) {
+      const remoteFile = remoteInfo.file; // e.g. "skills/jonny-writer-skill.md"
+      const localFile = path.join(shared.BASE_DIR, remoteFile);
+
+      // Update skills.json registry entry (always sync metadata)
+      const isNew = !localSkills[name];
+      localSkills[name] = {
+        ...remoteInfo,
+        file: remoteFile, // keep relative path
+      };
+
+      // Download the .md file if it doesn't exist locally or if we want to keep it fresh
+      // Strategy: always re-download to keep skills up to date
+      try {
+        const mdContent = await fetchText(`${RAW_BASE}/${remoteFile}`);
+        // Only write if content actually changed
+        let localContent = '';
+        if (fs.existsSync(localFile)) {
+          localContent = fs.readFileSync(localFile, 'utf-8');
+        }
+        if (mdContent !== localContent) {
+          fs.mkdirSync(path.dirname(localFile), { recursive: true });
+          fs.writeFileSync(localFile, mdContent);
+          updated++;
+          updatedNames.push(name);
+          console.log(`[Skills Sync] ${isNew ? 'New' : 'Updated'}: ${name}`);
+        }
+      } catch (dlErr) {
+        console.log(`[Skills Sync] Could not download ${remoteFile}: ${dlErr.message}`);
+      }
+    }
+
+    // 5. Save updated skills.json
+    fs.writeFileSync(shared.SKILLS_FILE, JSON.stringify(localSkills, null, 2));
+
+    res.json({
+      ok: true,
+      total: Object.keys(localSkills).length,
+      updated,
+      updatedNames,
+    });
+  } catch (err) {
+    console.error('[Skills Sync] Failed:', err.message);
+    res.json({ ok: false, error: err.message, updated: 0 });
+  }
+});
+
 module.exports = router;

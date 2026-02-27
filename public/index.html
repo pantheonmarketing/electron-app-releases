@@ -24,6 +24,14 @@
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
 
+<!-- Update Banner -->
+<div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:10000;background:linear-gradient(135deg,#7B2FF2,#9333EA);padding:10px 20px;text-align:center;font-size:13px;color:#fff;font-family:'Satoshi',sans-serif;box-shadow:0 2px 12px rgba(123,47,242,0.4);">
+  <span id="updateBannerText"></span>
+  <button id="updateDownloadBtn" onclick="downloadAppUpdate()" style="margin-left:12px;padding:4px 14px;background:#fff;color:#7B2FF2;border:none;border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;">Download</button>
+  <button id="updateInstallBtn" onclick="installAppUpdate()" style="display:none;margin-left:12px;padding:4px 14px;background:#fff;color:#7B2FF2;border:none;border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;">Install & Restart</button>
+  <button onclick="document.getElementById('updateBanner').style.display='none'" style="margin-left:8px;background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:16px;">✕</button>
+</div>
+
 <!-- ═══ Sidebar ═══ -->
 <div class="sidebar" id="sidebar">
   <div class="sidebar-brand" title="AI CEO Studio">
@@ -107,7 +115,7 @@
 <!-- Header -->
 <div class="header">
   <div class="header-top">
-    <h1>AI CEO Studio</h1>
+    <h1>AI CEO Studio <span id="appVersion" style="font-size:12px;font-weight:400;color:#555;vertical-align:middle;margin-left:6px;font-family:'JetBrains Mono',monospace;"></span></h1>
     <div class="header-right">
       <div class="worker-badge" id="tierBadge" style="display:none;"></div>
       <div class="worker-badge" id="workerBadge">0 workers active</div>
@@ -1923,7 +1931,88 @@ document.addEventListener('DOMContentLoaded', () => {
       loadSidebarProfile();
     });
   }, 200);
+
+  // Show version number
+  loadAppVersion();
+
+  // Auto-check for updates (after 3s to not slow startup)
+  setTimeout(checkForAppUpdate, 3000);
+
+  // Sync skills from online registry (after 5s)
+  setTimeout(syncOnlineSkills, 5000);
 });
+
+async function loadAppVersion() {
+  try {
+    if (window.electronAPI && window.electronAPI.getVersion) {
+      const ver = await window.electronAPI.getVersion();
+      if (ver) document.getElementById('appVersion').textContent = 'v' + ver;
+    } else {
+      // Non-Electron: get from health endpoint
+      const resp = await fetch('/api/health');
+      const data = await resp.json();
+      if (data.version) document.getElementById('appVersion').textContent = 'v' + data.version;
+    }
+  } catch (_) {}
+}
+
+async function checkForAppUpdate() {
+  try {
+    if (!window.electronAPI || !window.electronAPI.checkForUpdate) return;
+
+    // Listen for update events
+    window.electronAPI.onUpdateAvailable((data) => {
+      const banner = document.getElementById('updateBanner');
+      document.getElementById('updateBannerText').textContent = `Update v${data.version} is available!`;
+      document.getElementById('updateDownloadBtn').style.display = '';
+      document.getElementById('updateInstallBtn').style.display = 'none';
+      banner.style.display = '';
+    });
+
+    window.electronAPI.onUpdateProgress((data) => {
+      document.getElementById('updateBannerText').textContent = `Downloading update... ${data.percent}%`;
+      document.getElementById('updateDownloadBtn').style.display = 'none';
+    });
+
+    window.electronAPI.onUpdateDownloaded(() => {
+      document.getElementById('updateBannerText').textContent = 'Update ready!';
+      document.getElementById('updateDownloadBtn').style.display = 'none';
+      document.getElementById('updateInstallBtn').style.display = '';
+    });
+
+    window.electronAPI.onUpdateError((msg) => {
+      document.getElementById('updateBanner').style.display = 'none';
+    });
+
+    await window.electronAPI.checkForUpdate();
+  } catch (_) {}
+}
+
+function downloadAppUpdate() {
+  if (window.electronAPI && window.electronAPI.downloadUpdate) {
+    window.electronAPI.downloadUpdate();
+    document.getElementById('updateDownloadBtn').textContent = 'Downloading...';
+    document.getElementById('updateDownloadBtn').disabled = true;
+  }
+}
+
+function installAppUpdate() {
+  if (window.electronAPI && window.electronAPI.installUpdate) {
+    window.electronAPI.installUpdate();
+  }
+}
+
+async function syncOnlineSkills() {
+  try {
+    const resp = await fetch('/api/skills/sync-online', { method: 'POST' });
+    const data = await resp.json();
+    if (data.updated > 0) {
+      console.log(`[Skills] Synced ${data.updated} skill(s) from online`);
+      // Refresh skill list in UI
+      await refreshSkills();
+    }
+  } catch (_) {}
+}
 
 async function loadSidebarProfile() {
   const el = document.getElementById('sidebarProfile');

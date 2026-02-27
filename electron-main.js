@@ -211,9 +211,26 @@ function isSetupDone() {
   try { return fs.existsSync(SETUP_DONE_FILE); } catch { return false; }
 }
 
+function markSetupDone() {
+  try {
+    fs.mkdirSync(path.dirname(SETUP_DONE_FILE), { recursive: true });
+    fs.writeFileSync(SETUP_DONE_FILE, JSON.stringify({ completed_at: new Date().toISOString() }));
+  } catch (_) {}
+}
+
+// Quick health check — if all required deps are present, skip setup screen
+async function checkDepsQuick(port) {
+  try {
+    const resp = await net.fetch(`http://localhost:${port}/api/setup/check`);
+    const data = await resp.json();
+    return data.allRequired === true;
+  } catch (_) {
+    return false;
+  }
+}
+
 ipcMain.handle('setup:done', () => {
-  fs.mkdirSync(path.dirname(SETUP_DONE_FILE), { recursive: true });
-  fs.writeFileSync(SETUP_DONE_FILE, JSON.stringify({ completed_at: new Date().toISOString() }));
+  markSetupDone();
   return true;
 });
 
@@ -232,8 +249,16 @@ app.whenReady().then(async () => {
       if (license.key && result.tier && result.tier !== license.tier) {
         saveLicense(license.key, license.name, result.tier);
       }
+      // Skip setup screen if all required deps are already installed
       if (!isSetupDone()) {
-        createWindow(`http://localhost:${port}/setup.html`);
+        const depsOk = await checkDepsQuick(port);
+        if (depsOk) {
+          console.log('[Startup] All required deps found — skipping setup screen');
+          markSetupDone();
+          createWindow(`http://localhost:${port}`);
+        } else {
+          createWindow(`http://localhost:${port}/setup.html`);
+        }
       } else {
         createWindow(`http://localhost:${port}`);
       }
