@@ -341,7 +341,7 @@ function renderScheduleList() {
       <button class="schedule-toggle ${onClass}" onclick="event.stopPropagation();toggleSchedule('${s.id}',${!s.enabled})" title="${s.enabled ? 'Disable' : 'Enable'}"></button>
       <div class="schedule-info">
         <div class="schedule-name"><span class="schedule-icon">${icon}</span> ${escHtml(s.name)}</div>
-        <div class="schedule-detail">${daysLabel} at ${timeStr} · Next: <span class="${nextRunClass}">${nextRun}</span></div>
+        <div class="schedule-detail">${daysLabel} at ${timeStr}${s.timezone ? ' <span style="color:#666;">(' + s.timezone.replace(/_/g, ' ') + ')</span>' : ''} · Next: <span class="${nextRunClass}">${nextRun}</span></div>
         ${historyLine}
       </div>
       <div class="schedule-actions">
@@ -423,9 +423,31 @@ function showScheduleForm(preRoutineId) {
   const space = getActiveSpace();
   document.getElementById('scheduleSpaceNote').textContent = `${space.name || activeSpaceId}${space.working_dir ? ' — ' + space.working_dir.split(/[/\\]/).pop() : ''}`;
 
-  // Timezone
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  document.getElementById('scheduleFormTz').textContent = `(${tz})`;
+  // Timezone dropdown
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tzSelect = document.getElementById('scheduleTzInput');
+  if (tzSelect.options.length === 0) {
+    const commonTzs = [
+      'America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+      'America/Anchorage','Pacific/Honolulu','America/Phoenix',
+      'America/Toronto','America/Vancouver','America/Mexico_City',
+      'America/Sao_Paulo','America/Argentina/Buenos_Aires',
+      'Europe/London','Europe/Paris','Europe/Berlin','Europe/Moscow',
+      'Africa/Cairo','Africa/Lagos','Asia/Dubai','Asia/Kolkata',
+      'Asia/Bangkok','Asia/Shanghai','Asia/Tokyo','Asia/Seoul',
+      'Asia/Singapore','Asia/Manila','Australia/Sydney','Pacific/Auckland',
+      'UTC'
+    ];
+    if (!commonTzs.includes(browserTz)) commonTzs.unshift(browserTz);
+    commonTzs.forEach(tz => {
+      const opt = document.createElement('option');
+      opt.value = tz;
+      opt.textContent = tz.replace(/_/g, ' ');
+      tzSelect.appendChild(opt);
+    });
+  }
+  tzSelect.value = browserTz;
+  document.getElementById('scheduleFormTz').textContent = `(${browserTz})`;
 }
 
 function editSchedule(id) {
@@ -445,6 +467,20 @@ function editSchedule(id) {
     });
   } else {
     document.getElementById('scheduleDaysInput').value = s.days;
+  }
+
+  // Restore saved timezone
+  if (s.timezone) {
+    const tzSelect = document.getElementById('scheduleTzInput');
+    // Add the timezone if it's not in the list
+    if (!Array.from(tzSelect.options).some(o => o.value === s.timezone)) {
+      const opt = document.createElement('option');
+      opt.value = s.timezone;
+      opt.textContent = s.timezone.replace(/_/g, ' ');
+      tzSelect.insertBefore(opt, tzSelect.firstChild);
+    }
+    tzSelect.value = s.timezone;
+    document.getElementById('scheduleFormTz').textContent = `(${s.timezone})`;
   }
 }
 
@@ -483,6 +519,7 @@ async function saveSchedule() {
 
   const space = getActiveSpace();
   const editId = document.getElementById('editScheduleId').value;
+  const timezone = document.getElementById('scheduleTzInput').value || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   try {
     if (editId) {
@@ -490,7 +527,8 @@ async function saveSchedule() {
         name: routine ? routine.name : 'Schedule',
         routine_id: routineId,
         time: { hour: h, minute: m },
-        days
+        days,
+        timezone
       });
     } else {
       await api.createSchedule({
@@ -498,6 +536,7 @@ async function saveSchedule() {
         routine_id: routineId,
         time: { hour: h, minute: m },
         days,
+        timezone,
         space_id: activeSpaceId,
         working_dir: space.working_dir || null,
         context: space.context || []

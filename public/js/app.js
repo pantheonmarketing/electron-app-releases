@@ -48,9 +48,9 @@ async function refresh() {
     badge.textContent = `${running} task${running > 1 ? 's' : ''} running`;
     badge.classList.add('active');
     document.getElementById('stopBtn').style.display = '';
-    document.getElementById('runnerStatus').textContent = 'Processing...';
+    document.getElementById('runnerStatus').textContent = 'AI is working...';
   } else {
-    badge.textContent = '0 workers active';
+    badge.textContent = 'Ready';
     badge.classList.remove('active');
     document.getElementById('stopBtn').style.display = 'none';
     document.getElementById('terminalHint').textContent = '';
@@ -136,6 +136,7 @@ async function init() {
         sel.appendChild(opt);
       }
     });
+    buildSkillPicker();
 
     // Load projects
     projects = await api.getProjects();
@@ -165,12 +166,12 @@ async function init() {
         if (!health.python) missing.push('Python');
         if (!health.whisper) missing.push('Whisper');
         if (!health.ytdlp) missing.push('yt-dlp');
-        showServerBanner('⚠ Missing: ' + missing.join(', ') + ' — click Setup in sidebar to install', 'warning');
+        showServerBanner('⚠ Some tools need setup: ' + missing.join(', ') + ' — click Setup in the sidebar to fix this', 'warning');
       }
     } catch (_) {}
 
   } catch (e) {
-    showServerBanner('⚠ Cannot connect to server — is it running? (node server.js)', 'error');
+    showServerBanner('⚠ Cannot connect to the app — make sure AI CEO Studio is running', 'error');
     console.error('Init failed:', e);
   }
 
@@ -179,15 +180,19 @@ async function init() {
   startPolling();
   wfInitCanvas();
 
+  // Onboarding wizard (first-time users)
+  if (typeof showOnboarding === 'function') showOnboarding();
+
   // Keyboard shortcuts
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeAddModal(); closeResultModal(); closeSpaceModal(); closeTemplatePopup(); closeTaskMaster(); closeSaveRoutineModal(); closeHistory(); closeSchedules(); closeRoutineBuilder(); closeNewTerminalModal(); wfClosePicker(); wfClosePanel(); }
+    if (e.key === 'Escape') { closeAddModal(); closeResultModal(); closeSpaceModal(); closeTemplatePopup(); closeTaskMaster(); closeSaveRoutineModal(); closeHistory(); closeSchedules(); closeRoutineBuilder(); closeNewTerminalModal(); wfClosePicker(); wfClosePanel(); if (typeof closeSkillEditor === 'function') closeSkillEditor(); if (typeof finishOnboarding === 'function') finishOnboarding(); }
     if (e.key === 'n' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') openAddModal();
     if (e.key === 'm' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') openTaskMaster();
     if (e.key === '1' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') switchView('board');
-    if (e.key === '2' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') switchView('terminals');
-    if (e.key === '3' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') switchView('workflows');
-    if (e.key === '4' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') switchView('reelmaster');
+    if (e.key === '2' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') switchView('workflows');
+    if (e.key === '3' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') switchView('reelmaster');
+    if (e.key === '4' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') switchView('scripter');
+    if (e.key === '5' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName === 'BODY') switchView('heygen');
     // Ctrl+Enter in follow-up textarea submits
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && document.activeElement.id === 'followUpInput') {
       e.preventDefault();

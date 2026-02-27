@@ -1,6 +1,6 @@
 {
-  "appId": "com.aico.electron",
-  "productName": "Electron",
+  "appId": "com.aico.aiceo",
+  "productName": "AI CEO",
   "directories": {
     "output": "dist"
   },
@@ -16,8 +16,10 @@
     "public/**",
     "skills/**",
     "reel-presets/**",
+    "story-presets/**",
     "package.json",
-    ".env",
+    "routes/**",
+    "defaults/**",
     "node_modules/**"
   ],
   "extraResources": [

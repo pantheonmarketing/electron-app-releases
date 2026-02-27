@@ -253,7 +253,7 @@
         {
           "name": "video_path",
           "label": "Video file path",
-          "placeholder": "e.g. C:/Users/yoniw/Downloads/video.mp4",
+          "placeholder": "e.g. C:/path/to/video.mp4",
           "required": true
         },
         {
@@ -342,6 +342,30 @@
             "count": "4",
             "topic": "{{prev}}"
           }
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "name": "test",
+      "icon": "⚡",
+      "description": "",
+      "tasks": [
+        {
+          "template_id": "check-instagram",
+          "variables": {}
+        }
+      ]
+    },
+    {
+      "id": "insta",
+      "name": "insta",
+      "icon": "⚡",
+      "description": "",
+      "tasks": [
+        {
+          "template_id": "check-instagram",
+          "variables": {}
         }
       ]
     }

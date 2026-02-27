@@ -1,5 +1,5 @@
 /**
- * electron-main.js — Electron main process for "Electron" desktop app
+ * electron-main.js — Electron main process for "AI CEO" desktop app
  *
  * Starts the Express server internally, opens BrowserWindow,
  * and gates access behind a license key.
@@ -12,7 +12,7 @@ const netNode = require('net');
 const { autoUpdater } = require('electron-updater');
 
 // ── Config ──
-const APP_NAME = 'Electron';
+const APP_NAME = 'AI CEO';
 const LICENSE_FILE = path.join(app.getPath('userData'), 'license.json');
 const IS_DEV = !app.isPackaged;
 const LICENSE_API = 'https://aicreatorworkshop.com/api/license-validate';
@@ -224,10 +224,12 @@ app.whenReady().then(async () => {
   // Check license
   const license = readLicense();
   if (license) {
-    const result = await validateKey(license.key);
+    // If license has a tier but no key (e.g. owner/dev install), trust it
+    const hasValidTier = license.tier && ['basic', 'pro', 'lifetime'].includes(license.tier);
+    const result = license.key ? await validateKey(license.key) : { valid: hasValidTier, tier: license.tier };
     if (result.valid) {
       // Update stored tier from server (in case admin changed it)
-      if (result.tier && result.tier !== license.tier) {
+      if (license.key && result.tier && result.tier !== license.tier) {
         saveLicense(license.key, license.name, result.tier);
       }
       if (!isSetupDone()) {

@@ -2,101 +2,249 @@
   "jonny-writer": {
     "file": "skills/jonny-writer-skill.md",
     "description": "Write Facebook posts in Jonny's voice",
-    "context": []
+    "display_name": "Post Writer",
+    "icon": "\u270d\ufe0f",
+    "category": "content",
+    "plain_description": "Writes engaging Facebook posts that sound like you — just tell it the topic and it handles the rest.",
+    "context": [],
+    "requirements": ["Claude CLI"],
+    "config": [
+      { "key": "author_name", "label": "Author Name", "type": "text", "placeholder": "Jonny West" },
+      { "key": "brand_name", "label": "Brand / Product Name", "type": "text", "placeholder": "AI CEO Accelerator" },
+      { "key": "product_details", "label": "Product Details", "type": "textarea", "placeholder": "What you sell, price, target audience...", "hint": "Brief description of your offer so the writer can reference it" }
+    ],
+    "chat_prompts": ["Change writing tone to casual", "Add a new post template", "Update my product details"]
   },
   "ai-news": {
     "file": "skills/ai-news-researcher-skill.md",
     "description": "Research trending AI news",
-    "context": []
+    "display_name": "AI News",
+    "icon": "\ud83d\udcf0",
+    "category": "content",
+    "plain_description": "Finds the latest AI news and trends relevant to your niche, so you always have fresh content ideas.",
+    "context": [],
+    "requirements": ["Claude CLI", "Web access (Perplexity/ScrapingDog/Firecrawl via SkillBoss)"],
+    "chat_prompts": ["Focus on AI video tools only", "Add a new news source", "Change relevance scoring"]
   },
   "iv4": {
     "file": "skills/iv4-skill.md",
     "description": "Generate ultra-realistic AI influencer images",
-    "context": []
+    "display_name": "AI Photos",
+    "icon": "\ud83d\udcf8",
+    "category": "content",
+    "plain_description": "Creates realistic AI influencer photos for your social media posts — no photographer needed.",
+    "context": [],
+    "requirements": ["Claude CLI", "SkillBoss (image generation API)"],
+    "chat_prompts": ["Add a new style guide", "Change default image size", "Update the skin realism settings"]
   },
   "kit-broadcast": {
     "file": "skills/kit-broadcast-skill.md",
     "description": "Write and send Kit email broadcasts",
+    "display_name": "Email Sender",
+    "icon": "\ud83d\udce7",
+    "category": "communication",
+    "plain_description": "Writes and sends email broadcasts to your subscriber list through ConvertKit.",
     "context": [],
-    "context_notes": "Needs CONVERTKIT_API_KEY — add your .env file path to context after setup"
+    "context_notes": "Needs CONVERTKIT_API_KEY — add your .env file path to context after setup",
+    "requirements": ["Claude CLI", "CONVERTKIT_API_KEY (Kit v4 API)"],
+    "config": [
+      { "key": "sender_email", "label": "Sender Email", "type": "text", "placeholder": "you@yourdomain.com" },
+      { "key": "product_name", "label": "Product Name", "type": "text", "placeholder": "AI Influencer Academy" },
+      { "key": "product_price", "label": "Product Price", "type": "text", "placeholder": "$9/mo" },
+      { "key": "product_url", "label": "Product URL", "type": "url", "placeholder": "https://www.skool.com/your-community" }
+    ],
+    "chat_prompts": ["Change email writing style", "Add a new email template", "Update sender info"]
   },
   "fb-stories": {
     "file": "skills/fb-story-slides-skill.md",
     "description": "Create FB/IG story slide carousels",
-    "context": []
+    "display_name": "Story Slides",
+    "icon": "\ud83c\udfb4",
+    "category": "content",
+    "plain_description": "Creates beautiful 5-slide story carousels for Facebook and Instagram from your topic or idea.",
+    "context": [],
+    "requirements": ["Claude CLI", "Playwright MCP (browser automation)", "Python + rembg (background removal)"],
+    "chat_prompts": ["Change color scheme", "Update font choices", "Add a new slide template"]
   },
   "fb-story-video": {
     "file": "skills/fb-story-video-skill.md",
     "description": "Create FB story promo videos with Remotion",
-    "context": []
+    "display_name": "Story Videos",
+    "icon": "\ud83d\udcf1",
+    "category": "video",
+    "plain_description": "Creates animated promo videos for Facebook Stories with your talking head and text overlays.",
+    "context": [],
+    "requirements": ["Claude CLI", "Node.js + Remotion", "Whisper (word-level timestamps)", "ffmpeg"],
+    "chat_prompts": ["Change animation style", "Update color palette", "Add new transition type"]
   },
   "faceless-reel": {
     "file": "skills/faceless-reel-skill.md",
     "description": "Create faceless reels in @ineffable_ai22 style",
-    "context": []
+    "display_name": "Faceless Reels",
+    "icon": "\ud83c\udfac",
+    "category": "video",
+    "plain_description": "Creates viral-style faceless reels with stock video clips, text overlays, and moody music.",
+    "context": [],
+    "requirements": ["Claude CLI", "Node.js + Remotion", "Whisper (word-level timestamps)", "ffmpeg", "Video clips (stock or AI-generated)"],
+    "chat_prompts": ["Change text style", "Update music settings", "Add new CTA template"]
   },
   "adcreator": {
     "file": "skills/adcreator-skill.md",
     "description": "Create FB/IG video ads with Remotion",
+    "display_name": "Ad Creator",
+    "icon": "\ud83c\udfaf",
+    "category": "video",
+    "plain_description": "Creates 30-second video ads for Facebook and Instagram using AI video clips and subtitles.",
     "context": [
       "skills/ad-script-frameworks.md"
     ],
-    "context_notes": "Uses ad-script-frameworks.md for script selection"
+    "context_notes": "Uses ad-script-frameworks.md for script selection",
+    "requirements": ["Claude CLI", "Node.js + Remotion", "Whisper (word-level timestamps)", "ffmpeg", "Veo 3.1 / Google Flow (AI video clips)"],
+    "chat_prompts": ["Add a new script framework", "Change subtitle style", "Update end card design"]
   },
   "fb-ads": {
     "file": "skills/fb-ads-manager-skill.md",
     "description": "Manage FB Ads via browser automation",
-    "context": []
+    "display_name": "Ad Manager",
+    "icon": "\ud83d\udcb0",
+    "category": "social",
+    "plain_description": "Creates and manages Facebook ad campaigns through browser automation — no manual clicking needed.",
+    "context": [],
+    "requirements": ["Claude CLI", "Chrome DevTools MCP or Playwright MCP", "Facebook Ads Manager access", "Ad video/image files"],
+    "config": [
+      { "key": "ad_account_id", "label": "Ad Account ID", "type": "text", "placeholder": "act_123456789" },
+      { "key": "page_name", "label": "Facebook Page Name", "type": "text", "placeholder": "Your Page Name" },
+      { "key": "pixel_id", "label": "Pixel ID", "type": "text", "placeholder": "123456789012345" },
+      { "key": "destination_url", "label": "Destination URL", "type": "url", "placeholder": "https://yourdomain.com/offer" }
+    ],
+    "chat_prompts": ["Update budget guidelines", "Change targeting settings", "Add new ad copy template"]
   },
   "fb-comments": {
     "file": "skills/fb-auto-comment-skill.md",
     "description": "Auto-reply to FB comments + DMs",
-    "context": []
+    "display_name": "Auto Comments",
+    "icon": "\ud83d\udcac",
+    "category": "social",
+    "plain_description": "Automatically replies to Facebook post comments and sends follow-up DMs to interested people.",
+    "context": [],
+    "requirements": ["Claude CLI", "Chrome DevTools MCP", "Facebook login cookies (active session)"],
+    "chat_prompts": ["Change reply variations", "Update DM templates", "Adjust rate limits"]
   },
   "skool-poster": {
     "file": "skills/skool-poster-skill.md",
     "description": "Post in Skool communities",
-    "context": []
+    "display_name": "Skool Poster",
+    "icon": "\ud83c\udfeb",
+    "category": "social",
+    "plain_description": "Posts engaging content in your Skool communities to keep members active and attract new ones.",
+    "context": [],
+    "requirements": ["Claude CLI", "Playwright MCP", "Skool login cookies (active session)"],
+    "config": [
+      { "key": "community_slugs", "label": "Community Slugs", "type": "textarea", "placeholder": "ai-influencer-academy2026, your-community", "hint": "Comma-separated Skool community slugs (from the URL)" }
+    ],
+    "chat_prompts": ["Add a new community", "Change posting style", "Update post templates"]
   },
   "youtube-creator": {
     "file": "skills/youtube-creator-skill.md",
     "description": "Create AICO lesson videos with Remotion",
-    "context": []
+    "display_name": "Course Videos",
+    "icon": "\ud83c\udf93",
+    "category": "video",
+    "plain_description": "Creates professional course lesson videos with slides, animations, and word-synced subtitles.",
+    "context": [],
+    "requirements": ["Claude CLI", "Node.js + Remotion", "Whisper (word-level timestamps)", "ffmpeg"],
+    "chat_prompts": ["Add a new slide layout", "Change design colors", "Update animation style"]
   },
   "youtube-tracker": {
     "file": "skills/youtube-tracker-skill.md",
     "description": "Monitor YouTube channels for new videos",
+    "display_name": "YT Tracker",
+    "icon": "\ud83d\udcca",
+    "category": "monitoring",
+    "plain_description": "Watches YouTube channels you follow and sends you a Telegram alert when they post new videos.",
     "context": [],
-    "context_notes": "Needs TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID — add your .env and tracker files to context after setup"
+    "context_notes": "Needs TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID — add your .env and tracker files to context after setup",
+    "requirements": ["Node.js", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+    "config": [
+      { "key": "yt_channels", "label": "YouTube Channels to Track", "type": "textarea", "placeholder": "RoboNuggets, AiorBust, All About AI", "hint": "Comma-separated channel names" },
+      { "key": "telegram_note", "label": "Telegram Bot", "type": "info", "hint": "Set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID in Settings → API Keys" }
+    ],
+    "highlights": [
+      { "label": "Tracked Channels", "type": "code_array", "pattern": "\\{\\s*name:\\s*'([^']+)',\\s*rss:\\s*'https://www\\.youtube\\.com" }
+    ],
+    "chat_prompts": ["Add channel @NewCreator", "Remove a channel", "Change check interval"]
   },
   "longform-editor": {
     "file": "skills/longform-editor-skill.md",
     "description": "Add pro subtitles to long-form videos",
-    "context": []
+    "display_name": "Video Subtitles",
+    "icon": "\ud83c\udf9e\ufe0f",
+    "category": "video",
+    "plain_description": "Adds professional word-synced subtitles to any video — YouTube, courses, podcasts, anything.",
+    "context": [],
+    "requirements": ["Claude CLI", "Node.js + Remotion", "Whisper (word-level timestamps)", "ffmpeg"],
+    "chat_prompts": ["Change subtitle style", "Add new highlight color", "Update font settings"]
   },
   "reddit-researcher": {
     "file": "skills/reddit-researcher-skill.md",
     "description": "Research AI topics on Reddit",
-    "context": []
+    "display_name": "Reddit Research",
+    "icon": "\ud83d\udd0d",
+    "category": "content",
+    "plain_description": "Digs through Reddit to find trending AI discussions, pain points, and content ideas for your niche.",
+    "context": [],
+    "requirements": ["Claude CLI", "Web access (SkillBoss or browser MCP)"],
+    "chat_prompts": ["Add a new subreddit", "Change search topics", "Update scoring criteria"]
   },
   "webinar-page": {
     "file": "skills/webinar-page-skill.md",
     "description": "Build webinar landing pages",
-    "context": []
+    "display_name": "Webinar Pages",
+    "icon": "\ud83c\udf10",
+    "category": "web",
+    "plain_description": "Builds high-converting webinar registration and replay pages ready to deploy on Vercel.",
+    "context": [],
+    "requirements": ["Claude CLI", "React + Vite + Tailwind CSS", "Vercel (deployment)"],
+    "chat_prompts": ["Change page design", "Update registration form", "Add countdown timer"]
   },
   "instagram-tracker": {
     "file": "skills/instagram-tracker-skill.md",
     "description": "Monitors Instagram accounts via Apify scraper",
-    "context": []
+    "display_name": "IG Tracker",
+    "icon": "\ud83d\udcca",
+    "category": "monitoring",
+    "plain_description": "Monitors Instagram accounts and sends you Telegram alerts when they post new content.",
+    "context": [],
+    "requirements": ["Node.js", "APIFY_TOKEN", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+    "config": [
+      { "key": "ig_accounts", "label": "Instagram Accounts to Track", "type": "textarea", "placeholder": "ineffable_ai22, another_account", "hint": "Comma-separated usernames (no @ symbol)" },
+      { "key": "apify_token_note", "label": "Apify API Token", "type": "info", "hint": "Set in Settings → API Keys (APIFY_TOKEN)" }
+    ],
+    "highlights": [
+      { "label": "Tracked Accounts", "type": "code_array", "pattern": "\\{\\s*name:\\s*'([^']+)',\\s*url:\\s*'https://www\\.instagram\\.com" }
+    ],
+    "chat_prompts": ["Add account @newcreator", "Remove an account", "Change check frequency"]
   },
   "course-manager": {
     "file": "skills/course-manager-skill.md",
     "description": "Add/update AICO course lessons",
-    "context": []
+    "display_name": "Course Manager",
+    "icon": "\ud83d\udcda",
+    "category": "web",
+    "plain_description": "Adds new lessons, updates videos, and manages your AICO course content and deployments.",
+    "context": [],
+    "requirements": ["Claude CLI", "course-app project files", "Vercel (deployment)"],
+    "chat_prompts": ["Add a new lesson", "Update a video URL", "Change lesson order"]
   },
   "heygen-studio": {
     "file": "skills/heygen-studio-skill.md",
     "description": "Generate HeyGen videos via browser automation (free, uses Creator plan)",
-    "context": []
+    "display_name": "HeyGen Studio",
+    "icon": "\ud83e\udd16",
+    "category": "ai-tools",
+    "plain_description": "Creates AI avatar videos using HeyGen through browser automation — no API costs.",
+    "context": [],
+    "requirements": ["Claude CLI", "Chrome DevTools MCP or Playwright MCP", "HeyGen account + login cookies"],
+    "chat_prompts": ["Change default avatar", "Update voice settings", "Add new video template"]
   }
 }

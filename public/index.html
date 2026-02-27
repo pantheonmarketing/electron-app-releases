@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Claude Task Manager</title>
+  <title>AI CEO Studio</title>
   <link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500,400&f[]=archivo@600,400&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&family=Merriweather:wght@400;700;900&family=Lora:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=Raleway:wght@400;500;600;700&family=Bebas+Neue&family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
   <!-- CSS (extracted from inline styles) -->
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/layout.css">
@@ -16,6 +17,7 @@
   <link rel="stylesheet" href="css/reel-master.css">
   <link rel="stylesheet" href="css/heygen.css">
   <link rel="stylesheet" href="css/scripter.css">
+  <link rel="stylesheet" href="css/story-editor.css">
 </head>
 <body>
 
@@ -24,7 +26,7 @@
 
 <!-- ═══ Sidebar ═══ -->
 <div class="sidebar" id="sidebar">
-  <div class="sidebar-brand" title="AICO Studio">
+  <div class="sidebar-brand" title="AI CEO Studio">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
   </div>
   <nav class="sidebar-nav">
@@ -32,18 +34,22 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span class="sidebar-label">Studio</span>
     </div>
-    <div class="sidebar-item" id="nav-terminals" data-view="terminals" data-tooltip="Terminals" onclick="switchView('terminals')">
+    <div class="sidebar-item" id="nav-terminals" data-view="terminals" data-tooltip="Terminals" onclick="switchView('terminals')" style="display:none;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       <span class="sidebar-label">Shell</span>
       <span class="sidebar-badge" id="terminalCountBadge" data-count="0">0</span>
     </div>
     <div class="sidebar-item" id="nav-workflows" data-view="workflows" data-tooltip="Workflows" onclick="switchView('workflows')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-      <span class="sidebar-label">Flow</span>
+      <span class="sidebar-label">Workflows</span>
     </div>
     <div class="sidebar-item" id="nav-reelmaster" data-view="reelmaster" data-tooltip="Reel Master" onclick="switchView('reelmaster')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
       <span class="sidebar-label">Reels</span>
+    </div>
+    <div class="sidebar-item" id="nav-stories" data-view="stories" data-tooltip="Story Slides" onclick="switchView('stories')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 8h4"/><path d="M7 12h6"/></svg>
+      <span class="sidebar-label">Stories</span>
     </div>
     <div class="sidebar-item" id="nav-scripter" data-view="scripter" data-tooltip="Scripter" onclick="switchView('scripter')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
@@ -58,20 +64,36 @@
   <nav class="sidebar-nav" style="margin-bottom:8px;">
     <div class="sidebar-item" data-tooltip="Schedules" onclick="openSchedules()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span class="sidebar-label-sm">Schedules</span>
     </div>
     <div class="sidebar-item" data-tooltip="History" onclick="openHistory()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg>
+      <span class="sidebar-label-sm">History</span>
+    </div>
+    <div class="sidebar-item" data-tooltip="Skills" onclick="openSkillEditor()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      <span class="sidebar-label-sm">Skills</span>
     </div>
     <div class="sidebar-item" data-tooltip="Setup &amp; Dependencies" onclick="openSetupModal()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      <span class="sidebar-label-sm">Setup</span>
     </div>
     <div class="sidebar-item" data-tooltip="Check for Updates" onclick="checkAppUpdate()" id="updateBtn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      <span class="sidebar-label-sm">Update</span>
     </div>
     <div class="sidebar-item" data-tooltip="Reset All" onclick="resetAll()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      <span class="sidebar-label-sm">Reset</span>
     </div>
   </nav>
+  <div class="sidebar-profile" id="sidebarProfile" style="display:none;" onclick="openSettingsModal()" data-tooltip="Settings">
+    <div class="sidebar-profile-avatar" id="sidebarProfileAvatar">J</div>
+    <div class="sidebar-profile-info">
+      <div class="sidebar-profile-name" id="sidebarProfileName">User</div>
+      <div class="sidebar-profile-tier" id="sidebarProfileTier">Basic</div>
+    </div>
+  </div>
 </div>
 
 <!-- ═══ App Shell ═══ -->
@@ -85,9 +107,9 @@
 <!-- Header -->
 <div class="header">
   <div class="header-top">
-    <h1>Claude Task Manager</h1>
+    <h1>AI CEO Studio</h1>
     <div class="header-right">
-      <div class="worker-badge" id="tierBadge" onclick="toggleTierTest()" style="cursor:pointer;display:none;" title="Click to switch tier (testing only)"></div>
+      <div class="worker-badge" id="tierBadge" style="display:none;"></div>
       <div class="worker-badge" id="workerBadge">0 workers active</div>
     </div>
   </div>
@@ -117,7 +139,7 @@
         <div class="column-header">
           <div class="column-title"><span>Done</span><span class="column-count" id="count-done">0</span></div>
           <div class="column-actions">
-            <button onclick="archiveAllDone()" title="Archive all done tasks">📁 Archive</button>
+            <button onclick="archiveAllDone()" title="Hide completed tasks — find them later in History">📁 Archive</button>
           </div>
         </div>
         <div class="done-filter" id="doneFilter">
@@ -130,7 +152,7 @@
         <div class="column-header">
           <div class="column-title"><span>Failed</span><span class="column-count" id="count-failed">0</span></div>
           <div class="column-actions">
-            <button onclick="archiveAllFailed()" title="Archive all failed tasks">📁 Archive</button>
+            <button onclick="archiveAllFailed()" title="Hide failed tasks — find them later in History">📁 Archive</button>
           </div>
         </div>
         <div class="column-cards" id="col-failed" ondragover="onDragOver(event)" ondrop="onDrop(event,'failed')" ondragleave="onDragLeave(event)"></div>
@@ -138,7 +160,7 @@
     </div>
     <div class="runner-bar">
       <button class="btn btn-primary" onclick="openAddModal()">+ New Task</button>
-      <button class="btn btn-taskmaster" onclick="openTaskMaster()">🧠 Task Master</button>
+      <button class="btn btn-taskmaster" onclick="openTaskMaster()" title="Describe a big goal and the AI will break it into step-by-step tasks for you">🧠 Plan a Goal</button>
       <div style="width:1px;height:24px;background:rgba(255,255,255,0.1);"></div>
       <button class="btn btn-success" onclick="runWorkers()" id="runBtn">▶ Run All</button>
       <button class="btn btn-danger btn-sm" onclick="stopWorkers()" id="stopBtn" style="display:none;">Stop</button>
@@ -250,6 +272,7 @@
       </div>
 
       <!-- Step indicators -->
+      <div class="step-progress-text" id="rmStepProgress">Step 1 of 5 — Upload</div>
       <div class="rm-steps" id="rmSteps">
         <div class="rm-step active" data-step="upload" onclick="rmGoStep('upload')">
           <span class="rm-step-num">1</span><span class="rm-step-label">Upload</span>
@@ -358,7 +381,7 @@
               <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
                 <input type="text" class="rm-render-dir-input" id="rmRenderDir" style="margin-top:0; flex:1;"
                        placeholder="Click 'Choose Folder' or paste a path..."
-                       value="C:\Users\yoniw\Downloads\fb-story-promo">
+                       value="">
                 <button class="btn btn-primary btn-sm" onclick="rmBrowseFolder()" style="white-space:nowrap; flex-shrink:0;">📁 Choose Folder</button>
               </div>
             </div>
@@ -366,6 +389,7 @@
           <div class="rm-step-actions">
             <button class="btn btn-ghost" onclick="rmGoStep('customize')">← Back</button>
             <div style="flex:1;"></div>
+            <button class="btn btn-primary" onclick="rmPreviewStudio()">🎥 Preview in Studio</button>
             <button class="btn btn-success" onclick="rmRender()">🎬 Render Final Video</button>
           </div>
         </div>
@@ -512,6 +536,7 @@
       </div>
 
       <!-- Step indicators -->
+      <div class="step-progress-text" id="hgStepProgress">Step 1 of 3 — Choose Avatar & Voice</div>
       <div class="hg-steps" id="hgSteps">
         <div class="hg-step active" data-step="avatar" onclick="hgGoStep('avatar')">
           <span class="hg-step-num">1</span><span class="hg-step-label">Avatar & Voice</span>
@@ -655,6 +680,35 @@
     </div>
   </div><!-- /view-heygen -->
 
+  <!-- ═══ View: Story Editor ═══ -->
+  <div class="view view-stories" id="storiesView">
+    <!-- Landing (design list) -->
+    <div class="st-landing" id="stLanding">
+      <div class="st-landing-header">
+        <span class="st-landing-title">Story Brand Designer</span>
+        <button class="btn btn-primary" onclick="stNewDesign()">+ New Design</button>
+      </div>
+      <div class="st-landing-subtitle">Design how your story slides look. Then tell AI "make story slides about X" and it uses your design.</div>
+      <div class="st-project-list" id="stProjectList"></div>
+    </div>
+
+    <!-- Designer (active design) -->
+    <div class="st-studio" id="stStudio" style="display:none;">
+      <div class="st-studio-toolbar">
+        <button class="st-toolbar-back" onclick="stBackToList()" title="Back to designs">&larr;</button>
+        <input type="text" class="st-toolbar-name" id="stProjectName" placeholder="Design name..." onchange="stSaveDesign()">
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" onclick="stSaveDesign()">&#128190; Save</button>
+      </div>
+
+      <div class="st-step-progress" id="stStepProgress">Design your story brand</div>
+      <div class="st-steps" id="stSteps" style="display:none;"></div>
+
+      <!-- Single panel for the brand designer -->
+      <div class="st-panel st-panel-active" id="stPanelBrand"></div>
+    </div>
+  </div><!-- /view-stories -->
+
   <!-- Image Search Modal (Multi-source) -->
   <div class="rm-img-search-backdrop" id="rmImgSearchBackdrop" onclick="rmCloseImageSearch()"></div>
   <div class="rm-img-search-modal" id="rmImgSearchModal">
@@ -677,6 +731,69 @@
 
 </div><!-- /content-area -->
 </div><!-- /app-shell -->
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettingsModal()">
+  <div class="modal" style="width:440px;">
+    <h2>Settings</h2>
+
+    <div class="settings-section">
+      <div class="settings-profile-header">
+        <div class="settings-avatar" id="settingsAvatar">J</div>
+        <div>
+          <div class="settings-name" id="settingsName">User</div>
+          <div class="settings-tier-badge" id="settingsTierBadge">Lifetime</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-row">
+        <span class="settings-label">License Key</span>
+        <span class="settings-value" id="settingsKey" style="font-family:'Courier New',monospace;letter-spacing:1px;">—</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Plan</span>
+        <span class="settings-value" id="settingsPlan">—</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Activated</span>
+        <span class="settings-value" id="settingsActivated">—</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">App Version</span>
+        <span class="settings-value" id="settingsVersion">—</span>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span class="settings-label" style="margin:0;">API Keys &amp; Environment</span>
+        <button class="btn btn-ghost btn-sm" onclick="toggleAddEnvRow()" style="font-size:11px;padding:3px 10px;">+ Add Key</button>
+      </div>
+      <div id="settingsAddEnvRow" style="display:none;margin-bottom:12px;">
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <input type="text" id="settingsNewEnvKey" placeholder="KEY_NAME" style="flex:1;padding:7px 10px;font-size:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e0e0e0;font-family:'Courier New',monospace;text-transform:uppercase;">
+          <input type="text" id="settingsNewEnvVal" placeholder="value" style="flex:1.5;padding:7px 10px;font-size:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e0e0e0;">
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;">
+          <button class="btn btn-ghost btn-sm" onclick="toggleAddEnvRow()" style="font-size:11px;padding:3px 10px;">Cancel</button>
+          <button class="btn btn-primary btn-sm" onclick="saveNewEnvVar()" style="font-size:11px;padding:3px 10px;">Save</button>
+        </div>
+      </div>
+      <div id="settingsEnvList" style="font-size:12px;color:#888;">Loading...</div>
+      <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.04);padding-top:10px;">
+        <div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:8px;">Common Keys</div>
+        <div id="settingsEnvSuggestions"></div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeSettingsModal()">Close</button>
+      <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);" onclick="deactivateLicense()">Deactivate License</button>
+    </div>
+  </div>
+</div>
 
 <!-- New Terminal Modal -->
 <div class="modal-overlay" id="newTerminalModal">
@@ -715,47 +832,59 @@
     <h2 id="modalTitle">New Task</h2>
     <input type="hidden" id="editTaskId">
     <div class="form-group">
-      <label>Task Description</label>
-      <textarea id="taskInput" placeholder="What should Claude do?"></textarea>
+      <label>What should the AI do?</label>
+      <textarea id="taskInput" placeholder="Describe what you want done — e.g. &quot;Write a Facebook post about my new course&quot;"></textarea>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Skill <button class="btn-inline-refresh" onclick="refreshSkills()" title="Scan for new skills">🔄</button></label>
-        <select id="skillInput" onchange="onSkillChange()"><option value="">None (general)</option></select>
-        <div id="skillContextHint" style="display:none;margin-top:6px;padding:6px 10px;background:rgba(123,47,242,0.08);border:1px solid rgba(123,47,242,0.2);border-radius:6px;font-size:11px;color:#C084FC;"></div>
+    <div class="form-group">
+      <label>Choose a Skill <span class="field-hint" title="Skills are pre-trained AI tools for specific tasks like writing posts, creating videos, etc.">?</span> <button class="btn-inline-refresh" onclick="refreshSkills()" title="Scan for new skills">🔄</button></label>
+      <select id="skillInput" onchange="onSkillChange()" style="display:none"><option value="">None (general)</option></select>
+      <div class="skill-picker" id="skillPicker">
+        <div class="skill-picker-selected" id="skillPickerSelected" onclick="toggleSkillPicker()">
+          <span class="skill-picker-label" id="skillPickerLabel">None (general)</span>
+          <span class="skill-picker-arrow">▾</span>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Priority</label>
-        <select id="priorityInput">
-          <option value="1">1 - Urgent</option>
-          <option value="2">2 - High</option>
-          <option value="3">3 - Medium</option>
-          <option value="5" selected>5 - Normal</option>
-          <option value="10">10 - Low</option>
-        </select>
-      </div>
+      <div id="skillContextHint" style="display:none;margin-top:6px;padding:6px 10px;background:rgba(123,47,242,0.08);border:1px solid rgba(123,47,242,0.2);border-radius:6px;font-size:11px;color:#C084FC;"></div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Model</label>
-        <select id="modelInput">
-          <option value="sonnet" selected>Sonnet</option>
-          <option value="opus">Opus</option>
-          <option value="haiku">Haiku</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Max Turns</label>
-        <input type="number" id="turnsInput" value="25" min="1" max="100">
-      </div>
-    </div>
-    <details id="contextDetails" style="margin-bottom:16px;">
-      <summary style="cursor:pointer;font-size:12px;color:#888;user-select:none;">Advanced: Extra Context <span id="contextSummary" style="color:#4ADE80;"></span></summary>
-      <div style="margin-top:10px;">
-        <div style="font-size:11px;color:#666;margin-bottom:8px;">Space context is auto-included. Add extra files here if needed for this specific task.</div>
+    <details id="advancedDetails" style="margin-bottom:16px;">
+      <summary class="advanced-toggle">Advanced Settings</summary>
+      <div style="margin-top:12px;">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Priority</label>
+            <select id="priorityInput">
+              <option value="1">1 - Urgent</option>
+              <option value="2">2 - High</option>
+              <option value="3">3 - Medium</option>
+              <option value="5" selected>5 - Normal</option>
+              <option value="10">10 - Low</option>
+            </select>
+            <span class="field-help">Higher priority tasks run first. Normal is fine for most tasks.</span>
+          </div>
+          <div class="form-group">
+            <label>AI Model</label>
+            <select id="modelInput">
+              <option value="sonnet" selected>Sonnet (recommended)</option>
+              <option value="opus">Opus (complex tasks)</option>
+              <option value="haiku">Haiku (quick tasks)</option>
+            </select>
+            <span class="field-help">Sonnet is fast and smart. Use Opus only for very complex multi-file work.</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Max Turns</label>
+            <input type="number" id="turnsInput" value="25" min="1" max="100">
+            <span class="field-help">How many steps the AI can take. 25 is plenty for most tasks.</span>
+          </div>
+          <div class="form-group">
+          </div>
+        </div>
         <div class="form-group">
-          <label>Extra Context Files / Folders <span style="color:#666;font-weight:400;text-transform:none;">(one per line)</span></label>
-          <textarea id="contextInput" placeholder="C:\path\to\extra\file.md" style="min-height:60px;font-size:12px;font-family:'SF Mono',Monaco,monospace;"></textarea>
+          <label>Extra Reference Files</label>
+          <textarea id="contextInput" placeholder="C:\path\to\file.md (optional)" style="min-height:50px;font-size:12px;font-family:'SF Mono',Monaco,monospace;"></textarea>
+          <span class="field-help">File or folder paths the AI should read before starting. One path per line. Usually not needed.</span>
+          <span id="contextSummary" style="font-size:11px;color:#4ADE80;"></span>
         </div>
       </div>
     </details>
@@ -976,6 +1105,11 @@
         <button type="button" class="day-btn" data-day="4" onclick="toggleScheduleDay(this)">Thu</button>
         <button type="button" class="day-btn" data-day="5" onclick="toggleScheduleDay(this)">Fri</button>
         <button type="button" class="day-btn" data-day="6" onclick="toggleScheduleDay(this)">Sat</button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Timezone</label>
+        <select id="scheduleTzInput" style="width:100%;padding:8px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e0e0e0;font-size:13px;"></select>
       </div>
 
       <div style="font-size:11px;color:#555;padding:8px 12px;background:rgba(255,255,255,0.02);border-radius:6px;margin-bottom:16px;">
@@ -1341,7 +1475,7 @@
       <svg width="20" height="20" fill="none" stroke="#7B2FF2" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Setup &amp; Dependencies
     </h3>
-    <p style="color:#888;font-size:13px;margin-bottom:16px;">AICO Studio needs a few tools installed to work. Green = ready, red = missing.</p>
+    <p style="color:#888;font-size:13px;margin-bottom:16px;">AI CEO Studio needs a few tools installed to work. Green = ready, red = missing.</p>
     <div id="setupDepsList" style="display:flex;flex-direction:column;gap:8px;"></div>
     <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
       <button class="update-btn-ghost" onclick="setupCheckAll()" id="setupRefreshBtn">↻ Re-check</button>
@@ -1711,19 +1845,18 @@ async function initTierGating() {
   }
 }
 
-// ── Tier test toggle (for admin testing) ──
+// ── Tier badge (shows plan type, no testing toggle for students) ──
 function updateTierBadge() {
   const badge = document.getElementById('tierBadge');
   if (!badge) return;
-  if (window.APP_TIER === 'basic') {
-    badge.textContent = 'Basic Plan — click to test Lifetime';
-    badge.style.background = 'rgba(255,255,255,0.06)';
-    badge.style.color = '#888';
-  } else {
-    badge.textContent = 'Lifetime Plan — click to test Basic';
-    badge.style.background = 'rgba(123,47,242,0.2)';
-    badge.style.color = '#C084FC';
+  // Only show tier badge in Electron mode where tier gating matters
+  if (!window.APP_TIER || window.APP_TIER === 'lifetime') {
+    badge.style.display = 'none';
+    return;
   }
+  badge.textContent = 'Basic Plan';
+  badge.style.background = 'rgba(255,255,255,0.06)';
+  badge.style.color = '#888';
   badge.style.display = 'block';
 }
 
@@ -1773,9 +1906,191 @@ function toggleTierTest() {
 // Run after all JS loads
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
-    initTierGating().then(() => updateTierBadge());
+    initTierGating().then(() => {
+      updateTierBadge();
+      loadSidebarProfile();
+    });
   }, 200);
 });
+
+async function loadSidebarProfile() {
+  const el = document.getElementById('sidebarProfile');
+  if (!el) return;
+  try {
+    let name = '', tier = '';
+    if (window.electronAPI && window.electronAPI.getLicense) {
+      const license = await window.electronAPI.getLicense();
+      name = license?.name || '';
+      tier = license?.tier || window.APP_TIER || 'basic';
+      window._licenseData = license;
+    } else {
+      tier = window.APP_TIER || 'lifetime';
+    }
+    if (!name) name = 'Jonny'; // fallback
+    window._userName = name;
+    window._userTier = tier;
+    const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const tierLabels = { basic: 'Basic', pro: 'Pro', lifetime: 'Lifetime' };
+    document.getElementById('sidebarProfileAvatar').textContent = initials;
+    document.getElementById('sidebarProfileName').textContent = name.split(' ')[0];
+    document.getElementById('sidebarProfileTier').textContent = tierLabels[tier] || tier;
+    el.style.display = '';
+  } catch (_) {}
+}
+
+async function openSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  const license = window._licenseData || {};
+  const name = window._userName || license.name || 'User';
+  const tier = window._userTier || license.tier || 'basic';
+  const tierLabels = { basic: 'Basic', pro: 'Pro', lifetime: 'Lifetime' };
+  const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+  document.getElementById('settingsAvatar').textContent = initials;
+  document.getElementById('settingsName').textContent = name;
+  document.getElementById('settingsTierBadge').textContent = tierLabels[tier] || tier;
+  document.getElementById('settingsKey').textContent = license.key || 'No key (owner access)';
+  document.getElementById('settingsPlan').textContent = tierLabels[tier] || tier;
+
+  if (license.activated_at) {
+    try { document.getElementById('settingsActivated').textContent = new Date(license.activated_at).toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' }); }
+    catch (_) { document.getElementById('settingsActivated').textContent = license.activated_at; }
+  } else {
+    document.getElementById('settingsActivated').textContent = '—';
+  }
+
+  if (window.electronAPI && window.electronAPI.getVersion) {
+    const ver = await window.electronAPI.getVersion();
+    document.getElementById('settingsVersion').textContent = 'v' + ver;
+  } else {
+    document.getElementById('settingsVersion').textContent = 'Dev mode';
+  }
+
+  modal.classList.add('active');
+  loadEnvVars();
+}
+
+function closeSettingsModal() {
+  document.getElementById('settingsModal').classList.remove('active');
+}
+
+function toggleAddEnvRow() {
+  const row = document.getElementById('settingsAddEnvRow');
+  row.style.display = row.style.display === 'none' ? '' : 'none';
+  if (row.style.display !== 'none') document.getElementById('settingsNewEnvKey').focus();
+}
+
+async function loadEnvVars() {
+  const list = document.getElementById('settingsEnvList');
+  try {
+    const res = await fetch('/api/env');
+    const data = await res.json();
+    const vars = data.vars || {};
+    const sources = data.sources || {};
+    const keys = Object.keys(vars);
+    if (keys.length === 0) {
+      list.innerHTML = '<div style="color:#555;padding:8px 0;">No API keys configured. Click "+ Add Key" to add one.</div>';
+    } else {
+      list.innerHTML = keys.map(k => {
+        const src = sources[k] === 'dotenv' ? '<span style="font-size:8px;color:#555;background:rgba(255,255,255,0.05);padding:1px 5px;border-radius:3px;margin-left:4px;">.env</span>' : '';
+        return `<div class="settings-env-row">
+          <span style="color:#4ADE80;font-size:10px;line-height:1;flex-shrink:0;">&#x25CF;</span>
+          <span class="settings-env-key">${k}${src}</span>
+          <span class="settings-env-val">${vars[k]}</span>
+          <button class="settings-env-del" onclick="deleteEnvVar('${k}')" title="Remove">&times;</button>
+        </div>`;
+      }).join('');
+    }
+    renderEnvSuggestions(keys);
+  } catch (_) {
+    list.innerHTML = '<div style="color:#f87171;">Failed to load</div>';
+    renderEnvSuggestions([]);
+  }
+}
+
+async function saveNewEnvVar() {
+  const key = document.getElementById('settingsNewEnvKey').value.trim();
+  const value = document.getElementById('settingsNewEnvVal').value.trim();
+  if (!key) return;
+  if (!value) return;
+  try {
+    await fetch('/api/env', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) });
+    document.getElementById('settingsNewEnvKey').value = '';
+    document.getElementById('settingsNewEnvVal').value = '';
+    document.getElementById('settingsAddEnvRow').style.display = 'none';
+    loadEnvVars();
+  } catch (e) { alert('Failed to save: ' + e.message); }
+}
+
+async function deleteEnvVar(key) {
+  if (!confirm('Remove ' + key + '?')) return;
+  try {
+    await fetch('/api/env/' + key, { method: 'DELETE' });
+    loadEnvVars();
+  } catch (e) { alert('Failed to delete: ' + e.message); }
+}
+
+// ── Common Keys registry ──
+const COMMON_KEYS = [
+  { key: 'TELEGRAM_BOT_TOKEN', label: 'Telegram Bot Token', url: 'https://t.me/BotFather', urlLabel: 'Open BotFather', skills: ['Notifications', 'YouTube Tracker'] },
+  { key: 'TELEGRAM_CHAT_ID', label: 'Telegram Chat ID', url: 'https://t.me/userinfobot', urlLabel: 'Open @userinfobot', skills: ['Notifications'] },
+  { key: 'APIFY_API_TOKEN', label: 'Apify API Token', url: 'https://console.apify.com/account#/integrations', urlLabel: 'Get Token', skills: ['Instagram Tracker', 'Social Scraping'] },
+  { key: 'CONVERTKIT_API_KEY', label: 'Kit (ConvertKit) API Key', url: 'https://app.kit.com/account_settings', urlLabel: 'Get Key', skills: ['Email Broadcasts', 'Opt-in Forms'] },
+  { key: 'ZOOM_ACCOUNT_ID', label: 'Zoom Account ID', url: 'https://marketplace.zoom.us/develop/create', urlLabel: 'Zoom Marketplace', skills: ['Webinar Registration'] },
+  { key: 'ZOOM_CLIENT_ID', label: 'Zoom Client ID', url: 'https://marketplace.zoom.us/develop/create', urlLabel: 'Zoom Marketplace', skills: ['Webinar Registration'] },
+  { key: 'ZOOM_CLIENT_SECRET', label: 'Zoom Client Secret', url: 'https://marketplace.zoom.us/develop/create', urlLabel: 'Zoom Marketplace', skills: ['Webinar Registration'] },
+  { key: 'CLOUDFLARE_API_TOKEN', label: 'Cloudflare API Token', url: 'https://dash.cloudflare.com/profile/api-tokens', urlLabel: 'Get Token', skills: ['SkillBoss Deploy'] },
+];
+
+function renderEnvSuggestions(configuredKeys) {
+  const el = document.getElementById('settingsEnvSuggestions');
+  if (!el) return;
+  el.innerHTML = COMMON_KEYS.map(item => {
+    const configured = configuredKeys.includes(item.key);
+    const dot = configured
+      ? '<span style="color:#4ADE80;font-size:14px;line-height:1;" title="Configured">&#x25CF;</span>'
+      : '<span style="color:#F87171;font-size:14px;line-height:1;" title="Not configured">&#x25CF;</span>';
+    const action = configured
+      ? '<span style="font-size:10px;color:#4ADE80;">Configured</span>'
+      : `<a href="${item.url}" target="_blank" rel="noopener" style="font-size:10px;color:#C084FC;text-decoration:none;cursor:pointer;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${item.urlLabel} &rarr;</a>`;
+    const addBtn = configured
+      ? ''
+      : `<button style="background:none;border:none;color:#777;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;" title="Add ${item.key}" onclick="prefillEnvKey('${item.key}')">+</button>`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;${configured ? 'opacity:0.6;' : ''}">
+      ${dot}
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:11px;color:#bbb;font-weight:500;">${item.label}</div>
+        <div style="font-size:9px;color:#555;margin-top:1px;">${item.skills.join(' · ')}</div>
+      </div>
+      ${action}
+      ${addBtn}
+    </div>`;
+  }).join('');
+}
+
+function prefillEnvKey(key) {
+  document.getElementById('settingsAddEnvRow').style.display = '';
+  document.getElementById('settingsNewEnvKey').value = key;
+  const valInput = document.getElementById('settingsNewEnvVal');
+  valInput.value = '';
+  valInput.focus();
+}
+
+async function deactivateLicense() {
+  if (!confirm('Deactivate your license? You will need to re-enter your key to use the app.')) return;
+  try {
+    if (window.electronAPI && window.electronAPI.clearLicense) {
+      await window.electronAPI.clearLicense();
+      if (window.electronAPI.goToLicense) {
+        window.electronAPI.goToLicense();
+      } else {
+        window.location.reload();
+      }
+    }
+  } catch (e) {
+    alert('Failed to deactivate: ' + e.message);
+  }
+}
 </script>
 
 <!-- JS (extracted from inline script) -->
@@ -1789,6 +2104,50 @@ document.addEventListener('DOMContentLoaded', () => {
 <script src="js/reel-master.js"></script>
 <script src="js/heygen.js"></script>
 <script src="js/scripter.js"></script>
+<script src="js/story-editor.js"></script>
+<!-- ═══ Skill Editor Modal ═══ -->
+<div class="modal-overlay" id="skillEditorOverlay" onclick="if(event.target===this)closeSkillEditor()">
+  <div class="se-modal" style="position:relative;">
+    <button class="se-close-btn" onclick="closeSkillEditor()">&times;</button>
+    <div class="se-list-panel">
+      <div class="se-list-header">
+        <span>Skills</span>
+        <span class="se-status-summary" id="seStatusSummary"></span>
+      </div>
+      <div class="se-search-bar">
+        <input type="text" id="seSearchInput" placeholder="Search skills..." oninput="seFilterList()">
+      </div>
+      <div class="se-filter-tabs" id="seFilterTabs">
+        <button class="se-filter-tab active" data-filter="all" onclick="seSetFilter('all')">All</button>
+        <button class="se-filter-tab" data-filter="ready" onclick="seSetFilter('ready')">Ready</button>
+        <button class="se-filter-tab" data-filter="setup" onclick="seSetFilter('setup')">Needs Setup</button>
+      </div>
+      <div id="seSkillList"></div>
+    </div>
+    <div class="se-detail-panel" id="seDetailPanel">
+      <div class="se-empty">Select a skill from the list to view details and configure it.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Skill Picker Overlay (outside modal for full-screen overlay) -->
+<div class="skill-picker-overlay" id="skillPickerOverlay" onclick="if(event.target===this)toggleSkillPicker()">
+  <div class="skill-picker-panel">
+    <div class="skill-picker-header">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <h3 style="margin:0">Choose a Skill</h3>
+        <button class="sp-close-btn" onclick="toggleSkillPicker()" title="Close">&times;</button>
+      </div>
+      <div class="skill-picker-search-wrap">
+        <input type="text" class="skill-picker-search" id="skillPickerSearch" placeholder="Search skills..." oninput="filterSkillPicker()">
+      </div>
+    </div>
+    <div class="skill-picker-body" id="skillPickerList"></div>
+  </div>
+</div>
+
+<script src="js/skill-editor.js"></script>
+<script src="js/onboarding.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

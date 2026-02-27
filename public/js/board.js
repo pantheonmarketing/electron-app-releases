@@ -42,6 +42,15 @@ function migrateOldTasks() {
 // ── Space Tab Rendering ──
 function renderSpaceTabs() {
   const container = document.getElementById('spaceTabs');
+
+  // Hide space tabs when only 1 space (cleaner for beginners)
+  if (spaces.length <= 1) {
+    container.style.display = 'none';
+    renderSpaceInfo();
+    return;
+  }
+  container.style.display = '';
+
   let html = '';
 
   spaces.forEach(space => {
@@ -57,7 +66,7 @@ function renderSpaceTabs() {
     </div>`;
   });
 
-  html += `<div class="space-tab-add" onclick="createNewSpace()" title="New Space">+</div>`;
+  html += `<div class="space-tab-add" onclick="createNewSpace()" title="Spaces let you organize tasks by project — each space can have its own working folder and context files">+</div>`;
   container.innerHTML = html;
 
   // Update space info bar
@@ -180,7 +189,7 @@ function saveSpaceSettings() {
   closeSpaceModal();
 }
 
-function deleteCurrentSpace() {
+async function deleteCurrentSpace() {
   if (editingSpaceId === 'general') return;
   const space = spaces.find(s => s.id === editingSpaceId);
   if (!space) return;
@@ -191,10 +200,12 @@ function deleteCurrentSpace() {
 
   if (!confirm(msg)) return;
 
-  // Move tasks to general
-  tasksInSpace.forEach(async t => {
-    await api.updateTask(t.id, { space_id: 'general' });
-  });
+  // Move tasks to general — await all updates before continuing
+  try {
+    await Promise.all(tasksInSpace.map(t => api.updateTask(t.id, { space_id: 'general' })));
+  } catch (e) {
+    console.error('Failed to move some tasks:', e);
+  }
 
   spaces = spaces.filter(s => s.id !== editingSpaceId);
   if (activeSpaceId === editingSpaceId) activeSpaceId = 'general';
@@ -303,15 +314,21 @@ function renderBoard() {
       ).slice(0, 10);
     }
 
-    // Show/hide the done filter bar
+    // Show/hide the done filter bar — only show when there are enough done tasks to warrant filtering
     if (status === 'done') {
       const filterBar = document.getElementById('doneFilter');
-      filterBar.style.display = items.length > 5 ? 'flex' : 'none';
+      filterBar.style.display = items.length > 10 ? 'flex' : 'none';
     }
 
     if (displayItems.length === 0) {
-      const icons = { pending:'&#128203;', running:'&#128260;', done:'&#127881;', failed:'&#128295;' };
-      el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${icons[status]}</div><div>No ${status} tasks</div></div>`;
+      const emptyStates = {
+        pending: { icon: '📋', title: 'No tasks yet', hint: 'Click <b>+ New Task</b> to give your AI something to do' },
+        running: { icon: '⏳', title: 'Nothing running', hint: 'Hit <b>▶ Run All</b> to start your pending tasks' },
+        done:    { icon: '🎉', title: 'No completed tasks', hint: 'Completed tasks will show up here' },
+        failed:  { icon: '✅', title: 'No failures', hint: 'All clear — nothing to fix!' }
+      };
+      const s = emptyStates[status] || { icon: '📋', title: `No ${status} tasks`, hint: '' };
+      el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${s.icon}</div><div class="empty-state-title">${s.title}</div><div class="empty-state-hint">${s.hint}</div></div>`;
       return;
     }
 
@@ -364,7 +381,6 @@ function renderCard(t) {
   }
   tags.push(`<span class="tag tag-model">${t.model || 'sonnet'}</span>`);
   if (t.priority && t.priority <= 2) tags.push(`<span class="tag tag-priority">P${t.priority}</span>`);
-  if (t.worker) tags.push(`<span class="tag tag-worker">${t.worker}</span>`);
   if (isDone && t.started_at && t.completed_at) {
     tags.push(`<span class="tag tag-done-check">completed in ${formatDuration(t.started_at, t.completed_at)}</span>`);
   }
@@ -401,7 +417,7 @@ function renderCard(t) {
       ${t.status === 'pending' ? `<button class="card-btn" onclick="event.stopPropagation();openInTerminal('${t.id}')" title="Open in Terminal" style="color:#7B2FF2;font-size:12px;">💻</button>` : ''}
       ${(isRunning || isDone || isFailed) && hasSession ? `<button class="card-btn" onclick="event.stopPropagation();openTaskTerminal('${t.id}')" title="Chat with agent" style="color:#4ADE80;font-size:13px;">💬</button>` : ''}
       ${isFailed ? `<button class="card-btn" onclick="event.stopPropagation();retryById('${t.id}')" title="Retry" style="color:#FBBF24;">&#8635;</button>` : ''}
-      ${(isDone || isFailed) ? `<button class="card-btn" onclick="event.stopPropagation();archiveTask('${t.id}')" title="Archive" style="color:#666;font-size:12px;">📁</button>` : ''}
+      ${(isDone || isFailed) ? `<button class="card-btn" onclick="event.stopPropagation();archiveTask('${t.id}')" title="Hide this task — find it later in History" style="color:#666;font-size:12px;">📁</button>` : ''}
       <button class="card-btn delete" onclick="event.stopPropagation();deleteTask('${t.id}')" title="Delete">&times;</button>
     </div>
     <div class="card-id">#${t.id}${t.task.startsWith('This is a follow-up to task') ? ` <span class="tag" style="background:rgba(123,47,242,0.15);color:#C084FC;font-size:10px;padding:1px 6px;vertical-align:middle;">↩ follow-up</span>` : ''}${t.plan_id ? ` <span class="tag" style="background:rgba(123,47,242,0.1);color:#888;font-size:10px;padding:1px 6px;vertical-align:middle;">📋 Step ${t.plan_step || '?'}/${t.plan_total || '?'}</span>` : ''}</div>

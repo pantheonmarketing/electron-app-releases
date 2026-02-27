@@ -11,7 +11,7 @@ function switchView(view) {
 
   // Toggle view-active class
   document.querySelectorAll('.view').forEach(v => v.classList.remove('view-active'));
-  const viewMap = { board: 'boardView', terminals: 'terminalViewWrapper', workflows: 'workflowView', reelmaster: 'reelmasterView', scripter: 'scripterView', heygen: 'heygenView' };
+  const viewMap = { board: 'boardView', terminals: 'terminalViewWrapper', workflows: 'workflowView', reelmaster: 'reelmasterView', stories: 'storiesView', scripter: 'scripterView', heygen: 'heygenView' };
   const target = document.getElementById(viewMap[view]);
   if (target) target.classList.add('view-active');
 
@@ -25,6 +25,7 @@ function switchView(view) {
   if (view === 'reelmaster') rmInit();
   if (view === 'scripter') scrInit();
   if (view === 'heygen') hgInit();
+  if (view === 'stories') stInit();
 }
 
 function openTerminalPanel() {

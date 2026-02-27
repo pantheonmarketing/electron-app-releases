@@ -297,9 +297,13 @@ async function hgSaveProject() {
 // ── Steps ──
 function hgGoStep(step) {
   hgCurrentStep = step;
-  // Update step indicators
+  // Update step progress text
   const steps = ['avatar', 'script', 'generate'];
+  const stepLabels = { avatar: 'Choose Avatar & Voice', script: 'Write Script', generate: 'Generate Video' };
   const currentIdx = steps.indexOf(step);
+  const progressEl = document.getElementById('hgStepProgress');
+  if (progressEl) progressEl.textContent = `Step ${currentIdx + 1} of ${steps.length} — ${stepLabels[step] || step}`;
+  // Update step indicators
   document.querySelectorAll('.hg-step').forEach((el, i) => {
     el.classList.remove('active', 'completed');
     if (i === currentIdx) el.classList.add('active');

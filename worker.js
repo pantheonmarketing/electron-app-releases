@@ -185,9 +185,14 @@ function readFolderFiles(folderPath, maxDepth = 2, currentDepth = 0) {
         if (textExts.includes(ext) || isEnvFile) {
           try {
             const fileContent = fs.readFileSync(fullPath, 'utf-8');
-            // Skip huge files (>50KB)
+            // Skip huge files (>50KB per file)
             if (fileContent.length <= 50000) {
-              content += `\n--- FILE: ${fullPath} ---\n${fileContent}\n`;
+              // For large files (>15KB), include a summary header + truncated content
+              if (fileContent.length > 15000) {
+                content += `\n--- FILE: ${fullPath} (truncated — ${Math.round(fileContent.length/1024)}KB) ---\n${fileContent.slice(0, 15000)}\n... [truncated at 15KB]\n`;
+              } else {
+                content += `\n--- FILE: ${fullPath} ---\n${fileContent}\n`;
+              }
             } else {
               content += `\n--- FILE: ${fullPath} (SKIPPED — ${Math.round(fileContent.length/1024)}KB too large) ---\n`;
             }
@@ -256,6 +261,9 @@ function runClaude(task) {
     log(`  Merged context: ${mergedContext.length} unique path(s)`);
   }
 
+  // Max total context size (chars) — keeps prompts under ~100K tokens
+  const MAX_CONTEXT_CHARS = 80000;
+
   if (mergedContext.length > 0) {
     let contextContent = '';
     for (const rawCtxPath of mergedContext) {
@@ -281,6 +289,14 @@ function runClaude(task) {
       contextFileCount++;
     }
     if (contextContent) {
+      // Truncate if context is too large — keeps the prompt manageable
+      if (contextContent.length > MAX_CONTEXT_CHARS) {
+        const originalSize = contextContent.length;
+        contextContent = contextContent.slice(0, MAX_CONTEXT_CHARS)
+          + `\n\n--- CONTEXT TRUNCATED (${Math.round(originalSize/1024)}KB → ${Math.round(MAX_CONTEXT_CHARS/1024)}KB) ---\n`
+          + `The full context was too large. Only the first ${Math.round(MAX_CONTEXT_CHARS/1024)}KB is included.\n`;
+        log(`  ⚠ Context truncated: ${Math.round(originalSize/1024)}KB → ${Math.round(MAX_CONTEXT_CHARS/1024)}KB`);
+      }
       contextSize = contextContent.length;
       fullPrompt += `<project-context>\n${contextContent}\n</project-context>\n\n`;
       log(`  Context loaded: ${contextFileCount} source(s), ${contextSize} chars total`);

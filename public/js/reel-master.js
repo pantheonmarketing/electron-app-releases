@@ -32,6 +32,7 @@ const rmApi = {
   async render(projectId, d) { return (await safeFetch(`/api/reel/projects/${projectId}/render`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d||{}) })).json(); },
   async imageSearch(query, source) { return (await safeFetch(`/api/reel/image-search?q=${encodeURIComponent(query)}&source=${source || 'pexels'}`)).json(); },
   async downloadImage(projectId, url, filename) { return (await safeFetch(`/api/reel/projects/${projectId}/download-image`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url, filename}) })).json(); },
+  async previewStudio(projectId, d) { return (await safeFetch(`/api/reel/projects/${projectId}/preview-studio`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d||{}) })).json(); },
 };
 
 // ── Init & Project List ──
@@ -154,6 +155,11 @@ function rmGoStep(step) {
 
   // Update step indicators
   const steps = ['upload', 'whisper', 'scenes', 'customize', 'preview'];
+  const stepLabels = { upload: 'Upload', whisper: 'Transcribe', scenes: 'Scenes', customize: 'Customize', preview: 'Preview' };
+  const stepIdx = steps.indexOf(step) + 1;
+  const progressEl = document.getElementById('rmStepProgress');
+  if (progressEl) progressEl.textContent = `Step ${stepIdx} of ${steps.length} — ${stepLabels[step] || step}`;
+
   document.querySelectorAll('#rmSteps .rm-step').forEach(el => {
     const s = el.dataset.step;
     el.classList.remove('active');
@@ -2146,5 +2152,22 @@ async function rmRender() {
     const res = await rmApi.render(rmCurrentProject.id, { working_dir: workingDir, space_id: activeSpaceId });
     showToast(`Render task created: #${res.task_id} — check Board view`, 'success');
   } catch (e) { showToast('Render failed: ' + e.message, 'error'); }
+}
+
+async function rmPreviewStudio() {
+  if (!rmCurrentProject) return;
+  await rmSaveProject();
+  const workingDir = (document.getElementById('rmRenderDir')?.value || '').trim();
+  if (!workingDir) {
+    showToast('Please enter a Remotion working directory first', 'error');
+    const input = document.getElementById('rmRenderDir');
+    if (input) { input.focus(); input.style.borderColor = '#F87171'; setTimeout(() => input.style.borderColor = '', 2000); }
+    return;
+  }
+  try {
+    showToast('Launching Remotion Studio...', 'info');
+    const res = await rmApi.previewStudio(rmCurrentProject.id, { working_dir: workingDir });
+    showToast(res.message || 'Remotion Studio opening in browser', 'success');
+  } catch (e) { showToast('Preview failed: ' + e.message, 'error'); }
 }
 

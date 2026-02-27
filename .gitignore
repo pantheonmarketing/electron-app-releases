@@ -20,6 +20,9 @@ schedules.json.bak
 .rcedit-cache/
 .superdesign/
 
+user-env.json
+heygen-config.json
+
 # Large binaries (bundled during build, not tracked in git)
 bin/win/ffmpeg.exe
 bin/mac/ffmpeg

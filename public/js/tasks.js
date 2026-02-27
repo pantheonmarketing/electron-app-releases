@@ -23,6 +23,9 @@ async function refreshSkills() {
     if (currentVal && [...sel.options].some(o => o.value === currentVal)) {
       sel.value = currentVal;
     }
+    buildSkillPicker();
+    // Restore picker selection
+    if (currentVal) selectSkillPickerValue(currentVal);
 
     if (result.added > 0) {
       showToast(`Found ${result.added} new skill${result.added > 1 ? 's' : ''}: ${result.new_skills.join(', ')}`, 'success');
@@ -54,18 +57,182 @@ function onSkillChange() {
   hint.style.display = 'block';
 }
 
+// ── Custom Skill Picker ──
+const SP_CATEGORIES = [
+  { key: 'content',       label: 'Content Creation', icon: '✍️' },
+  { key: 'video',         label: 'Video Production', icon: '🎬' },
+  { key: 'social',        label: 'Social Media',     icon: '📱' },
+  { key: 'monitoring',    label: 'Monitoring',        icon: '📊' },
+  { key: 'communication', label: 'Communication',     icon: '📧' },
+  { key: 'web',           label: 'Web & Courses',     icon: '🌐' },
+  { key: 'ai-tools',      label: 'AI Tools',          icon: '🤖' },
+];
+
+function buildSkillPicker() {
+  const list = document.getElementById('skillPickerList');
+  if (!list) return;
+  const available = (skills || []).filter(s => s.exists);
+
+  // Group by category
+  const groups = {};
+  for (const s of available) {
+    const cat = s.category || 'other';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(s);
+  }
+
+  let html = `<div class="sp-none-item" data-sp-value="" onclick="pickSkill('')">
+    <span style="font-size:20px;opacity:0.5">🚫</span>
+    <div>
+      <div style="font-size:14px;font-weight:600;color:#999">None (general)</div>
+      <div style="font-size:12px;color:#555">Run task without a specific skill</div>
+    </div>
+  </div>`;
+
+  for (const catDef of SP_CATEGORIES) {
+    const items = groups[catDef.key];
+    if (!items || items.length === 0) continue;
+    html += `<div class="sp-category" data-sp-cat="${catDef.key}">
+      <span class="sp-category-icon">${catDef.icon}</span> ${catDef.label}
+      <span class="sp-category-line"></span>
+      <span style="font-size:11px;color:#555;font-weight:400">${items.length}</span>
+    </div>`;
+    html += `<div class="sp-grid" data-sp-grid="${catDef.key}">`;
+    for (const s of items) {
+      const icon = s.icon || '⚙️';
+      const name = s.display_name || s.name;
+      const desc = s.plain_description || s.description || '';
+      const ctxLabel = s.context && s.context.length > 0 ? `<span class="sp-card-ctx">+${s.context.length} ctx</span>` : '';
+      const searchData = (name + ' ' + s.name + ' ' + (s.description || '') + ' ' + desc).toLowerCase();
+      html += `<div class="sp-card" data-sp-value="${s.name}" data-sp-search="${searchData}" onclick="pickSkill('${s.name}')">
+        <div class="sp-card-icon">${icon}</div>
+        <div class="sp-card-info">
+          <div class="sp-card-name">${escHtml(name)}</div>
+          <div class="sp-card-desc">${escHtml(desc)}</div>
+        </div>
+        ${ctxLabel}
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  // Uncategorized
+  if (groups['other']) {
+    html += `<div class="sp-category" data-sp-cat="other">⚙️ Other <span class="sp-category-line"></span></div>`;
+    html += `<div class="sp-grid" data-sp-grid="other">`;
+    for (const s of groups['other']) {
+      const name = s.display_name || s.name;
+      const desc = s.plain_description || s.description || '';
+      const searchData = (name + ' ' + s.name + ' ' + (s.description || '') + ' ' + desc).toLowerCase();
+      html += `<div class="sp-card" data-sp-value="${s.name}" data-sp-search="${searchData}" onclick="pickSkill('${s.name}')">
+        <div class="sp-card-icon">${s.icon || '⚙️'}</div>
+        <div class="sp-card-info">
+          <div class="sp-card-name">${escHtml(name)}</div>
+          <div class="sp-card-desc">${escHtml(desc)}</div>
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  list.innerHTML = html;
+}
+
+function toggleSkillPicker() {
+  const overlay = document.getElementById('skillPickerOverlay');
+  const picker = document.getElementById('skillPicker');
+  const isOpen = overlay.classList.contains('open');
+  if (isOpen) {
+    overlay.classList.remove('open');
+    picker.classList.remove('open');
+  } else {
+    overlay.classList.add('open');
+    picker.classList.add('open');
+    const search = document.getElementById('skillPickerSearch');
+    if (search) { search.value = ''; filterSkillPicker(); search.focus(); }
+  }
+}
+
+function filterSkillPicker() {
+  const query = (document.getElementById('skillPickerSearch')?.value || '').toLowerCase().trim();
+  const cards = document.querySelectorAll('#skillPickerList .sp-card');
+  const noneItem = document.querySelector('#skillPickerList .sp-none-item');
+  const cats = document.querySelectorAll('#skillPickerList .sp-category');
+  const grids = document.querySelectorAll('#skillPickerList .sp-grid');
+
+  // Show/hide "None" item
+  if (noneItem) noneItem.style.display = (!query || 'none general'.includes(query)) ? '' : 'none';
+
+  // Show/hide cards
+  cards.forEach(el => {
+    if (!query) { el.style.display = ''; return; }
+    el.style.display = (el.dataset.spSearch || '').includes(query) ? '' : 'none';
+  });
+
+  // Show/hide category + grid (hide if all children hidden)
+  cats.forEach(cat => {
+    const catKey = cat.dataset.spCat;
+    const grid = document.querySelector(`[data-sp-grid="${catKey}"]`);
+    if (!grid) return;
+    const anyVisible = [...grid.querySelectorAll('.sp-card')].some(c => c.style.display !== 'none');
+    cat.style.display = anyVisible ? '' : 'none';
+    grid.style.display = anyVisible ? '' : 'none';
+  });
+}
+
+function pickSkill(value) {
+  document.getElementById('skillInput').value = value;
+  updateSkillPickerLabel(value);
+  // Close overlay
+  document.getElementById('skillPickerOverlay').classList.remove('open');
+  document.getElementById('skillPicker').classList.remove('open');
+  onSkillChange();
+}
+
+function selectSkillPickerValue(value) {
+  updateSkillPickerLabel(value);
+}
+
+function updateSkillPickerLabel(value) {
+  const label = document.getElementById('skillPickerLabel');
+  if (!label) return;
+  if (!value) {
+    label.innerHTML = '<span style="color:#666">None (general)</span>';
+    return;
+  }
+  const skill = (skills || []).find(s => s.name === value);
+  if (skill) {
+    const icon = skill.icon || '';
+    const name = skill.display_name || skill.name;
+    label.innerHTML = `${icon} ${escHtml(name)}`;
+  } else {
+    label.textContent = value;
+  }
+}
+
+// Escape key closes skill picker overlay
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('skillPickerOverlay');
+    if (overlay && overlay.classList.contains('open')) {
+      toggleSkillPicker();
+      e.stopPropagation();
+    }
+  }
+});
+
 // ── Task Actions ──
 function openAddModal() {
   document.getElementById('editTaskId').value = '';
   document.getElementById('modalTitle').textContent = 'New Task';
   document.getElementById('taskInput').value = '';
   document.getElementById('skillInput').value = '';
+  selectSkillPickerValue('');
   document.getElementById('priorityInput').value = '5';
   document.getElementById('modelInput').value = 'sonnet';
   document.getElementById('turnsInput').value = '25';
   document.getElementById('contextInput').value = '';
   document.getElementById('contextSummary').textContent = '';
-  document.getElementById('contextDetails').removeAttribute('open');
+  const advDet = document.getElementById('advancedDetails') || document.getElementById('contextDetails');
+  if (advDet) advDet.removeAttribute('open');
   document.getElementById('skillContextHint').style.display = 'none';
   document.getElementById('addModal').classList.add('active');
   document.getElementById('taskInput').focus();
@@ -80,6 +247,7 @@ async function editTask(id) {
   document.getElementById('modalTitle').textContent = 'Edit Task #' + t.id;
   document.getElementById('taskInput').value = t.task;
   document.getElementById('skillInput').value = t.skill || '';
+  selectSkillPickerValue(t.skill || '');
   document.getElementById('priorityInput').value = String(t.priority || 5);
   document.getElementById('modelInput').value = t.model || 'sonnet';
   document.getElementById('turnsInput').value = String(t.max_turns || 25);
@@ -432,6 +600,7 @@ async function stopWorkers() {
   await api.stop();
   document.getElementById('runnerStatus').textContent = 'Stopped';
   document.getElementById('terminalHint').textContent = '';
+  showToast('All tasks stopped', 'info');
   await refresh();
 }
 

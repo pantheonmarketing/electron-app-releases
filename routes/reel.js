@@ -1,0 +1,958 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { execSync, spawn } = require('child_process');
+const shared = require('../lib/shared');
+const { readTasks, writeTasks, generateId } = require('../lib/helpers');
+const router = express.Router();
+
+// ──────────────────────────────────────────────
+// Reel Helper Functions
+// ──────────────────────────────────────────────
+
+function readReelProject(id) {
+  const file = path.join(shared.REEL_PROJECTS_DIR, `${id}.json`);
+  if (!fs.existsSync(file)) return null;
+  try { return JSON.parse(fs.readFileSync(file, 'utf-8')); }
+  catch (_) { return null; }
+}
+
+function writeReelProject(project) {
+  project.updated_at = new Date().toISOString();
+  const file = path.join(shared.REEL_PROJECTS_DIR, `${project.id}.json`);
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(project, null, 2));
+  fs.renameSync(tmp, file);
+  return project;
+}
+
+function listReelProjects() {
+  if (!fs.existsSync(shared.REEL_PROJECTS_DIR)) return [];
+  return fs.readdirSync(shared.REEL_PROJECTS_DIR)
+    .filter(f => f.endsWith('.json'))
+    .map(f => {
+      try { return JSON.parse(fs.readFileSync(path.join(shared.REEL_PROJECTS_DIR, f), 'utf-8')); }
+      catch (_) { return null; }
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+}
+
+function deleteReelProject(id) {
+  const file = path.join(shared.REEL_PROJECTS_DIR, `${id}.json`);
+  if (fs.existsSync(file)) fs.unlinkSync(file);
+  const uploadDir = path.join(shared.UPLOADS_DIR, id);
+  if (fs.existsSync(uploadDir)) fs.rmSync(uploadDir, { recursive: true, force: true });
+}
+
+function readReelPreset(id) {
+  const file = path.join(shared.REEL_PRESETS_DIR, `${id}.json`);
+  if (!fs.existsSync(file)) return null;
+  try { return JSON.parse(fs.readFileSync(file, 'utf-8')); }
+  catch (_) { return null; }
+}
+
+function writeReelPreset(preset) {
+  const file = path.join(shared.REEL_PRESETS_DIR, `${preset.id}.json`);
+  fs.writeFileSync(file, JSON.stringify(preset, null, 2));
+  return preset;
+}
+
+function listReelPresets() {
+  if (!fs.existsSync(shared.REEL_PRESETS_DIR)) return [];
+  return fs.readdirSync(shared.REEL_PRESETS_DIR)
+    .filter(f => f.endsWith('.json'))
+    .map(f => {
+      try { return JSON.parse(fs.readFileSync(path.join(shared.REEL_PRESETS_DIR, f), 'utf-8')); }
+      catch (_) { return null; }
+    })
+    .filter(Boolean);
+}
+
+function getFileHash(filePath) {
+  const hash = crypto.createHash('md5');
+  hash.update(fs.readFileSync(filePath));
+  return hash.digest('hex');
+}
+
+function defaultReelStyle() {
+  return {
+    preset_id: 'default-purple',
+    colors: { primary: '#7B2FF2', secondary: '#C084FC', text: '#ffffff', background: '#0a0a12' },
+    font: { family: 'Playfair Display', size: 48, weight: 700 },
+    subtitle: { family: 'Inter', size: 32, shadow: true, position: 'bottom' },
+    animation: { type: 'spring', damping: 18, stiffness: 120, mass: 0.7 },
+    video: { zoom: 1.0, offsetX: 0, offsetY: 0, layout: 'bottom-half' }
+  };
+}
+
+// ──────────────────────────────────────────────
+// Reel Master API
+// ──────────────────────────────────────────────
+
+// List projects
+router.get('/reel/projects', (req, res) => {
+  const projects = listReelProjects().map(p => ({
+    id: p.id, name: p.name, created_at: p.created_at, updated_at: p.updated_at,
+    clip_count: (p.clips || []).length, scene_count: (p.scenes || []).length
+  }));
+  res.json(projects);
+});
+
+// Create project
+router.post('/reel/projects', (req, res) => {
+  const id = 'reel-' + Date.now();
+  const project = {
+    id,
+    name: req.body.name || 'Untitled Reel',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    clips: [],
+    scenes: [],
+    music: null,
+    style: defaultReelStyle(),
+    output: { width: 1080, height: 1920, fps: 30, codec: 'h264', crf: 18 }
+  };
+  writeReelProject(project);
+  res.json({ ok: true, project });
+});
+
+// Get project
+router.get('/reel/projects/:id', (req, res) => {
+  const project = readReelProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  res.json(project);
+});
+
+// Update project
+router.put('/reel/projects/:id', (req, res) => {
+  let project = readReelProject(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  // Merge top-level fields
+  const allowed = ['name', 'clips', 'scenes', 'music', 'style', 'output', 'mode'];
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) project[key] = req.body[key];
+  }
+  writeReelProject(project);
+  res.json({ ok: true, project });
+});
+
+// Delete project
+router.delete('/reel/projects/:id', (req, res) => {
+  deleteReelProject(req.params.id);
+  res.json({ ok: true });
+});
+
+// Upload files to project
+router.post('/reel/projects/:projectId/upload', (req, res, next) => {
+  shared.reelUpload.array('files', 10)(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+    const project = readReelProject(req.params.projectId);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const uploaded = req.files.map(f => {
+      const relPath = `uploads/${req.params.projectId}/${f.filename}`;
+      const ext = path.extname(f.originalname).toLowerCase();
+      let type = 'clip';
+      if (/\.(jpg|jpeg|png|gif|webp)$/i.test(ext)) type = 'image';
+      else if (/\.(mp3|wav|aac|m4a|ogg)$/i.test(ext)) type = 'music';
+
+      const clipObj = {
+        id: 'clip-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        filename: f.originalname,
+        storedName: f.filename,
+        path: relPath,
+        size: f.size,
+        type,
+        mime: f.mimetype,
+        whisper: null,
+        added_at: new Date().toISOString()
+      };
+
+      project.clips.push(clipObj);
+      return clipObj;
+    });
+
+    writeReelProject(project);
+    res.json({ ok: true, files: uploaded });
+  });
+});
+
+// Extract audio from video using ffmpeg
+router.post('/reel/projects/:projectId/extract-audio', express.json(), (req, res) => {
+  const { clip_path } = req.body;
+  if (!clip_path) return res.status(400).json({ error: 'clip_path required' });
+
+  const project = readReelProject(req.params.projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const inputPath = path.resolve(path.join(shared.BASE_DIR, clip_path));
+  // Prevent path traversal attacks
+  if (!inputPath.startsWith(path.resolve(shared.BASE_DIR))) {
+    return res.status(400).json({ error: 'Invalid clip path' });
+  }
+  if (!fs.existsSync(inputPath)) return res.status(404).json({ error: 'Source file not found' });
+
+  const outputName = path.basename(clip_path, path.extname(clip_path)) + '-audio.aac';
+  const outputDir = path.join(shared.UPLOADS_DIR, req.params.projectId);
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+  const outputPath = path.join(outputDir, outputName);
+  const relPath = `uploads/${req.params.projectId}/${outputName}`;
+
+  try {
+    execSync(`${shared.FFMPEG_BIN} -i "${inputPath}" -vn -acodec aac -b:a 192k -y "${outputPath}"`, {
+      stdio: 'pipe', timeout: 120000, windowsHide: true
+    });
+
+    const stat = fs.statSync(outputPath);
+    const fileObj = {
+      id: 'clip-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      filename: outputName,
+      storedName: outputName,
+      path: relPath,
+      size: stat.size,
+      type: 'music',
+      mime: 'audio/aac',
+      added_at: new Date().toISOString()
+    };
+
+    project.clips.push(fileObj);
+    writeReelProject(project);
+
+    res.json({ ok: true, file: fileObj });
+  } catch (e) {
+    console.error('Audio extraction failed:', e.message);
+    res.status(500).json({ error: 'Audio extraction failed: ' + (e.stderr ? e.stderr.toString().slice(-200) : e.message) });
+  }
+});
+
+// Whisper transcription
+router.post('/reel/projects/:projectId/whisper', (req, res) => {
+  const { clip_id } = req.body;
+  const project = readReelProject(req.params.projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const clip = project.clips.find(c => c.id === clip_id);
+  if (!clip) return res.status(404).json({ error: 'Clip not found' });
+
+  const filePath = path.join(shared.BASE_DIR, clip.path);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Clip file missing' });
+
+  // Check cache
+  const hash = getFileHash(filePath);
+  const cacheFile = path.join(shared.WHISPER_CACHE_DIR, `${hash}.json`);
+  if (fs.existsSync(cacheFile)) {
+    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8'));
+    clip.whisper = cached;
+    writeReelProject(project);
+    return res.json({ ok: true, status: 'cached', result: cached });
+  }
+
+  // Start whisper process
+  const jobId = 'wh-' + Date.now();
+  const outputDir = path.join(shared.WHISPER_CACHE_DIR, jobId);
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  const args = [filePath, '--model', 'small', '--language', 'en',
+    '--word_timestamps', 'True', '--output_format', 'json', '--output_dir', outputDir];
+
+  const proc = spawn('whisper', args, { windowsHide: true, shell: true });
+  shared.whisperJobs.set(jobId, { status: 'processing', clip_id, project_id: req.params.projectId, progress: 0, proc });
+
+  let stderrBuf = '';
+  proc.stderr.on('data', (chunk) => {
+    stderrBuf += chunk.toString();
+    const lines = stderrBuf.split('\n');
+    for (const line of lines) {
+      const match = line.match(/(\d+)%\|/);
+      if (match) {
+        const job = shared.whisperJobs.get(jobId);
+        if (job) job.progress = parseInt(match[1]);
+      }
+    }
+  });
+
+  proc.on('close', (code) => {
+    const job = shared.whisperJobs.get(jobId);
+    if (!job) return;
+    if (code === 0) {
+      try {
+        const outputFiles = fs.readdirSync(outputDir).filter(f => f.endsWith('.json'));
+        if (outputFiles.length > 0) {
+          const result = JSON.parse(fs.readFileSync(path.join(outputDir, outputFiles[0]), 'utf-8'));
+          fs.writeFileSync(cacheFile, JSON.stringify(result, null, 2));
+          const proj = readReelProject(job.project_id);
+          if (proj) {
+            const c = proj.clips.find(c => c.id === job.clip_id);
+            if (c) { c.whisper = result; writeReelProject(proj); }
+          }
+          job.status = 'done';
+          job.result = result;
+        } else {
+          job.status = 'error';
+          job.error = 'Whisper produced no output';
+        }
+      } catch (e) {
+        job.status = 'error';
+        job.error = e.message;
+      }
+    } else {
+      job.status = 'error';
+      job.error = `Whisper exited with code ${code}`;
+    }
+    try { fs.rmSync(outputDir, { recursive: true, force: true }); } catch (_) {}
+  });
+
+  res.json({ ok: true, job_id: jobId, status: 'processing' });
+});
+
+router.get('/reel/whisper-status/:jobId', (req, res) => {
+  const job = shared.whisperJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  const response = { status: job.status, progress: job.progress };
+  if (job.status === 'done') response.result = job.result;
+  if (job.status === 'error') response.error = job.error;
+  res.json(response);
+});
+
+// Generate scenes from Whisper data
+router.post('/reel/projects/:projectId/generate-scenes', (req, res) => {
+  const project = readReelProject(req.params.projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const maxWords = req.body.max_words_per_scene || 8;
+  const scenes = [];
+  let sceneIdx = 0;
+  const debug = { clips_checked: 0, clips_with_whisper: 0, segments_found: 0, words_found: 0, fallback_used: false };
+
+  for (const clip of project.clips) {
+    debug.clips_checked++;
+    if (clip.type !== 'clip') continue;
+    if (!clip.whisper) continue;
+    debug.clips_with_whisper++;
+
+    // Support multiple whisper output formats
+    const segments = clip.whisper.segments || [];
+    debug.segments_found += segments.length;
+
+    for (const seg of segments) {
+      const words = seg.words || [];
+      debug.words_found += words.length;
+
+      if (words.length > 0) {
+        // Word-level timestamps available — group into scenes
+        let buf = [];
+        for (const w of words) {
+          buf.push(w);
+          const text = buf.map(b => (b.word || '')).join('').trim();
+          const endsWithPunctuation = /[.!?]$/.test(text);
+          if (buf.length >= maxWords || endsWithPunctuation) {
+            scenes.push({
+              id: 'scene-' + (++sceneIdx),
+              clip_id: clip.id,
+              start: buf[0].start,
+              end: buf[buf.length - 1].end + 0.3,
+              words: buf.map(b => ({ word: (b.word || '').trim(), start: b.start, end: b.end })),
+              text: buf.map(b => (b.word || '')).join('').trim(),
+              images: [],
+              text_overlay: '',
+              display_mode: 'subtitles',
+              mfx_preset: 'none',
+              mfx_opacity: 0.5,
+              mfx_instructions: ''
+            });
+            buf = [];
+          }
+        }
+        if (buf.length > 0) {
+          scenes.push({
+            id: 'scene-' + (++sceneIdx),
+            clip_id: clip.id,
+            start: buf[0].start,
+            end: buf[buf.length - 1].end + 0.3,
+            words: buf.map(b => ({ word: (b.word || '').trim(), start: b.start, end: b.end })),
+            text: buf.map(b => (b.word || '')).join('').trim(),
+            images: [],
+            text_overlay: '',
+            mfx_preset: 'none',
+            mfx_opacity: 0.5,
+            mfx_instructions: ''
+          });
+        }
+      } else if (seg.text && seg.start != null && seg.end != null) {
+        // Fallback: no word-level timestamps, use segment as a single scene
+        debug.fallback_used = true;
+        const segText = (seg.text || '').trim();
+        if (segText) {
+          // Split segment text into fake words for subtitle display
+          const fakeWords = segText.split(/\s+/).filter(Boolean);
+          const segDuration = seg.end - seg.start;
+          const wordDur = fakeWords.length > 0 ? segDuration / fakeWords.length : segDuration;
+          scenes.push({
+            id: 'scene-' + (++sceneIdx),
+            clip_id: clip.id,
+            start: seg.start,
+            end: seg.end + 0.3,
+            words: fakeWords.map((w, wi) => ({
+              word: w,
+              start: seg.start + wi * wordDur,
+              end: seg.start + (wi + 1) * wordDur
+            })),
+            text: segText,
+            images: [],
+            text_overlay: '',
+            mfx_preset: 'none',
+            mfx_opacity: 0.5,
+            mfx_instructions: ''
+          });
+        }
+      }
+    }
+
+    // Last resort: if whisper has .text but no segments at all, create one big scene
+    if (segments.length === 0 && clip.whisper.text) {
+      debug.fallback_used = true;
+      const fullText = (clip.whisper.text || '').trim();
+      if (fullText) {
+        // Split into chunks of ~maxWords words each
+        const allWords = fullText.split(/\s+/).filter(Boolean);
+        for (let i = 0; i < allWords.length; i += maxWords) {
+          const chunk = allWords.slice(i, i + maxWords);
+          scenes.push({
+            id: 'scene-' + (++sceneIdx),
+            clip_id: clip.id,
+            start: null,
+            end: null,
+            words: chunk.map(w => ({ word: w, start: null, end: null })),
+            text: chunk.join(' '),
+            images: [],
+            text_overlay: '',
+            mfx_preset: 'none',
+            mfx_opacity: 0.5,
+            mfx_instructions: ''
+          });
+        }
+      }
+    }
+  }
+
+  // Merge tiny scenes (fewer than 3 words) into their neighbor
+  const MIN_WORDS = 3;
+  for (let i = scenes.length - 1; i >= 0; i--) {
+    const s = scenes[i];
+    if ((s.words || []).length < MIN_WORDS && scenes.length > 1) {
+      // Prefer merging into previous scene, fallback to next
+      const mergeIdx = i > 0 ? i - 1 : i + 1;
+      const target = scenes[mergeIdx];
+      if (i > 0) {
+        // Append to previous
+        target.words = (target.words || []).concat(s.words || []);
+        target.text = target.words.map(w => w.word).join(' ');
+        target.end = s.end;
+      } else {
+        // Prepend to next
+        target.words = (s.words || []).concat(target.words || []);
+        target.text = target.words.map(w => w.word).join(' ');
+        target.start = s.start;
+      }
+      scenes.splice(i, 1);
+    }
+  }
+
+  // Re-number scene IDs after merges
+  scenes.forEach((s, idx) => { s.id = 'scene-' + (idx + 1); });
+
+  // Store original_text on each scene for undo support
+  for (const scene of scenes) {
+    scene.original_text = scene.text;
+  }
+
+  project.scenes = scenes;
+  writeReelProject(project);
+  console.log(`[ReelMaster] Generated ${scenes.length} scenes from ${debug.clips_with_whisper}/${debug.clips_checked} clips (${debug.segments_found} segments, ${debug.words_found} words, fallback: ${debug.fallback_used})`);
+  res.json({ ok: true, scenes, debug });
+});
+
+// AI Image Generation — uses SkillBoss api-hub.js
+router.post('/reel/projects/:projectId/generate-image', (req, res) => {
+  const project = readReelProject(req.params.projectId);
+  if (!project) return res.status(404).json({ ok: false, error: 'Project not found' });
+
+  const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ ok: false, error: 'No prompt provided' });
+
+  // Find SkillBoss api-hub.js
+  const homeDir = process.env.USERPROFILE || process.env.HOME || '';
+  const skillbossPaths = [
+    path.join(homeDir, '.claude', 'skills', 'skillboss', 'scripts', 'api-hub.js'),
+    path.join(homeDir, 'Downloads', 'skillboss', 'skillboss', 'scripts', 'api-hub.js'),
+  ];
+  const apiHub = skillbossPaths.find(p => fs.existsSync(p));
+  if (!apiHub) {
+    return res.json({ ok: false, error: 'SkillBoss not found. Install it first.' });
+  }
+
+  // Generate filename and output path
+  const filename = `ai-gen-${Date.now()}.png`;
+  const uploadsDir = path.join(shared.BASE_DIR, 'uploads', req.params.projectId);
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  const outputPath = path.join(uploadsDir, filename);
+
+  // Call SkillBoss image generation (execFileSync to prevent injection)
+  const { execFileSync: execFileSyncLocal } = require('child_process');
+  try {
+    execFileSyncLocal('node', [apiHub, 'image', '--prompt', prompt, '--size', '1024*1024', '--output', outputPath], {
+      timeout: 60000,
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      windowsHide: true
+    });
+
+    if (!fs.existsSync(outputPath)) {
+      return res.json({ ok: false, error: 'Image generation completed but file not found' });
+    }
+
+    // Add to project clips
+    const clipPath = `uploads/${req.params.projectId}/${filename}`;
+    const clip = {
+      path: clipPath,
+      storedName: filename,
+      originalName: filename,
+      type: 'image',
+      size: fs.statSync(outputPath).size,
+    };
+    project.clips.push(clip);
+    writeReelProject(project);
+
+    res.json({ ok: true, url: `/${clipPath}`, clip, filename });
+  } catch (err) {
+    console.error('[AI Image Gen] Error:', err.message?.slice(0, 200));
+    res.json({ ok: false, error: err.stderr?.slice(0, 200) || err.message?.slice(0, 200) || 'Generation failed' });
+  }
+});
+
+// Image search — supports multiple sources: pexels, pixabay, google
+router.get('/reel/image-search', async (req, res) => {
+  const query = req.query.q;
+  const source = req.query.source || 'pexels';
+  if (!query) return res.json({ ok: false, error: 'No query', results: [] });
+
+  try {
+    if (source === 'pexels') {
+      const apiKey = process.env.PEXELS_API_KEY || '';
+      if (!apiKey) return res.json({ ok: false, error: 'PEXELS_API_KEY not set. Get a free key at pexels.com/api', results: [] });
+      const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=40`;
+      const resp = await fetch(url, { headers: { Authorization: apiKey } });
+      if (!resp.ok) return res.json({ ok: false, error: `Pexels error: ${resp.status}`, results: [] });
+      const data = await resp.json();
+      const results = (data.photos || []).map(p => ({
+        id: p.id, thumb: p.src.small, url: p.src.large, original: p.src.original,
+        photographer: p.photographer, alt: p.alt || query, source: 'pexels'
+      }));
+      return res.json({ ok: true, results });
+    }
+
+    if (source === 'pixabay') {
+      const apiKey = process.env.PIXABAY_API_KEY || '';
+      if (!apiKey) return res.json({ ok: false, error: 'PIXABAY_API_KEY not set. Get a free key at pixabay.com/api/docs/', results: [] });
+      const url = `https://pixabay.com/api/?key=${apiKey}&q=${encodeURIComponent(query)}&per_page=40&image_type=photo&safesearch=true`;
+      const resp = await fetch(url);
+      if (!resp.ok) return res.json({ ok: false, error: `Pixabay error: ${resp.status}`, results: [] });
+      const data = await resp.json();
+      const results = (data.hits || []).map(p => ({
+        id: p.id, thumb: p.previewURL, url: p.largeImageURL, original: p.largeImageURL,
+        photographer: p.user, alt: p.tags || query, source: 'pixabay'
+      }));
+      return res.json({ ok: true, results });
+    }
+
+    if (source === 'google') {
+      // Google Custom Search JSON API — 100 free queries/day
+      const apiKey = process.env.GOOGLE_SEARCH_API_KEY || '';
+      const cx = process.env.GOOGLE_SEARCH_CX || '';
+      if (!apiKey || !cx) return res.json({ ok: false, error: 'Set GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_CX in .env. Get them at programmablesearchengine.google.com', results: [] });
+      // Fetch 2 pages (10 each) for 20 results
+      const results = [];
+      for (const start of [1, 11]) {
+        const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(query)}&searchType=image&num=10&start=${start}&imgSize=large&safe=active`;
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          if (start === 1) return res.json({ ok: false, error: `Google API error: ${resp.status}`, results: [] });
+          break;
+        }
+        const data = await resp.json();
+        for (const item of (data.items || [])) {
+          results.push({
+            id: item.link, thumb: item.image?.thumbnailLink || item.link,
+            url: item.link, original: item.link,
+            photographer: item.displayLink || '', alt: item.title || query, source: 'google'
+          });
+        }
+      }
+      return res.json({ ok: true, results });
+    }
+
+    res.json({ ok: false, error: `Unknown source: ${source}`, results: [] });
+  } catch (e) {
+    res.json({ ok: false, error: e.message, results: [] });
+  }
+});
+
+// Download external image to project uploads
+router.post('/reel/projects/:projectId/download-image', async (req, res) => {
+  const { url, filename } = req.body;
+  const project = readReelProject(req.params.projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!url) return res.status(400).json({ error: 'No URL provided' });
+
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+    const buffer = Buffer.from(await resp.arrayBuffer());
+
+    const dir = path.join(shared.UPLOADS_DIR, req.params.projectId);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const safeName = (filename || 'image').replace(/[^a-zA-Z0-9_-]/g, '_') + '-' + Date.now() + '.jpg';
+    const filePath = path.join(dir, safeName);
+    fs.writeFileSync(filePath, buffer);
+
+    const relPath = `uploads/${req.params.projectId}/${safeName}`;
+    const clipObj = {
+      id: 'clip-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      filename: filename || 'pexels-image.jpg',
+      storedName: safeName,
+      path: relPath,
+      size: buffer.length,
+      type: 'image',
+      mime: 'image/jpeg',
+      whisper: null,
+      added_at: new Date().toISOString()
+    };
+    project.clips.push(clipObj);
+    writeReelProject(project);
+    res.json({ ok: true, clip: clipObj });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
+// Preset CRUD
+router.get('/reel/presets', (req, res) => {
+  let presets = listReelPresets();
+  // Ensure default preset exists
+  if (!presets.find(p => p.id === 'default-purple')) {
+    const def = { id: 'default-purple', name: 'Purple Premium', description: 'Default dark purple theme', style: defaultReelStyle() };
+    writeReelPreset(def);
+    presets.unshift(def);
+  }
+  res.json(presets);
+});
+
+router.post('/reel/presets', (req, res) => {
+  const { name, description, style } = req.body;
+  const preset = {
+    id: 'preset-' + Date.now(),
+    name: name || 'Custom Preset',
+    description: description || '',
+    style: style || defaultReelStyle()
+  };
+  writeReelPreset(preset);
+  res.json({ ok: true, preset });
+});
+
+router.delete('/reel/presets/:id', (req, res) => {
+  if (req.params.id === 'default-purple') return res.status(400).json({ error: 'Cannot delete default preset' });
+  const file = path.join(shared.REEL_PRESETS_DIR, `${req.params.id}.json`);
+  if (fs.existsSync(file)) fs.unlinkSync(file);
+  res.json({ ok: true });
+});
+
+// Browse for folder (native dialog — cross-platform)
+router.post('/reel/browse-folder', (req, res) => {
+  if (shared.IS_WIN) {
+    // Windows: PowerShell FolderBrowserDialog
+    const ps = spawn('powershell', ['-Command', `
+      Add-Type -AssemblyName System.Windows.Forms
+      $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+      $dialog.Description = "Select Remotion project folder"
+      $dialog.ShowNewFolderButton = $false
+      if ($dialog.ShowDialog() -eq 'OK') { $dialog.SelectedPath } else { '' }
+    `], { windowsHide: false });
+    let stdout = '';
+    ps.stdout.on('data', d => stdout += d.toString());
+    ps.on('close', () => {
+      const folder = stdout.trim();
+      res.json({ ok: true, folder });
+    });
+    ps.on('error', (e) => {
+      res.json({ ok: false, folder: '', error: e.message });
+    });
+  } else if (process.env.ELECTRON_MODE) {
+    // Mac/Linux in Electron: use IPC to trigger dialog.showOpenDialog in main process
+    try {
+      const { ipcMain, BrowserWindow } = require('electron');
+      const win = BrowserWindow.getFocusedWindow();
+      if (win) {
+        const { dialog } = require('electron');
+        dialog.showOpenDialog(win, {
+          properties: ['openDirectory'],
+          title: 'Select Remotion project folder'
+        }).then(result => {
+          const folder = result.canceled ? '' : (result.filePaths[0] || '');
+          res.json({ ok: true, folder });
+        }).catch(e => {
+          res.json({ ok: false, folder: '', error: e.message });
+        });
+      } else {
+        res.json({ ok: false, folder: '', error: 'No active window' });
+      }
+    } catch (e) {
+      res.json({ ok: false, folder: '', error: e.message });
+    }
+  } else {
+    // Mac/Linux non-Electron: use osascript (Mac) or zenity (Linux)
+    if (shared.IS_MAC) {
+      const ps = spawn('osascript', ['-e', 'POSIX path of (choose folder with prompt "Select Remotion project folder")']);
+      let stdout = '';
+      ps.stdout.on('data', d => stdout += d.toString());
+      ps.on('close', () => {
+        const folder = stdout.trim().replace(/\/$/, ''); // remove trailing slash
+        res.json({ ok: true, folder });
+      });
+      ps.on('error', (e) => {
+        res.json({ ok: false, folder: '', error: e.message });
+      });
+    } else {
+      // Linux fallback
+      const ps = spawn('zenity', ['--file-selection', '--directory', '--title=Select Remotion project folder']);
+      let stdout = '';
+      ps.stdout.on('data', d => stdout += d.toString());
+      ps.on('close', () => {
+        const folder = stdout.trim();
+        res.json({ ok: true, folder });
+      });
+      ps.on('error', (e) => {
+        res.json({ ok: false, folder: '', error: e.message });
+      });
+    }
+  }
+});
+
+// Render — creates a Claude task
+router.post('/reel/projects/:projectId/render', (req, res) => {
+  const project = readReelProject(req.params.projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const { working_dir, space_id } = req.body;
+  if (!working_dir) return res.status(400).json({ error: 'No working_dir provided' });
+
+  // 1. Write config file to the Remotion project's public/ directory
+  const configDir = path.join(working_dir, 'public', 'reel-data');
+  if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+  const configPath = path.join(configDir, 'config.json');
+  fs.writeFileSync(configPath, JSON.stringify(project, null, 2));
+
+  // 2. Copy media files (video clips, images, music) to Remotion public/reel-data/
+  const mediaMap = {}; // old path → new filename
+  for (const clip of project.clips) {
+    if (!clip.path) continue;
+    const srcPath = path.join(shared.BASE_DIR, clip.path);
+    if (!fs.existsSync(srcPath)) continue;
+    const destName = clip.storedName || path.basename(clip.path);
+    const destPath = path.join(configDir, destName);
+    try { fs.copyFileSync(srcPath, destPath); } catch (_) {}
+    mediaMap[clip.path] = destName;
+  }
+  // Also copy B-roll videos from scenes
+  for (const scene of (project.scenes || [])) {
+    for (const brollPath of (scene.broll || [])) {
+      const srcPath = path.join(shared.BASE_DIR, brollPath);
+      if (!fs.existsSync(srcPath)) continue;
+      const destName = path.basename(brollPath);
+      try { fs.copyFileSync(srcPath, path.join(configDir, destName)); } catch (_) {}
+      mediaMap[brollPath] = destName;
+    }
+  }
+  // Also copy music
+  if (project.music && project.music.path) {
+    const srcPath = path.join(shared.BASE_DIR, project.music.path);
+    if (fs.existsSync(srcPath)) {
+      const destName = path.basename(project.music.path);
+      try { fs.copyFileSync(srcPath, path.join(configDir, destName)); } catch (_) {}
+      mediaMap[project.music.path] = destName;
+    }
+  }
+  fs.writeFileSync(path.join(configDir, 'media-map.json'), JSON.stringify(mediaMap, null, 2));
+
+  // 3. Build a compact summary for the task prompt (no whisper data inline)
+  const style = project.style || {};
+  const anim = style.animation || {};
+  const colors = style.colors || {};
+  const sub = style.subtitle || {};
+  const video = style.video || {};
+  const sceneCount = (project.scenes || []).length;
+  const sceneSummary = (project.scenes || []).map((s, i) =>
+    `  ${i+1}. "${s.text}" (${s.start?.toFixed(1)}s-${s.end?.toFixed(1)}s) [${s.display_mode || 'subtitles'}]${s.images?.length > 1 ? ` [${s.images.length} images - slideshow]` : s.images?.length ? ' [has image]' : ''}${s.images?.length && s.img_position && s.img_position !== 'top' ? ` [img_position: ${s.img_position}]` : ''}${s.images?.length && s.img_border && s.img_border !== 'none' ? ` [img_border: ${s.img_border}]` : ''}${s.broll?.length ? ' [has B-roll video]' : ''}${s.display_mode === 'mfx' && s.mfx_preset && s.mfx_preset !== 'none' ? ` [mfx: ${s.mfx_preset}]` : ''}${s.display_mode === 'mfx' && s.mfx_instructions ? ` [instructions: ${s.mfx_instructions}]` : ''}`
+  ).join('\n');
+
+  const prompt = `Build and render a Remotion FB Story video from the config file.
+
+CONFIG FILE: public/reel-data/config.json (read this file for full scene data, whisper words, and settings)
+MEDIA FILES: public/reel-data/ (video clips, images, music are copied here)
+MEDIA MAP: public/reel-data/media-map.json (maps original paths to filenames in reel-data/)
+
+SUMMARY (${sceneCount} scenes):
+${sceneSummary}
+
+STYLE:
+- Colors: primary=${colors.primary}, secondary=${colors.secondary}, text=${colors.text}, bg=${colors.background}
+- Heading: ${style.font?.family || 'Playfair Display'} ${style.font?.size || 48}px weight ${style.font?.weight || 700}
+- Subtitle: ${sub.family || 'Inter'} ${sub.size || 32}px, position=${sub.position || 'bottom'}, shadow=${sub.shadow !== false}, maxWords=${sub.maxWords || 6}
+- Animation: type=${anim.type || 'spring'}, damping=${anim.damping || 18}, stiffness=${anim.stiffness || 120}, mass=${anim.mass || 0.7}
+- Video: zoom=${video.zoom || 1}, offsetX=${video.offsetX || 0}%, offsetY=${video.offsetY || 0}%
+- Mode: ${project.mode || 'full'} (full = video fills 100%, images overlay on top; split = separate image zone on top, video at bottom)
+- Image: fit=${video.imageFit || 'contain'}, size=${video.imageSize || 35}% (only used in split mode)
+- Music: ${project.music ? project.music.filename + ' @ volume ' + (project.music.volume || 0.12) : 'none'}
+- Display Mode: PER-SCENE (see below)
+
+OUTPUT: ${project.output.width}x${project.output.height} @ ${project.output.fps}fps, codec h264, crf ${project.output.crf || 18}
+
+DISPLAY MODES:
+Each scene has a display_mode — 'subtitles', 'mfx', or 'none':
+- SUBTITLES: Show word-synced animated subtitles at the bottom of the screen (standard karaoke-style).
+- MFX (Motion Graphics): Animate the scene's text as the main visual element (typographic animation, kinetic text, motion graphics). The text IS the content — make it visually engaging with movement, scale, reveals, etc. If a specific preset is set (lines, corners, particles, etc.), use that style. If custom instructions are provided, follow them. If neither preset nor instructions are given, create a clean animated text presentation of the scene's words timed to the audio.
+- NONE (No Text): Do NOT render any text, subtitles, or motion graphics for this scene. Just show the video (and image if present). The audio still plays but no visual text appears.
+
+LAYOUT RULES (MODE: ${project.mode || 'full'}):
+${(project.mode === 'split') ? `- SPLIT SCREEN MODE: The frame has two zones: TOP (image area, 50% height) and BOTTOM (video area, 45% height) with a 5% divider.
+- Images go in the TOP zone. Text/subtitles go in the BOTTOM zone, over the video.
+- NEVER place text on top of images. Text and images must be in separate zones.
+- Images should have NO glow, NO colored box-shadow, NO border effects. Clean with object-fit: ${video.imageFit || 'contain'}.` : `- FULL VIDEO MODE: The video fills 100% of the frame (full screen).
+- Images OVERLAY on top of the video (position: absolute, top: 0, covering the top ~50% of the frame).
+- Text/subtitles appear over the video at the bottom.
+- Images should have NO glow, NO colored box-shadow, NO border effects. Clean with object-fit: ${video.imageFit || 'contain'}.`}
+- CRITICAL IMAGE SCOPING: Each scene's image MUST be wrapped in its own <Sequence from={} durationInFrames={}> so it ONLY appears during that scene's time range. When a scene ends, its image must disappear.
+- PER-SCENE IMAGE POSITION: Each scene may have an img_position field. Apply these CSS positions (in full/youtube mode, images overlay on video):
+  * "top" (default): position:absolute; top:0; width:100%; height:50%
+  * "center": position:absolute; top:25%; width:100%; height:50%
+  * "bottom": position:absolute; bottom:0; width:100%; height:50%
+  * "full": position:absolute; top:0; width:100%; height:100%
+  In split mode, position is ignored (image fills the top zone).
+- PER-SCENE IMAGE BORDER: Each scene may have an img_border field. Apply these CSS styles:
+  * "none" (default): no border effects
+  * "rounded": border-radius:16px; margin:4%
+  * "shadow": border-radius:12px; margin:4%; box-shadow: 0 8px 32px rgba(0,0,0,0.6)
+  * "frame": border: 3px solid rgba(255,255,255,0.15); border-radius:8px; margin:4%
+  * "glow": border-radius:12px; margin:4%; box-shadow: 0 0 20px rgba(123,47,242,0.5)
+  When margin is applied, adjust width/height to 92% to account for the inset.
+- SLIDESHOW: If a scene has multiple images (check scenes[i].images array length), cycle through them evenly within the scene duration. For example, 3 images in a 3s scene = 1s per image. Use opacity transitions (fade in/out) to switch between them. Stack them absolutely on top of each other and animate opacity.
+- B-ROLL: If a scene has a broll array (scenes[i].broll), use the B-roll video INSTEAD of the main video for that scene's duration. Use <OffthreadVideo> with the B-roll file from reel-data/.
+
+INSTRUCTIONS:
+1. Read public/reel-data/config.json for the full project data (scenes with word-level timestamps)
+2. Read public/reel-data/media-map.json to know which media files are available
+3. Create/update Remotion components: use <OffthreadVideo> for video
+4. For 'subtitles' scenes: word-synced subtitles from scenes[].words, positioned at bottom over video. Show max ${sub.maxWords || 6} words at a time (group words into chunks of ${sub.maxWords || 6}).
+5. For 'mfx' scenes: animated text presentation of the scene's words (follow any instructions/preset if provided)
+6. For 'none' scenes: NO text at all — just video and image (if any). Skip all subtitles and motion graphics for that scene.
+7. For scenes with images: apply per-scene img_position and img_border CSS (see above). Use object-fit: ${video.imageFit || 'contain'}.
+8. For scenes with B-roll: use the B-roll video for that scene instead of the main video clip
+9. CRITICAL: Only show an image during its scene's time range. Never persist a previous scene's image.
+10. Apply spring(${JSON.stringify({damping: anim.damping || 18, stiffness: anim.stiffness || 120, mass: anim.mass || 0.7})}) animations
+11. Add background music with <Audio> at volume ${project.music?.volume || 0.12}
+12. Render: npx remotion render src/index.ts MainComp out/${(project.name || 'reel').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'reel'}.mp4 --codec h264 --crf ${project.output.crf || 18}`;
+
+  const tasks = readTasks();
+  const id = generateId(tasks);
+  const newTask = {
+    id,
+    task: prompt,
+    skill: 'fb-story-video',
+    status: 'pending',
+    priority: 1,
+    model: 'sonnet',
+    max_turns: 50,
+    context: [],
+    extra_context: [],
+    working_dir: working_dir || null,
+    space_id: space_id || 'general',
+    timeout_mins: 45,  // video renders need more time than default 30
+    worker: null, started_at: null, completed_at: null, result_file: null, error: null, archived: false
+  };
+  tasks.push(newTask);
+  writeTasks(tasks);
+
+  res.json({ ok: true, task_id: id, config_path: configPath });
+});
+
+// Preview in Remotion Studio — writes config + media, spawns studio
+router.post('/reel/projects/:projectId/preview-studio', (req, res) => {
+  const project = readReelProject(req.params.projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const { working_dir } = req.body;
+  if (!working_dir) return res.status(400).json({ error: 'No working_dir provided' });
+
+  // 1. Write config file to the Remotion project's public/ directory
+  const configDir = path.join(working_dir, 'public', 'reel-data');
+  if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+  const configPath = path.join(configDir, 'config.json');
+  fs.writeFileSync(configPath, JSON.stringify(project, null, 2));
+
+  // 2. Copy media files (video clips, images, music) to Remotion public/reel-data/
+  const mediaMap = {};
+  for (const clip of (project.clips || [])) {
+    if (!clip.path) continue;
+    const srcPath = path.join(shared.BASE_DIR, clip.path);
+    if (!fs.existsSync(srcPath)) continue;
+    const destName = clip.storedName || path.basename(clip.path);
+    const destPath = path.join(configDir, destName);
+    try { fs.copyFileSync(srcPath, destPath); } catch (_) {}
+    mediaMap[clip.path] = destName;
+  }
+  for (const scene of (project.scenes || [])) {
+    // Copy scene images
+    for (const imgPath of (scene.images || [])) {
+      const srcPath = path.join(shared.BASE_DIR, imgPath);
+      if (!fs.existsSync(srcPath)) continue;
+      const destName = path.basename(imgPath);
+      try { fs.copyFileSync(srcPath, path.join(configDir, destName)); } catch (_) {}
+      mediaMap[imgPath] = destName;
+    }
+    // Copy B-roll videos
+    for (const brollPath of (scene.broll || [])) {
+      const srcPath = path.join(shared.BASE_DIR, brollPath);
+      if (!fs.existsSync(srcPath)) continue;
+      const destName = path.basename(brollPath);
+      try { fs.copyFileSync(srcPath, path.join(configDir, destName)); } catch (_) {}
+      mediaMap[brollPath] = destName;
+    }
+  }
+  if (project.music && project.music.path) {
+    const srcPath = path.join(shared.BASE_DIR, project.music.path);
+    if (fs.existsSync(srcPath)) {
+      const destName = path.basename(project.music.path);
+      try { fs.copyFileSync(srcPath, path.join(configDir, destName)); } catch (_) {}
+      mediaMap[project.music.path] = destName;
+    }
+  }
+  fs.writeFileSync(path.join(configDir, 'media-map.json'), JSON.stringify(mediaMap, null, 2));
+
+  // 3. Spawn Remotion Studio (detached)
+  const child = spawn('npx', ['remotion', 'studio', 'src/index.ts'], {
+    cwd: working_dir,
+    detached: true,
+    stdio: 'ignore',
+    shell: true
+  });
+  child.unref();
+
+  console.log(`[ReelMaster] Remotion Studio launched for project ${project.id} in ${working_dir}`);
+  res.json({ ok: true, message: 'Remotion Studio launching on localhost:3000', config_path: configPath });
+});
+
+module.exports = router;

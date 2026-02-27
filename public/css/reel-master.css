@@ -52,6 +52,13 @@
 .rm-chip:hover:not(.active) { color: #bbb; border-color: rgba(255,255,255,0.2); }
 .rm-scene-img-wrap video.rm-scene-img-thumb { width: 100%; height: 100%; object-fit: cover; }
 
+/* Step progress text */
+.step-progress-text {
+  text-align: center; padding: 10px 24px 0;
+  font-size: 13px; font-weight: 600; color: #C084FC;
+  letter-spacing: 0.3px;
+}
+
 /* Step indicators */
 .rm-steps {
   display: flex; align-items: center; justify-content: center; gap: 0;

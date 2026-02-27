@@ -1,0 +1,30 @@
+{
+  "id": "default-purple",
+  "name": "Dark Purple",
+  "description": "Premium dark theme with purple accents",
+  "style": {
+    "preset_id": "default-purple",
+    "colors": {
+      "background": "#0a0a12",
+      "primary": "#7B2FF2",
+      "secondary": "#C084FC",
+      "tertiary": "#E9D5FF",
+      "text": "#ffffff"
+    },
+    "fonts": {
+      "headline": "Playfair Display",
+      "body": "Inter"
+    },
+    "decorations": {
+      "topLine": true,
+      "slideIndicator": true,
+      "cornerCircles": true,
+      "backgroundGlow": true
+    },
+    "photo": {
+      "position": "bottom-center",
+      "glow": true,
+      "removeBg": true
+    }
+  }
+}
