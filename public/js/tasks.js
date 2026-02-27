@@ -353,9 +353,12 @@ function renderMarkdown(text) {
 
 let currentResultText = ''; // Store the raw result text for follow-ups
 
-async function viewResult(id) {
+async function viewResult(id, autoOpen) {
+  // If the user manually dismissed the modal, don't auto-reopen it
+  if (autoOpen && resultModalDismissed) return;
   currentResultTaskId = id;
   currentResultText = '';
+  resultModalDismissed = false;
   const t = allTasks.find(x => x.id === id);
   document.getElementById('resultTitle').textContent = `Task #${id} - ${t?.status === 'done' ? 'Result' : 'Error Details'}`;
   document.getElementById('resultContent').innerHTML = '<span style="color:#888">Loading...</span>';
@@ -412,6 +415,7 @@ async function viewResult(id) {
 let liveLogInterval = null;
 
 async function viewLiveLog(id) {
+  resultModalDismissed = false;
   currentResultTaskId = id;
   const t = allTasks.find(x => x.id === id);
   document.getElementById('resultTitle').textContent = `Task #${id} - Live Progress`;
@@ -467,7 +471,7 @@ async function viewLiveLog(id) {
       const freshTask = freshTasks.find(x => x.id === id);
       if (freshTask && (freshTask.status === 'done' || freshTask.status === 'failed')) {
         stopLiveLog();
-        viewResult(id);
+        viewResult(id, true);
       }
     } catch (_) {}
   }
@@ -480,9 +484,12 @@ function stopLiveLog() {
   if (liveLogInterval) { clearInterval(liveLogInterval); liveLogInterval = null; }
 }
 
+let resultModalDismissed = false;
+
 function closeResultModal() {
   document.getElementById('resultModal').classList.remove('active');
   currentResultText = '';
+  resultModalDismissed = true;
   stopLiveLog();
 }
 

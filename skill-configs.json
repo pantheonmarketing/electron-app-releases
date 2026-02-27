@@ -1,0 +1,30 @@
+{
+  "jonny-writer": {
+    "author_name": "Jonny West",
+    "brand_name": "AI CEO Accelerator",
+    "product_details": "AI Influencer Academy on Skool — $9/mo community teaching people how to build AI influencers for content, clients, and income. Also: AI CEO Accelerator ($397) — flagship course. URL: https://www.skool.com/ai-influencer-academy2026"
+  },
+  "kit-broadcast": {
+    "sender_email": "yoniwe@gmail.com",
+    "product_name": "AI Influencer Academy",
+    "product_price": "$9/mo",
+    "product_url": "https://www.skool.com/ai-influencer-academy2026"
+  },
+  "fb-ads": {
+    "ad_account_id": "1233107868706263",
+    "page_name": "AI Influencer Academy",
+    "pixel_id": "1163320328988676",
+    "destination_url": "https://www.skool.com/ai-influencer-academy"
+  },
+  "skool-poster": {
+    "community_slugs": "ai-influencer-academy2026"
+  },
+  "youtube-tracker": {
+    "yt_channels": "RoboNuggets, AiorBust, All About AI, Filip AI Influencer, MreFlow",
+    "telegram_note": "Sends digest to Telegram chat 1660655025 via bot 8557020874"
+  },
+  "instagram-tracker": {
+    "ig_accounts": "ineffable_ai22",
+    "apify_token_note": "Token in .env.vercel (APIFY_API_TOKEN)"
+  }
+}
