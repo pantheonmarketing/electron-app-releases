@@ -165,20 +165,27 @@ if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
 });
 
 // ── Electron first-run seeding ──
+// IMPORTANT: fs.copyFileSync does NOT work from inside .asar archives.
+// Electron patches readFileSync/readdir/existsSync for asar, but NOT copyFileSync.
+// Always use readFileSync + writeFileSync when copying from APP_DIR (which is inside .asar).
+function extractFile(src, dest) {
+  const content = fs.readFileSync(src);
+  fs.writeFileSync(dest, content);
+}
+
 if (IS_PACKAGED_ELECTRON) {
   for (const f of ['tasks.json', 'skills.json', 'projects.json', 'templates.json']) {
     const dest = path.join(BASE_DIR, f);
     if (!fs.existsSync(dest)) {
-      // Priority: 1) extraResources, 2) defaults/ directory, 3) bundled root, 4) hardcoded empty
       const resourceSrc = path.join(process.resourcesPath || '', f);
       const defaultsSrc = path.join(APP_DIR, 'defaults', f);
       const bundleSrc = path.join(APP_DIR, f);
       if (fs.existsSync(resourceSrc)) {
-        fs.copyFileSync(resourceSrc, dest);
+        try { extractFile(resourceSrc, dest); } catch (_) {}
       } else if (fs.existsSync(defaultsSrc)) {
-        try { fs.copyFileSync(defaultsSrc, dest); } catch (_) {}
+        try { extractFile(defaultsSrc, dest); } catch (_) {}
       } else if (fs.existsSync(bundleSrc)) {
-        try { fs.copyFileSync(bundleSrc, dest); } catch (_) {}
+        try { extractFile(bundleSrc, dest); } catch (_) {}
       }
       if (!fs.existsSync(dest)) {
         const defaults = { 'tasks.json': '[]', 'skills.json': '{}', 'projects.json': '[]', 'templates.json': '{"templates":[],"routines":[]}' };
@@ -189,17 +196,16 @@ if (IS_PACKAGED_ELECTRON) {
   const bundlePresetsDir = path.join(APP_DIR, 'reel-presets');
   if (fs.existsSync(bundlePresetsDir) && fs.readdirSync(REEL_PRESETS_DIR).length === 0) {
     for (const f of fs.readdirSync(bundlePresetsDir)) {
-      try { fs.copyFileSync(path.join(bundlePresetsDir, f), path.join(REEL_PRESETS_DIR, f)); } catch (_) {}
+      try { extractFile(path.join(bundlePresetsDir, f), path.join(REEL_PRESETS_DIR, f)); } catch (_) {}
     }
   }
   const bundleStoryPresetsDir = path.join(APP_DIR, 'story-presets');
   if (fs.existsSync(bundleStoryPresetsDir) && fs.readdirSync(STORY_PRESETS_DIR).length === 0) {
     for (const f of fs.readdirSync(bundleStoryPresetsDir)) {
-      try { fs.copyFileSync(path.join(bundleStoryPresetsDir, f), path.join(STORY_PRESETS_DIR, f)); } catch (_) {}
+      try { extractFile(path.join(bundleStoryPresetsDir, f), path.join(STORY_PRESETS_DIR, f)); } catch (_) {}
     }
   }
   // Always update skills.json from bundle (contains full skill registry with metadata)
-  // This ensures new skills added in app updates are available immediately
   const bundledSkillsJson = path.join(APP_DIR, 'skills.json');
   if (fs.existsSync(bundledSkillsJson)) {
     try {
@@ -207,9 +213,7 @@ if (IS_PACKAGED_ELECTRON) {
       const local = fs.existsSync(shared.SKILLS_FILE)
         ? JSON.parse(fs.readFileSync(shared.SKILLS_FILE, 'utf-8'))
         : {};
-      // Merge: bundled entries are the base, local entries override (preserves user customizations)
       const merged = { ...bundled, ...local };
-      // But ensure all bundled skills are present (in case local had them deleted)
       for (const [name, info] of Object.entries(bundled)) {
         if (!merged[name]) merged[name] = info;
       }
@@ -220,25 +224,25 @@ if (IS_PACKAGED_ELECTRON) {
     }
   }
 
-  // Always extract skills from bundle to BASE_DIR (overwrite to keep up to date with app updates)
+  // Always extract skill .md files from bundle to BASE_DIR
   const bundleSkillsDir = path.join(APP_DIR, 'skills');
   const destSkillsDir = path.join(BASE_DIR, 'skills');
   if (fs.existsSync(bundleSkillsDir)) {
     if (!fs.existsSync(destSkillsDir)) fs.mkdirSync(destSkillsDir, { recursive: true });
     let extracted = 0;
     for (const f of fs.readdirSync(bundleSkillsDir)) {
-      try { fs.copyFileSync(path.join(bundleSkillsDir, f), path.join(destSkillsDir, f)); extracted++; } catch (_) {}
+      try { extractFile(path.join(bundleSkillsDir, f), path.join(destSkillsDir, f)); extracted++; } catch (e) {
+        console.error(`[Server] Failed to extract skill ${f}: ${e.message}`);
+      }
     }
     console.log(`[Server] Extracted ${extracted} skill files to ${destSkillsDir}`);
   }
 
   // Extract worker.js from app.asar to BASE_DIR so plain `node` can execute it.
-  // Electron's patched fs can read from .asar, but spawned `node` processes cannot.
-  // Always overwrite to ensure the latest version is used after updates.
   const workerSrc = path.join(APP_DIR, 'worker.js');
   const workerDest = path.join(BASE_DIR, 'worker.js');
   try {
-    fs.copyFileSync(workerSrc, workerDest);
+    extractFile(workerSrc, workerDest);
     console.log(`[Server] Extracted worker.js to ${workerDest}`);
   } catch (e) {
     console.error(`[Server] Failed to extract worker.js: ${e.message}`);
