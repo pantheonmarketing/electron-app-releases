@@ -157,6 +157,7 @@ const STORY_PRESETS_DIR = path.join(BASE_DIR, 'story-presets');
 const HEYGEN_CONFIG_FILE = path.join(BASE_DIR, 'heygen-config.json');
 const SCHEDULES_FILE = path.join(BASE_DIR, 'schedules.json');
 const SKILL_VERSIONS_DIR = path.join(BASE_DIR, 'skill-versions');
+const SKILL_CONFIGS_FILE = path.join(BASE_DIR, 'skill-configs.json');
 
 // ── Ensure directories exist ──
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
@@ -206,6 +207,7 @@ if (IS_PACKAGED_ELECTRON) {
     }
   }
   // Always update skills.json from bundle (contains full skill registry with metadata)
+  // IMPORTANT: Per-skill deep merge — bundled metadata updates, but local config_values are NEVER lost
   const bundledSkillsJson = path.join(APP_DIR, 'skills.json');
   if (fs.existsSync(bundledSkillsJson)) {
     try {
@@ -213,9 +215,17 @@ if (IS_PACKAGED_ELECTRON) {
       const local = fs.existsSync(shared.SKILLS_FILE)
         ? JSON.parse(fs.readFileSync(shared.SKILLS_FILE, 'utf-8'))
         : {};
-      const merged = { ...bundled, ...local };
-      for (const [name, info] of Object.entries(bundled)) {
-        if (!merged[name]) merged[name] = info;
+      // Load saved configs (protected file that survives all merges/syncs)
+      const savedConfigs = fs.existsSync(SKILL_CONFIGS_FILE)
+        ? JSON.parse(fs.readFileSync(SKILL_CONFIGS_FILE, 'utf-8'))
+        : {};
+      // Per-skill deep merge: bundled as base, local overrides, saved configs always win
+      const merged = {};
+      const allNames = new Set([...Object.keys(bundled), ...Object.keys(local)]);
+      for (const name of allNames) {
+        merged[name] = { ...(bundled[name] || {}), ...(local[name] || {}) };
+        // Restore config_values from protected file (highest priority)
+        if (savedConfigs[name]) merged[name].config_values = savedConfigs[name];
       }
       fs.writeFileSync(shared.SKILLS_FILE, JSON.stringify(merged, null, 2));
       console.log(`[Server] Skills registry: ${Object.keys(merged).length} skills (${Object.keys(bundled).length} bundled)`);
@@ -247,6 +257,23 @@ if (IS_PACKAGED_ELECTRON) {
   } catch (e) {
     console.error(`[Server] Failed to extract worker.js: ${e.message}`);
   }
+}
+
+// Migrate config_values to protected file (runs for all modes, including dev)
+if (!fs.existsSync(SKILL_CONFIGS_FILE) && fs.existsSync(SKILLS_FILE)) {
+  try {
+    const skills = JSON.parse(fs.readFileSync(SKILLS_FILE, 'utf-8'));
+    const configs = {};
+    for (const [name, info] of Object.entries(skills)) {
+      if (info.config_values && Object.keys(info.config_values).length > 0) {
+        configs[name] = info.config_values;
+      }
+    }
+    if (Object.keys(configs).length > 0) {
+      fs.writeFileSync(SKILL_CONFIGS_FILE, JSON.stringify(configs, null, 2));
+      console.log(`[Server] Migrated ${Object.keys(configs).length} skill configs to protected file`);
+    }
+  } catch (_) {}
 }
 
 // ── User environment variables ──
@@ -326,7 +353,7 @@ const reelUpload = multer({
 // Populate shared state for route modules
 // ──────────────────────────────────────────────
 Object.assign(shared, {
-  BASE_DIR, APP_DIR, TASKS_FILE, SKILLS_FILE, PROJECTS_FILE, TEMPLATES_FILE,
+  BASE_DIR, APP_DIR, TASKS_FILE, SKILLS_FILE, SKILL_CONFIGS_FILE, PROJECTS_FILE, TEMPLATES_FILE,
   RESULTS_DIR, LOGS_DIR, WORKFLOW_RUNS_FILE, UPLOADS_DIR,
   REEL_PROJECTS_DIR, REEL_PRESETS_DIR, WHISPER_CACHE_DIR,
   HEYGEN_PROJECTS_DIR, HEYGEN_CONFIG_FILE, STORY_PROJECTS_DIR, STORY_PRESETS_DIR,

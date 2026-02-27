@@ -152,6 +152,14 @@ router.put('/skills/:name/config', (req, res) => {
   if (!skill.config_values) skill.config_values = {};
   Object.assign(skill.config_values, config_values);
   fs.writeFileSync(shared.SKILLS_FILE, JSON.stringify(skills, null, 2));
+  // Also save to protected config file (survives syncs, merges, and reinstalls)
+  try {
+    const configs = fs.existsSync(shared.SKILL_CONFIGS_FILE)
+      ? JSON.parse(fs.readFileSync(shared.SKILL_CONFIGS_FILE, 'utf-8'))
+      : {};
+    configs[req.params.name] = { ...skill.config_values };
+    fs.writeFileSync(shared.SKILL_CONFIGS_FILE, JSON.stringify(configs, null, 2));
+  } catch (_) {}
   res.json({ ok: true, name: req.params.name, config_values: skill.config_values });
 });
 
@@ -262,8 +270,11 @@ router.post('/skills/sync-online', async (req, res) => {
     const remoteSkillsRaw = await fetchText(`${RAW_BASE}/skills.json`);
     const remoteSkills = JSON.parse(remoteSkillsRaw);
 
-    // 2. Load local skills.json
+    // 2. Load local skills.json + protected configs
     const localSkills = readSkills();
+    const savedConfigs = fs.existsSync(shared.SKILL_CONFIGS_FILE)
+      ? JSON.parse(fs.readFileSync(shared.SKILL_CONFIGS_FILE, 'utf-8'))
+      : {};
     let updated = 0;
     const updatedNames = [];
 
@@ -276,12 +287,15 @@ router.post('/skills/sync-online', async (req, res) => {
       const remoteFile = remoteInfo.file; // e.g. "skills/jonny-writer-skill.md"
       const localFile = path.join(shared.BASE_DIR, remoteFile);
 
-      // Update skills.json registry entry (always sync metadata)
+      // Preserve local config_values before overwriting with remote metadata
+      const existingConfigValues = localSkills[name]?.config_values || savedConfigs[name] || null;
       const isNew = !localSkills[name];
       localSkills[name] = {
         ...remoteInfo,
         file: remoteFile, // keep relative path
       };
+      // Restore config_values — never lose user's API keys
+      if (existingConfigValues) localSkills[name].config_values = existingConfigValues;
 
       // Download the .md file if it doesn't exist locally or if we want to keep it fresh
       // Strategy: always re-download to keep skills up to date
