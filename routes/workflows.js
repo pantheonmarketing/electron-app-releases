@@ -76,7 +76,7 @@ function checkWorkflowProgress() {
       currentNode.status = 'success';
       currentNode.completed_at = task.completed_at || new Date().toISOString();
       if (task.result_file) {
-        const resultFile = path.join(shared.BASE_DIR, task.result_file);
+        const resultFile = path.isAbsolute(task.result_file) ? task.result_file : path.join(shared.BASE_DIR, task.result_file);
         if (fs.existsSync(resultFile)) {
           try {
             const result = JSON.parse(fs.readFileSync(resultFile, 'utf-8'));
