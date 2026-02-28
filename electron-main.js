@@ -8,8 +8,40 @@
 const { app, BrowserWindow, ipcMain, Menu, net, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const netNode = require('net');
+const { execSync } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+
+// ── Machine fingerprint for device-based licensing ──
+let _machineId = null;
+function getMachineId() {
+  if (_machineId) return _machineId;
+  try {
+    if (process.platform === 'win32') {
+      // Windows: read MachineGuid from registry (unique per OS install)
+      const raw = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
+        { encoding: 'utf-8', timeout: 5000, windowsHide: true });
+      const match = raw.match(/MachineGuid\s+REG_SZ\s+(.+)/);
+      if (match) _machineId = crypto.createHash('sha256').update(match[1].trim()).digest('hex').slice(0, 16);
+    } else if (process.platform === 'darwin') {
+      // macOS: hardware UUID
+      const raw = execSync('ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID',
+        { encoding: 'utf-8', timeout: 5000 });
+      const match = raw.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/);
+      if (match) _machineId = crypto.createHash('sha256').update(match[1].trim()).digest('hex').slice(0, 16);
+    } else {
+      // Linux: /etc/machine-id
+      const raw = fs.readFileSync('/etc/machine-id', 'utf-8').trim();
+      _machineId = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16);
+    }
+  } catch (_) {}
+  if (!_machineId) {
+    // Fallback: hash hostname + platform
+    _machineId = crypto.createHash('sha256').update(require('os').hostname() + process.platform).digest('hex').slice(0, 16);
+  }
+  return _machineId;
+}
 
 // ── Config ──
 const APP_NAME = 'AI CEO';
@@ -114,13 +146,19 @@ async function validateKey(key) {
     const resp = await net.fetch(LICENSE_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: normalizedKey, app_version: app.getVersion() }),
+      body: JSON.stringify({
+        key: normalizedKey,
+        app_version: app.getVersion(),
+        machine_id: getMachineId(),
+        machine_name: require('os').hostname(),
+      }),
     });
     const data = await resp.json();
     if (data.valid === true) {
       return { valid: true, tier: data.tier || 'basic' };
     }
-    return { valid: false };
+    // Pass through device limit error so UI can show it
+    return { valid: false, error: data.error || '' };
   } catch (err) {
     // Offline fallback: accept if we have a saved license (trust last validation)
     console.log('License API unreachable, using offline fallback:', err.message);
@@ -128,7 +166,7 @@ async function validateKey(key) {
     if (saved && saved.key === normalizedKey) {
       return { valid: true, tier: saved.tier || 'basic' };
     }
-    return { valid: false };
+    return { valid: false, error: 'Could not reach license server' };
   }
 }
 

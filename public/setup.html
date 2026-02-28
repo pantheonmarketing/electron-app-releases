@@ -207,6 +207,54 @@
       vertical-align: middle;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Progress bar for Install Everything */
+    .progress-container {
+      display: none;
+      margin-top: 16px;
+      padding: 16px 18px;
+      background: rgba(123,47,242,0.06);
+      border: 1px solid rgba(123,47,242,0.15);
+      border-radius: 12px;
+    }
+    .progress-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #C084FC;
+      margin-bottom: 10px;
+    }
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7B2FF2, #C084FC);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+      width: 0%;
+    }
+    .progress-steps {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #888;
+      line-height: 1.8;
+    }
+    .progress-steps .done { color: #4ade80; }
+    .progress-steps .active { color: #C084FC; font-weight: 600; }
+    .progress-steps .pending { color: #555; }
+
+    /* Overlay to lock UI during install */
+    .ui-lock {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 100;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
@@ -233,10 +281,18 @@
     <div id="depsList"></div>
 
     <div id="installAllRow" class="install-all-row" style="display:none;">
-      <button class="btn-install" onclick="installAllMissing()" id="installAllBtn">
-        Install All Missing
+      <button class="btn-install" onclick="installAll()" id="installAllBtn">
+        ⚡ Install Everything
       </button>
     </div>
+
+    <div class="progress-container" id="progressContainer">
+      <div class="progress-label" id="progressLabel">Installing...</div>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-steps" id="progressSteps"></div>
+    </div>
+
+    <div class="ui-lock" id="uiLock"></div>
 
     <div id="noteArea"></div>
 
@@ -244,24 +300,41 @@
       Checking...
     </button>
     <button class="btn btn-ghost" onclick="runChecks()">Re-check</button>
+
+    <div id="debugPanel" style="margin-top:24px;padding:12px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:11px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Debug Log</span>
+        <button onclick="document.getElementById('debugLog').textContent=''" style="font-size:10px;color:#555;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:2px 8px;cursor:pointer;">Clear</button>
+      </div>
+      <pre id="debugLog" style="font-family:monospace;font-size:11px;color:#888;line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap;margin:0;"></pre>
+    </div>
   </div>
 
   <script>
     let depsData = {};
     let platform = 'win';
 
+    function dbg(msg) {
+      const el = document.getElementById('debugLog');
+      const ts = new Date().toLocaleTimeString();
+      el.textContent += `[${ts}] ${msg}\n`;
+      el.scrollTop = el.scrollHeight;
+    }
+
     // Friendly display names and install package mappings
     const DEP_META = {
       ffmpeg:         { label: 'FFmpeg',          pkg: null },
-      node:           { label: 'Node.js',         pkg: null },
+      node:           { label: 'Node.js',         pkg: 'node' },
+      git:            { label: 'Git',             pkg: 'git' },
       claude:         { label: 'Claude AI',       pkg: 'claude-cli' },
+      claude_login:   { label: 'Claude Login',    pkg: 'claude-login' },
       python:         { label: 'Python',          pkg: 'python' },
       faster_whisper: { label: 'Subtitles (Whisper)', pkg: 'faster-whisper' },
       ytdlp:          { label: 'Video Downloader', pkg: 'yt-dlp' },
     };
 
-    // Preferred display order
-    const DEP_ORDER = ['ffmpeg', 'claude', 'node', 'python', 'faster_whisper', 'ytdlp'];
+    // Preferred display order — Node → Git → Claude → Login, then optional
+    const DEP_ORDER = ['ffmpeg', 'node', 'git', 'claude', 'claude_login', 'python', 'faster_whisper', 'ytdlp'];
 
     async function runChecks() {
       const btn = document.getElementById('continueBtn');
@@ -272,8 +345,10 @@
       document.getElementById('noteArea').innerHTML = '';
 
       try {
+        dbg('Fetching /api/setup/check...');
         const resp = await fetch('/api/setup/check');
         const data = await resp.json();
+        dbg('Setup check result: ' + JSON.stringify(data, null, 0).slice(0, 500));
         depsData = data.deps || {};
         platform = data.deps?.platform || 'win';
 
@@ -297,6 +372,15 @@
       const list = document.getElementById('depsList');
       list.innerHTML = '';
 
+      // Synthesize virtual claude_login dep from claude's auth data
+      deps.claude_login = {
+        installed: !!(deps.claude && deps.claude.loggedIn),
+        version: deps.claude?.email ? `Logged in as ${deps.claude.email}` : null,
+        required: true,
+        description: 'Connect your Claude account to run AI tasks',
+        canAutoInstall: !!(deps.claude && deps.claude.installed),
+      };
+
       let ready = 0, missing = 0, total = 0, missingInstallable = 0;
 
       for (const key of DEP_ORDER) {
@@ -314,11 +398,18 @@
         const badgeClass = isBundled ? 'bundled' : isRequired ? 'required' : 'optional';
         const badgeText = isBundled ? 'Bundled' : isRequired ? 'Required' : 'Optional';
 
+        // Button label: "Login" for claude_login, "Install" for everything else
+        const btnLabel = key === 'claude_login' ? 'Login' : 'Install';
         let actionHtml = '';
         if (!dep.installed && DEP_META[key]?.pkg && dep.canAutoInstall !== false) {
-          actionHtml = `<div class="dep-action"><button class="btn-install" id="installBtn-${key}" onclick="installDep('${key}')">Install</button></div>`;
+          actionHtml = `<div class="dep-action"><button class="btn-install" id="installBtn-${key}" onclick="installDep('${key}')">${btnLabel}</button></div>`;
         } else if (!dep.installed) {
-          actionHtml = `<div class="dep-action" style="font-size:11px;color:#666;">Manual install needed</div>`;
+          let hint = 'Manual install needed';
+          if (key === 'claude_login') hint = 'Install Claude first';
+          else if (key === 'claude' && !deps.node?.installed) hint = 'Install Node.js first';
+          else if (key === 'claude' && !deps.git?.installed) hint = 'Install Git first';
+          else if ((key === 'faster_whisper' || key === 'ytdlp') && !deps.python?.installed) hint = 'Install Python first';
+          actionHtml = `<div class="dep-action" style="font-size:11px;color:#666;">${hint}</div>`;
         }
 
         card.innerHTML = `
@@ -344,35 +435,56 @@
       document.getElementById('statReady').textContent = ready;
       document.getElementById('statMissing').textContent = missing;
 
-      // Install all button
-      if (missingInstallable > 1) {
+      // Install Everything button — show if anything is missing
+      if (missing > 0) {
         document.getElementById('installAllRow').style.display = 'flex';
       } else {
         document.getElementById('installAllRow').style.display = 'none';
       }
 
-      // Notes
+      // Notes — guide the user step-by-step
       const noteArea = document.getElementById('noteArea');
-      if (!deps.claude?.installed) {
+      if (!deps.node?.installed) {
         noteArea.innerHTML = `<div class="note">
-          <strong>Note:</strong> After installing Claude AI, you'll need to open a terminal and run <code style="background:rgba(123,47,242,0.15);color:#C084FC;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:12px;">claude login</code> once to connect your account.
+          <strong>Start here:</strong> Click <strong>Install</strong> on Node.js first — everything else depends on it. This may take 1-2 minutes.
+        </div>`;
+      } else if (!deps.git?.installed) {
+        noteArea.innerHTML = `<div class="note">
+          <strong>Next:</strong> Node.js is ready! Now install <strong>Git</strong> — Claude needs it to run on Windows.
+        </div>`;
+      } else if (!deps.claude?.installed) {
+        noteArea.innerHTML = `<div class="note">
+          <strong>Next:</strong> Node.js and Git are ready! Now click <strong>Install</strong> on Claude AI.
+        </div>`;
+      } else if (!deps.claude_login?.installed) {
+        noteArea.innerHTML = `<div class="note">
+          <strong>Almost there!</strong> Claude is installed — click <strong>Login</strong> above to connect your account. A browser window will open for you to sign in.
         </div>`;
       }
 
       // Continue button
       const btn = document.getElementById('continueBtn');
-      if (data.allRequired) {
+      const allRequiredMet = deps.claude?.installed && deps.ffmpeg?.installed;
+      const isLoggedIn = deps.claude_login?.installed;
+      if (allRequiredMet && isLoggedIn) {
         btn.disabled = false;
         btn.textContent = missing === 0 ? 'Launch App →' : 'Continue to App →';
+      } else if (allRequiredMet && !isLoggedIn) {
+        btn.disabled = false;
+        btn.textContent = 'Skip Login & Launch Anyway →';
       } else {
         btn.disabled = false;
         btn.textContent = 'Skip & Launch Anyway →';
       }
     }
 
+    let installingKeys = new Set(); // track what's currently installing
+
     async function installDep(key) {
       const pkg = DEP_META[key]?.pkg;
       if (!pkg) return;
+      if (installingKeys.has(key)) return; // prevent double-click
+      installingKeys.add(key);
 
       const installBtn = document.getElementById('installBtn-' + key);
       const card = document.getElementById('card-' + key);
@@ -385,70 +497,163 @@
         installBtn.className = 'btn-install installing';
         installBtn.innerHTML = '<span class="spinner"></span> Installing...';
       }
-      card.className = 'dep-card installing';
-      icon.className = 'dep-icon installing';
-      icon.innerHTML = '<span class="spinner"></span>';
-      msg.className = 'install-msg';
-      msg.style.display = 'none';
+      if (card) card.className = 'dep-card installing';
+      if (icon) { icon.className = 'dep-icon installing'; icon.innerHTML = '<span class="spinner"></span>'; }
+      if (msg) { msg.className = 'install-msg'; msg.style.display = 'none'; }
 
       try {
+        dbg(`Installing ${key} (package: ${pkg})...`);
         const resp = await fetch('/api/setup/install', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ package: pkg }),
         });
         const data = await resp.json();
+        dbg(`Install ${key} response (${resp.status}): ${JSON.stringify(data).slice(0, 500)}`);
 
-        if (data.ok) {
-          msg.className = 'install-msg success';
-          msg.textContent = data.message || 'Installed successfully!';
-          // Re-check this specific dep
-          setTimeout(() => runChecks(), 1500);
+        if (data.ok && data.pending) {
+          if (msg) { msg.className = 'install-msg success'; msg.textContent = data.message || 'Complete the login, then click Re-check.'; }
+          dbg(`PENDING ${key}: ${data.message}`);
+          if (installBtn) { installBtn.disabled = false; installBtn.className = 'btn-install'; installBtn.innerHTML = 'Re-check'; installBtn.onclick = () => runChecks(); }
+          if (card) card.className = 'dep-card missing';
+          if (icon) { icon.className = 'dep-icon missing'; icon.innerHTML = '⏳'; }
+        } else if (data.ok) {
+          if (msg) { msg.className = 'install-msg success'; msg.textContent = data.message || 'Installed successfully!'; }
+          if (icon) { icon.className = 'dep-icon ok'; icon.innerHTML = '✓'; }
+          if (card) card.className = 'dep-card ok';
+          if (installBtn) { installBtn.disabled = true; installBtn.innerHTML = '✓ Done'; }
+          // Only auto-recheck if NOT in batch mode
+          if (!batchMode) setTimeout(() => runChecks(), 1500);
         } else {
-          msg.className = 'install-msg error';
-          msg.textContent = data.error || 'Installation failed.';
-          if (data.details) msg.textContent += ' ' + data.details;
-          // Reset button
-          if (installBtn) {
-            installBtn.disabled = false;
-            installBtn.className = 'btn-install';
-            installBtn.innerHTML = 'Retry';
-          }
-          card.className = 'dep-card missing';
-          icon.className = 'dep-icon missing';
-          icon.innerHTML = '✗';
+          if (msg) { msg.className = 'install-msg error'; msg.textContent = data.error || 'Installation failed.'; if (data.details) msg.textContent += ' ' + data.details; }
+          dbg(`FAIL ${key}: ${data.error} ${data.details || ''}`);
+          if (installBtn) { installBtn.disabled = false; installBtn.className = 'btn-install'; installBtn.innerHTML = 'Retry'; }
+          if (card) card.className = 'dep-card missing';
+          if (icon) { icon.className = 'dep-icon missing'; icon.innerHTML = '✗'; }
         }
       } catch (e) {
-        msg.className = 'install-msg error';
-        msg.textContent = 'Network error — could not install.';
-        if (installBtn) {
-          installBtn.disabled = false;
-          installBtn.className = 'btn-install';
-          installBtn.innerHTML = 'Retry';
-        }
-        card.className = 'dep-card missing';
-        icon.className = 'dep-icon missing';
-        icon.innerHTML = '✗';
+        dbg(`ERROR ${key}: ${e.message}`);
+        if (msg) { msg.className = 'install-msg error'; msg.textContent = 'Network error — could not install.'; }
+        if (installBtn) { installBtn.disabled = false; installBtn.className = 'btn-install'; installBtn.innerHTML = 'Retry'; }
+        if (card) card.className = 'dep-card missing';
+        if (icon) { icon.className = 'dep-icon missing'; icon.innerHTML = '✗'; }
+      } finally {
+        installingKeys.delete(key);
       }
     }
 
-    async function installAllMissing() {
-      const btn = document.getElementById('installAllBtn');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Installing...';
+    let batchMode = false; // when true, installDep won't auto-recheck
 
-      for (const key of DEP_ORDER) {
-        const dep = depsData[key];
-        if (dep && !dep.installed && DEP_META[key]?.pkg && dep.canAutoInstall !== false) {
-          await installDep(key);
-          // Small delay between installs
-          await new Promise(r => setTimeout(r, 1000));
+    // Install everything in the right dependency order with progress bar
+    async function installAll() {
+      const btn = document.getElementById('installAllBtn');
+      const progress = document.getElementById('progressContainer');
+      const progressLabel = document.getElementById('progressLabel');
+      const progressFill = document.getElementById('progressFill');
+      const progressSteps = document.getElementById('progressSteps');
+      const uiLock = document.getElementById('uiLock');
+
+      btn.disabled = true;
+      batchMode = true;
+      progress.style.display = 'block';
+      uiLock.style.display = 'block';
+      document.getElementById('installAllRow').style.display = 'none';
+
+      // Full install chain in dependency order
+      const chain = ['node', 'git', 'claude', 'claude_login', 'python', 'faster_whisper', 'ytdlp'];
+      const labels = chain.map(k => DEP_META[k]?.label || k);
+      const status = chain.map(() => 'pending'); // 'pending' | 'active' | 'done' | 'skipped' | 'failed'
+
+      function renderProgress(activeIdx, pct) {
+        progressFill.style.width = pct + '%';
+        let html = '';
+        for (let j = 0; j < chain.length; j++) {
+          const s = status[j];
+          const cls = s === 'done' ? 'done' : s === 'skipped' ? 'done' : s === 'active' ? 'active' : s === 'failed' ? '' : 'pending';
+          const icon = s === 'done' ? '✓' : s === 'skipped' ? '⊘' : s === 'active' ? '⟳' : s === 'failed' ? '✗' : '·';
+          const color = s === 'failed' ? 'color:#f87171;' : '';
+          html += `<div class="${cls}" style="${color}">${icon} ${labels[j]}${s === 'active' ? ' — installing...' : s === 'failed' ? ' — failed' : ''}</div>`;
         }
+        progressSteps.innerHTML = html;
       }
 
+      for (let i = 0; i < chain.length; i++) {
+        const key = chain[i];
+        // Re-check deps before each install to get fresh state
+        try {
+          const resp = await fetch('/api/setup/check');
+          const data = await resp.json();
+          depsData = data.deps || {};
+          depsData.claude_login = {
+            installed: !!(depsData.claude && depsData.claude.loggedIn),
+            canAutoInstall: !!(depsData.claude && depsData.claude.installed),
+          };
+        } catch (_) {}
+
+        const dep = depsData[key];
+        if (!dep) { status[i] = 'skipped'; continue; }
+        if (dep.installed) { status[i] = 'done'; renderProgress(i, ((i+1)/chain.length*100).toFixed(0)); continue; }
+        if (!DEP_META[key]?.pkg) { status[i] = 'skipped'; continue; }
+
+        status[i] = 'active';
+        progressLabel.textContent = `Installing ${labels[i]}...`;
+        renderProgress(i, (i/chain.length*100).toFixed(0));
+
+        // Claude login — opens a window, temporarily unlock UI for browser
+        if (key === 'claude_login') {
+          uiLock.style.display = 'none'; // let user interact with login window
+          await installDep(key);
+          progressLabel.textContent = 'Waiting for Claude login... complete it in your browser';
+          // Poll for login completion (every 5s, up to 2 min)
+          let loggedIn = false;
+          for (let t = 0; t < 24; t++) {
+            await new Promise(r => setTimeout(r, 5000));
+            try {
+              const resp = await fetch('/api/setup/check');
+              const data = await resp.json();
+              if (data.deps?.claude?.loggedIn) { loggedIn = true; break; }
+            } catch (_) {}
+          }
+          status[i] = loggedIn ? 'done' : 'failed';
+          uiLock.style.display = 'block';
+          if (!loggedIn) dbg('Claude login timed out — continuing');
+          renderProgress(i, ((i+1)/chain.length*100).toFixed(0));
+          continue;
+        }
+
+        await installDep(key);
+        await new Promise(r => setTimeout(r, 1000));
+
+        // Check if it actually installed
+        try {
+          const resp = await fetch('/api/setup/check');
+          const data = await resp.json();
+          depsData = data.deps || {};
+          depsData.claude_login = {
+            installed: !!(depsData.claude && depsData.claude.loggedIn),
+            canAutoInstall: !!(depsData.claude && depsData.claude.installed),
+          };
+          const freshDep = depsData[key];
+          status[i] = freshDep?.installed ? 'done' : 'failed';
+        } catch (_) {
+          status[i] = 'failed';
+        }
+        renderProgress(i, ((i+1)/chain.length*100).toFixed(0));
+      }
+
+      // Done
+      progressFill.style.width = '100%';
+      const doneCount = status.filter(s => s === 'done').length;
+      const failCount = status.filter(s => s === 'failed').length;
+      progressLabel.textContent = failCount > 0
+        ? `Done! ${doneCount} installed, ${failCount} need attention`
+        : `All done! Everything is ready.`;
+
+      batchMode = false;
+      uiLock.style.display = 'none';
       btn.disabled = false;
-      btn.innerHTML = 'Install All Missing';
-      runChecks();
+      btn.innerHTML = '⚡ Install Everything';
+      runChecks(); // final re-check
     }
 
     async function goToApp() {

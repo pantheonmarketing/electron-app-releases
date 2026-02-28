@@ -976,7 +976,13 @@
       <div style="font-size:11px;color:#666;margin-bottom:10px;">Your AI agents will use this info on every task in this space.</div>
       <div class="form-group">
         <label>Your Name</label>
-        <input type="text" id="spacePersonaName" placeholder="e.g. Sarah Chen" style="font-size:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="space-photo-upload" id="spacePersonaPhoto" onclick="document.getElementById('spacePhotoInput').click()" title="Add your photo">
+            <span class="space-photo-placeholder">+</span>
+          </div>
+          <input type="file" id="spacePhotoInput" accept="image/*" style="display:none" onchange="handleSpacePersonaPhoto(this)">
+          <input type="text" id="spacePersonaName" placeholder="e.g. Sarah Chen" style="font-size:12px;flex:1;">
+        </div>
       </div>
       <div class="form-group">
         <label>Your Business</label>
@@ -1522,9 +1528,16 @@
     </h3>
     <p style="color:#888;font-size:13px;margin-bottom:16px;">AI CEO Studio needs a few tools installed to work. Green = ready, red = missing.</p>
     <div id="setupDepsList" style="display:flex;flex-direction:column;gap:8px;"></div>
-    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
+    <div id="setupProgressArea" style="display:none;margin-top:12px;">
+      <div style="font-size:12px;font-weight:600;color:#C084FC;margin-bottom:6px;" id="setupProgressLabel">Installing...</div>
+      <div style="width:100%;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+        <div id="setupProgressFill" style="height:100%;background:linear-gradient(90deg,#7B2FF2,#C084FC);border-radius:3px;transition:width 0.5s;width:0%;"></div>
+      </div>
+      <div id="setupProgressSteps" style="margin-top:8px;font-size:11px;color:#888;line-height:1.7;"></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;" id="setupBtnRow">
       <button class="update-btn-ghost" onclick="setupCheckAll()" id="setupRefreshBtn">↻ Re-check</button>
-      <button class="update-btn" onclick="setupInstallAll()" id="setupInstallAllBtn" style="display:none;">Install All Missing</button>
+      <button class="update-btn" onclick="setupInstallEverything()" id="setupInstallAllBtn" style="display:none;">⚡ Install Everything</button>
       <button class="update-btn-ghost" onclick="closeSetupModal()">Close</button>
     </div>
   </div>
@@ -1556,77 +1569,176 @@ function renderSetupDeps(data) {
   const list = document.getElementById('setupDepsList');
   const installAllBtn = document.getElementById('setupInstallAllBtn');
   let html = '';
-  let hasMissingPip = false;
+  let missingCount = 0;
 
   const order = [
-    ['python', 'Python', '🐍'],
+    ['node', 'Node.js', '📦'],
+    ['git', 'Git', '🔧'],
     ['claude', 'Claude CLI', '🤖'],
+    ['claude_login', 'Claude Login', '🔑'],
+    ['python', 'Python', '🐍'],
     ['ffmpeg', 'FFmpeg', '🎬'],
     ['faster_whisper', 'Faster Whisper', '🎤'],
     ['ytdlp', 'yt-dlp', '📥']
   ];
 
+  // Synthesize virtual claude_login dep from claude's auth data
+  data.deps.claude_login = {
+    installed: !!(data.deps.claude && data.deps.claude.loggedIn),
+    version: data.deps.claude?.email ? `Logged in as ${data.deps.claude.email}` : null,
+    required: true,
+    description: 'Connect your Claude account to run AI tasks',
+  };
+
   for (const [key, label, icon] of order) {
     const dep = data.deps[key];
     if (!dep) continue;
     const ok = dep.installed;
-    const canInstall = dep.pipPackage && !ok && data.deps.python?.installed;
-    if (canInstall) hasMissingPip = true;
+    if (!ok) missingCount++;
 
-    html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid ${ok ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'};">
+    html += `<div id="setupRow-${key}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid ${ok ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'};">
       <span style="font-size:18px;">${icon}</span>
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:600;color:${ok ? '#E2E8F0' : '#F87171'};">${label}${dep.required ? ' <span style="font-size:9px;color:#888;font-weight:400;">(required)</span>' : ' <span style="font-size:9px;color:#666;font-weight:400;">(optional)</span>'}</div>
         <div style="font-size:11px;color:#666;">${dep.description}</div>
         ${dep.version ? `<div style="font-size:10px;color:#555;margin-top:2px;">${dep.version}</div>` : ''}
       </div>
-      <div style="display:flex;align-items:center;gap:6px;">
+      <div id="setupStatus-${key}" style="display:flex;align-items:center;gap:6px;">
         ${ok
           ? '<span style="color:#10B981;font-size:13px;font-weight:600;">✓ Ready</span>'
-          : dep.installUrl
-            ? `<a href="${dep.installUrl}" target="_blank" style="font-size:11px;color:#C084FC;text-decoration:underline;cursor:pointer;" onclick="if(window.electronAPI)window.electronAPI.openExternal('${dep.installUrl}')">Download</a>`
-            : canInstall
-              ? `<button onclick="setupInstallPkg('${dep.pipPackage}', this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(123,47,242,0.3);background:rgba(123,47,242,0.1);color:#C084FC;cursor:pointer;">Install</button>`
-              : dep.bundled
-                ? '<span style="color:#F87171;font-size:11px;">Missing</span>'
-                : '<span style="color:#F87171;font-size:11px;">Install Python first</span>'
+          : '<span style="color:#F87171;font-size:13px;">✗ Missing</span>'
         }
       </div>
     </div>`;
   }
 
   list.innerHTML = html;
-  installAllBtn.style.display = hasMissingPip ? '' : 'none';
+  // Show "Install Everything" if anything is missing
+  installAllBtn.style.display = missingCount > 0 ? '' : 'none';
 }
 
-async function setupInstallPkg(pkg, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'Installing...'; btn.style.opacity = '0.5'; }
-  try {
-    const r = await fetch('/api/setup/install', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ package: pkg })
-    });
-    const data = await r.json();
-    if (data.ok) {
-      if (btn) { btn.textContent = '✓ Done'; btn.style.color = '#10B981'; }
-      setTimeout(() => setupCheckAll(), 500);
-    } else {
-      if (btn) { btn.textContent = 'Failed'; btn.style.color = '#F87171'; }
-      alert('Install failed: ' + (data.details || data.error));
-    }
-  } catch (e) {
-    if (btn) { btn.textContent = 'Error'; btn.style.color = '#F87171'; }
-    alert('Install error: ' + e.message);
-  }
+// Single-package install (used internally by installEverything)
+async function _setupInstall(pkg) {
+  const r = await fetch('/api/setup/install', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ package: pkg })
+  });
+  return await r.json();
 }
 
-async function setupInstallAll() {
+// Install Everything — one click, full chain with progress
+async function setupInstallEverything() {
   const btn = document.getElementById('setupInstallAllBtn');
-  btn.disabled = true; btn.textContent = 'Installing...';
-  for (const pkg of ['yt-dlp', 'faster-whisper']) {
-    try { await setupInstallPkg(pkg, null); } catch(_) {}
+  const refreshBtn = document.getElementById('setupRefreshBtn');
+  const progressArea = document.getElementById('setupProgressArea');
+  const progressLabel = document.getElementById('setupProgressLabel');
+  const progressFill = document.getElementById('setupProgressFill');
+  const progressSteps = document.getElementById('setupProgressSteps');
+
+  btn.style.display = 'none';
+  refreshBtn.disabled = true;
+  progressArea.style.display = 'block';
+
+  const chain = [
+    { key: 'node', label: 'Node.js', pkg: 'node' },
+    { key: 'git', label: 'Git', pkg: 'git' },
+    { key: 'claude', label: 'Claude CLI', pkg: 'claude-cli' },
+    { key: 'claude_login', label: 'Claude Login', pkg: 'claude-login' },
+    { key: 'python', label: 'Python', pkg: 'python' },
+    { key: 'faster_whisper', label: 'Faster Whisper', pkg: 'faster-whisper' },
+    { key: 'ytdlp', label: 'yt-dlp', pkg: 'yt-dlp' },
+  ];
+  const status = chain.map(() => 'pending');
+
+  function renderProgress(idx) {
+    const pct = Math.round(((idx + 1) / chain.length) * 100);
+    progressFill.style.width = pct + '%';
+    let html = '';
+    for (let j = 0; j < chain.length; j++) {
+      const s = status[j];
+      const color = s === 'done' ? '#4ade80' : s === 'active' ? '#C084FC' : s === 'failed' ? '#f87171' : s === 'skipped' ? '#4ade80' : '#555';
+      const icon = s === 'done' || s === 'skipped' ? '✓' : s === 'active' ? '⟳' : s === 'failed' ? '✗' : '·';
+      html += `<div style="color:${color};${s === 'active' ? 'font-weight:600;' : ''}">${icon} ${chain[j].label}${s === 'active' ? ' — installing...' : ''}</div>`;
+    }
+    progressSteps.innerHTML = html;
+
+    // Also update the row status in the list
+    for (let j = 0; j < chain.length; j++) {
+      const el = document.getElementById('setupStatus-' + chain[j].key);
+      const row = document.getElementById('setupRow-' + chain[j].key);
+      if (!el || !row) continue;
+      if (status[j] === 'done' || status[j] === 'skipped') {
+        el.innerHTML = '<span style="color:#10B981;font-size:13px;font-weight:600;">✓ Ready</span>';
+        row.style.borderColor = 'rgba(16,185,129,0.2)';
+      } else if (status[j] === 'active') {
+        el.innerHTML = '<span style="color:#C084FC;font-size:12px;"><span class="spinner" style="width:12px;height:12px;border-width:2px;"></span> Installing</span>';
+        row.style.borderColor = 'rgba(123,47,242,0.3)';
+      } else if (status[j] === 'failed') {
+        el.innerHTML = '<span style="color:#F87171;font-size:13px;">✗ Failed</span>';
+      }
+    }
   }
-  btn.textContent = 'Install All Missing'; btn.disabled = false;
+
+  for (let i = 0; i < chain.length; i++) {
+    const { key, label, pkg } = chain[i];
+    // Fresh check before each install
+    let deps = {};
+    try {
+      const r = await fetch('/api/setup/check');
+      const d = await r.json();
+      deps = d.deps || {};
+      deps.claude_login = { installed: !!(deps.claude && deps.claude.loggedIn) };
+    } catch (_) {}
+
+    if (deps[key]?.installed) { status[i] = 'done'; renderProgress(i); continue; }
+
+    status[i] = 'active';
+    progressLabel.textContent = `Installing ${label}...`;
+    renderProgress(i);
+
+    // Claude login — user must interact
+    if (key === 'claude_login') {
+      try { await _setupInstall(pkg); } catch (_) {}
+      progressLabel.textContent = 'Complete Claude login in your browser...';
+      renderProgress(i);
+      let loggedIn = false;
+      for (let t = 0; t < 24; t++) {
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+          const r = await fetch('/api/setup/check');
+          const d = await r.json();
+          if (d.deps?.claude?.loggedIn) { loggedIn = true; break; }
+        } catch (_) {}
+      }
+      status[i] = loggedIn ? 'done' : 'failed';
+      renderProgress(i);
+      continue;
+    }
+
+    try {
+      const result = await _setupInstall(pkg);
+      await new Promise(r => setTimeout(r, 1000));
+      // Verify
+      const r2 = await fetch('/api/setup/check');
+      const d2 = await r2.json();
+      d2.deps.claude_login = { installed: !!(d2.deps.claude && d2.deps.claude.loggedIn) };
+      status[i] = d2.deps[key]?.installed ? 'done' : 'failed';
+    } catch (_) {
+      status[i] = 'failed';
+    }
+    renderProgress(i);
+  }
+
+  // Done
+  progressFill.style.width = '100%';
+  const doneCount = status.filter(s => s === 'done' || s === 'skipped').length;
+  const failCount = status.filter(s => s === 'failed').length;
+  progressLabel.textContent = failCount > 0
+    ? `Done! ${doneCount} ready, ${failCount} need attention`
+    : 'All done! Everything is ready.';
+  refreshBtn.disabled = false;
+  btn.style.display = failCount > 0 ? '' : 'none';
+  btn.textContent = '⚡ Retry Failed';
   setupCheckAll();
 }
 </script>

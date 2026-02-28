@@ -10,7 +10,12 @@ router.get('/terminal/sessions', (req, res) => {
 });
 
 router.post('/terminal/sessions', (req, res) => {
-  const { name, workingDir, skill, model } = req.body;
+  let { name, workingDir, skill, model } = req.body;
+  // Validate workingDir is actually a directory
+  if (workingDir) {
+    try { if (!fs.statSync(workingDir).isDirectory()) workingDir = null; }
+    catch (_) { workingDir = null; }
+  }
   try {
     const session = shared.terminalManager.createSession({ name, workingDir, skill, model });
     res.json({ ok: true, session });
@@ -23,11 +28,20 @@ router.post('/terminal/sessions/live', (req, res) => {
   const { name, workingDir, skill, model, task, context, persona } = req.body;
   if (!task) return res.status(400).json({ error: 'task is required' });
 
+  // Validate workingDir is actually a directory (not a file)
+  let safeWorkingDir = workingDir || null;
+  if (safeWorkingDir) {
+    try {
+      const stat = fs.statSync(safeWorkingDir);
+      if (!stat.isDirectory()) safeWorkingDir = null;
+    } catch (_) { safeWorkingDir = null; }
+  }
+
   try {
     // Create session
     const session = shared.terminalManager.createSession({
       name: name || 'Live Task',
-      workingDir: workingDir || null,
+      workingDir: safeWorkingDir,
       skill: skill || null,
       model: model || 'sonnet'
     });

@@ -1,3 +1,18 @@
+// ── Claude Auth Pre-flight Check (cached 60s) ──
+let _claudeAuthCache = null;
+let _claudeAuthTs = 0;
+async function checkClaudeReady() {
+  if (_claudeAuthCache && Date.now() - _claudeAuthTs < 60000) return _claudeAuthCache;
+  try {
+    const r = await fetch('/api/setup/check');
+    const data = await r.json();
+    const cl = data.deps?.claude || {};
+    _claudeAuthCache = { installed: !!cl.installed, loggedIn: !!cl.loggedIn };
+    _claudeAuthTs = Date.now();
+    return _claudeAuthCache;
+  } catch (_) { return { installed: false, loggedIn: false }; }
+}
+
 // ── Skill Change Handler ──
 async function refreshSkills() {
   const btn = document.querySelector('.btn-inline-refresh');
@@ -299,6 +314,10 @@ async function saveTask() {
 }
 
 async function goLive() {
+  const auth = await checkClaudeReady();
+  if (!auth.installed) { showToast('Claude CLI not installed — open Setup in sidebar', 'error'); return; }
+  if (!auth.loggedIn) { showToast('Claude not logged in — open Setup in sidebar to connect', 'error'); return; }
+
   const taskText = document.getElementById('taskInput').value.trim();
   if (!taskText) return alert('Enter a task description');
 
@@ -378,6 +397,10 @@ async function deleteTask(id) {
 async function retryById(id) { await api.moveTask(id, 'pending'); await refresh(); }
 
 async function runSingleTask(id) {
+  const auth = await checkClaudeReady();
+  if (!auth.installed) { showToast('Claude CLI not installed — open Setup in sidebar', 'error'); return; }
+  if (!auth.loggedIn) { showToast('Claude not logged in — open Setup in sidebar to connect', 'error'); return; }
+
   try {
     const res = await fetch(`/api/tasks/${id}/run`, { method: 'POST' });
     const data = await res.json();
@@ -725,6 +748,10 @@ async function showRunDebug() {
 
 async function runWorkers() {
   if (runningLock) return; // Prevent double-click
+  const auth = await checkClaudeReady();
+  if (!auth.installed) { showToast('Claude CLI not installed — open Setup in sidebar', 'error'); return; }
+  if (!auth.loggedIn) { showToast('Claude not logged in — open Setup in sidebar to connect', 'error'); return; }
+
   const btn = document.getElementById('runBtn');
   runningLock = true;
   btn.disabled = true;

@@ -440,9 +440,14 @@ function runClaude(task) {
     let killed = false;
     let timeoutId = null;
 
+    // Validate cwd is a real directory (avoids ENOTDIR)
+    let spawnCwd = task.working_dir || BASE_DIR;
+    try { if (!fs.statSync(spawnCwd).isDirectory()) spawnCwd = BASE_DIR; }
+    catch (_) { spawnCwd = BASE_DIR; }
+
     const child = spawn(cmd, [], {
       env: cleanEnv,
-      cwd: task.working_dir || BASE_DIR,
+      cwd: spawnCwd,
       shell: true,
       stdio: ['ignore', 'pipe', 'pipe'],  // stdin is handled by shell pipe (type file | claude)
       windowsHide: true

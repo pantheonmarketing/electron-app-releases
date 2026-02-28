@@ -17,6 +17,7 @@
     "skills/**",
     "reel-presets/**",
     "story-presets/**",
+    "skills.json",
     "package.json",
     "routes/**",
     "defaults/**",

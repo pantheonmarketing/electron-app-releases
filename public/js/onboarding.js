@@ -8,6 +8,35 @@
 const ONBOARDING_KEY = 'aiceo_onboarding_done';
 let _obPersona = {};
 
+function handlePersonaPhoto(input, targetId) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const size = 150;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      // Crop to square center
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      _obPersona.photo = dataUrl;
+      const target = document.getElementById(targetId);
+      if (target) {
+        target.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function shouldShowOnboarding() {
   if (localStorage.getItem(ONBOARDING_KEY)) return false;
   // Show if tasks list is empty (fresh install)
@@ -33,9 +62,15 @@ function showOnboarding() {
           <div class="ob-tagline">Let's personalize your AI</div>
           <p class="ob-desc" style="margin-bottom:18px;">Tell us a bit about you and your business. Your AI agents will use this on every task to give you better, more relevant results.</p>
           <div class="ob-form">
-            <div class="ob-field">
-              <label>Your name</label>
-              <input type="text" id="obPersonaName" placeholder="e.g. Sarah Chen" autocomplete="off">
+            <div class="ob-photo-row">
+              <div class="persona-photo-upload" id="obPersonaPhoto" onclick="document.getElementById('obPhotoInput').click()" title="Add your photo">
+                <span class="persona-photo-placeholder">+</span>
+              </div>
+              <input type="file" id="obPhotoInput" accept="image/*" style="display:none" onchange="handlePersonaPhoto(this, 'obPersonaPhoto')">
+              <div class="ob-field" style="flex:1">
+                <label>Your name</label>
+                <input type="text" id="obPersonaName" placeholder="e.g. Sarah Chen" autocomplete="off">
+              </div>
             </div>
             <div class="ob-field">
               <label>What's your business?</label>
@@ -58,6 +93,7 @@ function showOnboarding() {
         </div>`,
       onLeave() {
         _obPersona = {
+          ..._obPersona,
           name: (document.getElementById('obPersonaName') || {}).value?.trim() || '',
           business: (document.getElementById('obPersonaBusiness') || {}).value?.trim() || '',
           audience: (document.getElementById('obPersonaAudience') || {}).value?.trim() || '',
@@ -77,6 +113,11 @@ function showOnboarding() {
           if (el4) { el4.value = _obPersona.tone || ''; }
           const el5 = document.getElementById('obPersonaExtra');
           if (el5) { el5.value = _obPersona.extra || ''; }
+          // Restore photo if already uploaded
+          const photoEl = document.getElementById('obPersonaPhoto');
+          if (photoEl && _obPersona.photo) {
+            photoEl.innerHTML = `<img src="${_obPersona.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+          }
         }, 0);
       }
     },
@@ -272,6 +313,7 @@ function _saveOnboardingPersona() {
   const nameEl = document.getElementById('obPersonaName');
   if (nameEl) {
     _obPersona = {
+      ..._obPersona,
       name: nameEl.value.trim(),
       business: (document.getElementById('obPersonaBusiness') || {}).value?.trim() || '',
       audience: (document.getElementById('obPersonaAudience') || {}).value?.trim() || '',
@@ -279,7 +321,8 @@ function _saveOnboardingPersona() {
       extra: (document.getElementById('obPersonaExtra') || {}).value?.trim() || '',
     };
   }
-  const hasData = Object.values(_obPersona).some(v => v);
+  const { photo, ...textFields } = _obPersona;
+  const hasData = Object.values(textFields).some(v => v);
   if (!hasData) return;
   // Save persona to the default General space
   try {

@@ -43,7 +43,7 @@ if (shared.IS_MAC) {
   }
 }
 
-// Also fix PATH for Windows — npm global, Python, etc.
+// Also fix PATH for Windows — npm global, Python, Git, etc.
 if (shared.IS_WIN) {
   const home = require('os').homedir();
   const extraPaths = [
@@ -51,6 +51,8 @@ if (shared.IS_WIN) {
     path.join(home, 'AppData', 'Local', 'Programs', 'Python'),
     'C:\\Python312', 'C:\\Python311', 'C:\\Python310',
     path.join(home, '.local', 'bin'),
+    'C:\\Program Files\\Git\\cmd',                        // Git
+    'C:\\Program Files\\Git\\bin',
   ];
   // Find Python in AppData
   const pyBase = path.join(home, 'AppData', 'Local', 'Programs', 'Python');
@@ -67,6 +69,12 @@ if (shared.IS_WIN) {
   const newPaths = extraPaths.filter(p => !currentPath.includes(p) && fs.existsSync(p));
   if (newPaths.length > 0) {
     process.env.PATH = newPaths.join(';') + ';' + currentPath;
+  }
+
+  // Set CLAUDE_CODE_GIT_BASH_PATH so Claude CLI finds bash
+  const bashExe = 'C:\\Program Files\\Git\\bin\\bash.exe';
+  if (!process.env.CLAUDE_CODE_GIT_BASH_PATH && fs.existsSync(bashExe)) {
+    process.env.CLAUDE_CODE_GIT_BASH_PATH = bashExe;
   }
 }
 
@@ -87,10 +95,26 @@ function checkPython() {
 }
 
 function checkPythonImport(mod) {
-  const r = checkTool(`python -c "import ${mod}; print(${mod}.__version__)"`);
+  // Try importing the module — also try without __version__ as some packages don't have it
+  let r = checkTool(`python -c "import ${mod}; print(${mod}.__version__)"`);
+  if (!r.ok) r = checkTool(`python -c "import ${mod}; print('installed')"`);
   if (r.ok) return r;
-  if (shared.IS_MAC) return checkTool(`python3 -c "import ${mod}; print(${mod}.__version__)"`);
+  if (shared.IS_MAC) {
+    r = checkTool(`python3 -c "import ${mod}; print(${mod}.__version__)"`);
+    if (!r.ok) r = checkTool(`python3 -c "import ${mod}; print('installed')"`);
+  }
   return r;
+}
+
+function checkClaudeAuth() {
+  try {
+    const out = execSync('claude auth status', {
+      stdio: 'pipe', timeout: 8000, windowsHide: true, encoding: 'utf-8',
+      env: { ...process.env }
+    });
+    const parsed = JSON.parse(out.trim());
+    return { loggedIn: !!parsed.loggedIn, email: parsed.email || null };
+  } catch (_) { return { loggedIn: false, email: null }; }
 }
 
 router.get('/health', (req, res) => {
@@ -111,14 +135,20 @@ router.get('/setup/check', (req, res) => {
   deps.python = { installed: py.ok, version: py.version || null, required: false,
     description: 'Needed for subtitles & video downloads',
     canAutoInstall: true };
-  const cl = checkTool('claude --version');
-  deps.claude = { installed: cl.ok, version: cl.version || null, required: true,
-    description: 'AI brain that powers all tasks',
-    canAutoInstall: true };
   const nd = checkTool('node --version');
   deps.node = { installed: nd.ok, version: nd.version || null, required: true,
     description: 'Runtime engine (needed for Claude CLI)',
-    canAutoInstall: false };
+    canAutoInstall: true };
+  const gt = checkTool('git --version');
+  deps.git = { installed: gt.ok, version: gt.version || null, required: true,
+    description: 'Needed by Claude CLI on Windows (provides git-bash)',
+    canAutoInstall: true };
+  // Claude needs both Node (for npm install) and Git (for git-bash runtime)
+  const cl = checkTool('claude --version');
+  const auth = cl.ok ? checkClaudeAuth() : { loggedIn: false, email: null };
+  deps.claude = { installed: cl.ok, version: cl.version || null, required: true,
+    description: 'AI brain that powers all tasks',
+    canAutoInstall: nd.ok && gt.ok, loggedIn: auth.loggedIn, email: auth.email };
   const fw = checkPythonImport('faster_whisper');
   deps.faster_whisper = { installed: fw.ok, version: fw.version || null, required: false,
     description: 'Auto-generates subtitles from speech',
@@ -136,6 +166,51 @@ router.get('/setup/check', (req, res) => {
   res.json({ deps, allRequired, allOptional, allGood: allRequired && allOptional });
 });
 
+// ── Remote setup logging ──
+// Fire-and-forget: log every install attempt to Vercel/Neon so we can debug student issues
+const SETUP_LOG_URL = 'https://www.aicreatorworkshop.com/api/setup-log';
+let _logMeta = null; // cached machine info, populated on first call
+
+function getLogMeta() {
+  if (_logMeta) return _logMeta;
+  const os = require('os');
+  _logMeta = {
+    computer_name: os.hostname(),
+    os_info: `${os.platform()} ${os.release()} (${os.arch()})`,
+    app_version: require('../package.json').version,
+  };
+  // Try to read license key from stored file (Electron saves to %APPDATA%\AI CEO\)
+  try {
+    const candidates = [
+      path.join(shared.getAppDataDir(), 'AI CEO', 'license.json'),
+      path.join(shared.getAppDataDir(), 'electron', 'license.json'),
+    ];
+    for (const licFile of candidates) {
+      if (fs.existsSync(licFile)) {
+        const lic = JSON.parse(fs.readFileSync(licFile, 'utf-8'));
+        if (lic.key) { _logMeta.license_key = lic.key; break; }
+      }
+    }
+  } catch (_) {}
+  return _logMeta;
+}
+
+function sendSetupLog(pkg, success, output, error) {
+  const meta = getLogMeta();
+  const body = { ...meta, package: pkg, success, output: (output || '').slice(0, 4000), error: (error || '').slice(0, 4000) };
+  // Fire and forget — never block the response
+  const https = require('https');
+  const data = JSON.stringify(body);
+  const url = new URL(SETUP_LOG_URL);
+  const req = https.request({
+    hostname: url.hostname, port: 443, path: url.pathname,
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+  }, () => {});
+  req.on('error', () => {}); // swallow errors
+  req.write(data);
+  req.end();
+}
+
 // Expanded install endpoint — handles all dependencies
 const runCmd = (cmd, opts) => new Promise((resolve, reject) => {
   const { exec: execCb } = require('child_process');
@@ -148,64 +223,274 @@ const runCmd = (cmd, opts) => new Promise((resolve, reject) => {
 
 router.post('/setup/install', express.json(), async (req, res) => {
   const { package: pkg } = req.body;
-  const allowed = ['faster-whisper', 'yt-dlp', 'claude-cli', 'python'];
+  const allowed = ['faster-whisper', 'yt-dlp', 'claude-cli', 'python', 'claude-login', 'node', 'git'];
   if (!pkg || !allowed.includes(pkg)) {
     return res.status(400).json({ ok: false, error: `Invalid package. Allowed: ${allowed.join(', ')}` });
   }
 
   console.log(`[Setup] Installing ${pkg}...`);
 
+  // Helper: respond + log in one call
+  const succeed = (data) => { sendSetupLog(pkg, true, data.output || data.message || '', ''); res.json(data); };
+  const fail = (status, data) => { sendSetupLog(pkg, false, '', data.error + (data.details ? ' | ' + data.details : '')); res.status(status).json(data); };
+
   try {
-    if (pkg === 'claude-cli') {
-      // Install Claude CLI globally via npm
+    if (pkg === 'node') {
+      // Install Node.js via direct download
+      if (shared.IS_WIN) {
+        try {
+          const nodeUrl = 'https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi';
+          const psCmd = `powershell -Command "` +
+            `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
+            `Write-Host 'Downloading Node.js...'; ` +
+            `Invoke-WebRequest -Uri '${nodeUrl}' -OutFile $env:TEMP\\node-install.msi -UseBasicParsing; ` +
+            `Write-Host 'Installing Node.js...'; ` +
+            `Start-Process msiexec.exe -ArgumentList '/i', $env:TEMP\\node-install.msi, '/quiet', '/norestart' -Wait; ` +
+            `Write-Host 'Done'"`;
+          await runCmd(psCmd, { timeout: 300 * 1000 });
+          const newNodePath = 'C:\\Program Files\\nodejs';
+          if (!process.env.PATH.includes(newNodePath)) {
+            process.env.PATH = newNodePath + ';' + process.env.PATH;
+          }
+          console.log(`[Setup] Node.js installed`);
+          succeed({ ok: true, package: pkg, message: 'Node.js installed! Click Re-check to update the list.' });
+        } catch (e) {
+          fail(500, { ok: false, error: 'Failed to install Node.js automatically.', details: (e.stderr || e.message).slice(0, 500) });
+        }
+      } else if (shared.IS_MAC) {
+        try {
+          await runCmd('which brew');
+          const { stdout } = await runCmd('brew install node', { timeout: 300 * 1000 });
+          succeed({ ok: true, package: pkg, output: stdout.slice(-500) });
+        } catch (_) {
+          fail(500, { ok: false, error: 'Please install Homebrew first (brew.sh), then re-try.' });
+        }
+      } else {
+        fail(400, { ok: false, error: 'Use your package manager to install nodejs' });
+      }
+
+    } else if (pkg === 'git') {
+      // Install Git for Windows (needed by Claude CLI for git-bash)
+      if (shared.IS_WIN) {
+        try {
+          const gitUrl = 'https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.2/Git-2.47.1.2-64-bit.exe';
+          const psCmd = `powershell -Command "` +
+            `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
+            `Write-Host 'Downloading Git for Windows...'; ` +
+            `Invoke-WebRequest -Uri '${gitUrl}' -OutFile $env:TEMP\\git-install.exe -UseBasicParsing; ` +
+            `Write-Host 'Installing Git...'; ` +
+            `Start-Process $env:TEMP\\git-install.exe -ArgumentList '/VERYSILENT', '/NORESTART', '/NOCANCEL', '/SP-' -Wait; ` +
+            `Write-Host 'Done'"`;
+          await runCmd(psCmd, { timeout: 300 * 1000 });
+          // Add Git to PATH and set CLAUDE_CODE_GIT_BASH_PATH
+          const gitPaths = ['C:\\Program Files\\Git\\cmd', 'C:\\Program Files\\Git\\bin'];
+          for (const p of gitPaths) {
+            if (!process.env.PATH.includes(p)) process.env.PATH = p + ';' + process.env.PATH;
+          }
+          const bashExe = 'C:\\Program Files\\Git\\bin\\bash.exe';
+          if (fs.existsSync(bashExe)) {
+            process.env.CLAUDE_CODE_GIT_BASH_PATH = bashExe;
+          }
+          console.log(`[Setup] Git installed`);
+          succeed({ ok: true, package: pkg, message: 'Git installed! Click Re-check to update the list.' });
+        } catch (e) {
+          fail(500, { ok: false, error: 'Failed to install Git automatically.', details: (e.stderr || e.message).slice(0, 500) });
+        }
+      } else if (shared.IS_MAC) {
+        try {
+          await runCmd('xcode-select --install', { timeout: 10 * 1000 });
+          succeed({ ok: true, package: pkg, message: 'Installing Xcode Command Line Tools (includes Git). A system dialog should appear.' });
+        } catch (_) {
+          fail(500, { ok: false, error: 'Please install Git via Homebrew: brew install git' });
+        }
+      } else {
+        fail(400, { ok: false, error: 'Use your package manager to install git' });
+      }
+
+    } else if (pkg === 'claude-login') {
+      // First check if already logged in (maybe user logged in manually)
+      const preAuth = checkClaudeAuth();
+      if (preAuth.loggedIn) {
+        console.log(`[Setup] Claude already logged in: ${preAuth.email}`);
+        succeed({ ok: true, package: pkg, email: preAuth.email, message: `Already logged in as ${preAuth.email}` });
+        return;
+      }
+
+      // Spawn a detached CMD window for login — don't block the HTTP response
+      const { spawn } = require('child_process');
+      if (shared.IS_WIN) {
+        // Ensure CLAUDE_CODE_GIT_BASH_PATH is set for the spawned process
+        const bashExe = 'C:\\Program Files\\Git\\bin\\bash.exe';
+        if (fs.existsSync(bashExe) && !process.env.CLAUDE_CODE_GIT_BASH_PATH) {
+          process.env.CLAUDE_CODE_GIT_BASH_PATH = bashExe;
+        }
+        // Open a CMD window that stays open (/k) so the user can see what's happening
+        const child = spawn('cmd.exe', ['/c', 'start', 'cmd', '/k',
+          'echo. && echo   Complete the login in your browser... && echo. && claude auth login && echo. && echo   Login complete! You can close this window. && echo   Then click Re-check in the setup page.'],
+          { detached: true, stdio: 'ignore', windowsHide: false, env: { ...process.env } });
+        child.unref();
+      } else if (shared.IS_MAC) {
+        try {
+          const { execSync: es } = require('child_process');
+          es('osascript -e \'tell application "Terminal" to do script "claude auth login"\'', { timeout: 5000 });
+        } catch (_) {}
+      } else {
+        // Linux — try opening in a terminal emulator
+        const child = spawn('x-terminal-emulator', ['-e', 'claude auth login'],
+          { detached: true, stdio: 'ignore' });
+        child.unref();
+      }
+
+      // Wait a few seconds then check — user might have a cached session
+      await new Promise(r => setTimeout(r, 3000));
+      const auth = checkClaudeAuth();
+      if (auth.loggedIn) {
+        console.log(`[Setup] Claude login successful: ${auth.email}`);
+        succeed({ ok: true, package: pkg, email: auth.email, message: `Logged in as ${auth.email}` });
+      } else {
+        // Not an error — the login window is open, user just needs to complete it
+        sendSetupLog(pkg, false, '', 'Login window opened but not yet completed');
+        res.json({ ok: true, package: pkg, pending: true,
+          message: 'A login window opened — complete the login in your browser, then click Re-check here.' });
+      }
+
+    } else if (pkg === 'claude-cli') {
+      const npmCheck = checkTool('npm --version');
+      if (!npmCheck.ok) {
+        return fail(400, { ok: false, error: 'Node.js must be installed first (it provides npm). Install Node.js above, then retry.' });
+      }
       const { stdout } = await runCmd('npm install -g @anthropic-ai/claude-code');
+      const npmGlobalBin = path.join(require('os').homedir(), 'AppData', 'Roaming', 'npm');
+      if (shared.IS_WIN && !process.env.PATH.includes(npmGlobalBin)) {
+        process.env.PATH = npmGlobalBin + ';' + process.env.PATH;
+      }
+      if (shared.IS_MAC) {
+        try {
+          const prefix = execSync('npm prefix -g', { encoding: 'utf-8', timeout: 5000 }).trim();
+          const macBin = path.join(prefix, 'bin');
+          if (!process.env.PATH.includes(macBin)) process.env.PATH = macBin + ':' + process.env.PATH;
+        } catch (_) {}
+      }
       console.log(`[Setup] Claude CLI installed`);
-      res.json({ ok: true, package: pkg, output: stdout.slice(-500),
-        message: 'Claude CLI installed! You still need to run "claude login" in a terminal to authenticate.' });
+      succeed({ ok: true, package: pkg, output: stdout.slice(-500), message: 'Claude CLI installed! Now click Login to connect your account.' });
 
     } else if (pkg === 'python') {
-      // Platform-specific Python install
       if (shared.IS_WIN) {
-        // Windows: try winget first
         try {
           const { stdout } = await runCmd('winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements',
             { timeout: 300 * 1000 });
-          res.json({ ok: true, package: pkg, output: stdout.slice(-500),
-            message: 'Python installed! Restart the app for it to be detected.' });
+          const homeW = require('os').homedir();
+          const pyPathsW = [
+            'C:\\Program Files\\Python312', 'C:\\Program Files\\Python312\\Scripts',
+            path.join(homeW, 'AppData', 'Local', 'Programs', 'Python', 'Python312'),
+            path.join(homeW, 'AppData', 'Local', 'Programs', 'Python', 'Python312', 'Scripts'),
+          ];
+          for (const p of pyPathsW) {
+            if (fs.existsSync(p) && !process.env.PATH.includes(p)) process.env.PATH = p + ';' + process.env.PATH;
+          }
+          succeed({ ok: true, package: pkg, output: stdout.slice(-500), message: 'Python installed! Click Re-check to update.' });
         } catch (e) {
-          res.status(500).json({ ok: false, error: 'Automatic install failed. Please download Python from python.org/downloads',
-            details: (e.stderr || e.message).slice(0, 500) });
+          console.log('[Setup] winget failed, trying direct Python download...');
+          try {
+            const pyUrl = 'https://www.python.org/ftp/python/3.12.9/python-3.12.9-amd64.exe';
+            const psCmd = `powershell -Command "` +
+              `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
+              `Write-Host 'Downloading Python...'; ` +
+              `Invoke-WebRequest -Uri '${pyUrl}' -OutFile $env:TEMP\\python-install.exe -UseBasicParsing; ` +
+              `Write-Host 'Installing Python...'; ` +
+              `Start-Process $env:TEMP\\python-install.exe -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=1' -Wait; ` +
+              `Write-Host 'Done'"`;
+            await runCmd(psCmd, { timeout: 300 * 1000 });
+            const home = require('os').homedir();
+            const pyPaths = [
+              'C:\\Program Files\\Python312', 'C:\\Program Files\\Python312\\Scripts',
+              path.join(home, 'AppData', 'Local', 'Programs', 'Python', 'Python312'),
+              path.join(home, 'AppData', 'Local', 'Programs', 'Python', 'Python312', 'Scripts'),
+            ];
+            for (const p of pyPaths) {
+              if (fs.existsSync(p) && !process.env.PATH.includes(p)) process.env.PATH = p + ';' + process.env.PATH;
+            }
+            console.log(`[Setup] Python installed via direct download`);
+            succeed({ ok: true, package: pkg, message: 'Python installed! Click Re-check to update.' });
+          } catch (e2) {
+            fail(500, { ok: false, error: 'Automatic install failed. Please download Python from python.org/downloads', details: (e2.stderr || e2.message).slice(0, 500) });
+          }
         }
       } else if (shared.IS_MAC) {
-        // Mac: try brew, or xcode command line tools (which includes python3)
         try {
           await runCmd('which brew');
           const { stdout } = await runCmd('brew install python3', { timeout: 300 * 1000 });
-          res.json({ ok: true, package: pkg, output: stdout.slice(-500) });
+          succeed({ ok: true, package: pkg, output: stdout.slice(-500) });
         } catch (_) {
-          // No brew — try xcode-select
           try {
             await runCmd('xcode-select --install', { timeout: 10 * 1000 });
-            res.json({ ok: true, package: pkg,
-              message: 'Installing Xcode Command Line Tools (includes Python). A system dialog should appear — click Install.' });
+            succeed({ ok: true, package: pkg, message: 'Installing Xcode Command Line Tools (includes Python). A system dialog should appear — click Install.' });
           } catch (e2) {
-            res.status(500).json({ ok: false, error: 'Please install Python from python.org/downloads or install Homebrew first (brew.sh)' });
+            fail(500, { ok: false, error: 'Please install Python from python.org/downloads or install Homebrew first (brew.sh)' });
           }
         }
       } else {
-        res.status(400).json({ ok: false, error: 'Use your package manager to install python3' });
+        fail(400, { ok: false, error: 'Use your package manager to install python3' });
       }
 
     } else {
       // pip packages (faster-whisper, yt-dlp)
+
+      // faster-whisper needs Visual C++ Redistributable for ctranslate2.dll on Windows
+      if (pkg === 'faster-whisper' && shared.IS_WIN) {
+        // Check if VC++ Redist is already installed (look for vcruntime140.dll in System32)
+        const vcDll = 'C:\\Windows\\System32\\vcruntime140.dll';
+        if (!fs.existsSync(vcDll)) {
+          console.log('[Setup] Installing Visual C++ Redistributable (needed by faster-whisper)...');
+          try {
+            const vcUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
+            const psCmd = `powershell -Command "` +
+              `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ` +
+              `Write-Host 'Downloading Visual C++ Redistributable...'; ` +
+              `Invoke-WebRequest -Uri '${vcUrl}' -OutFile $env:TEMP\\vc_redist.x64.exe -UseBasicParsing; ` +
+              `Write-Host 'Installing...'; ` +
+              `Start-Process $env:TEMP\\vc_redist.x64.exe -ArgumentList '/quiet', '/norestart' -Wait; ` +
+              `Write-Host 'Done'"`;
+            await runCmd(psCmd, { timeout: 120 * 1000 });
+            console.log('[Setup] Visual C++ Redistributable installed');
+          } catch (vcErr) {
+            console.log('[Setup] VC++ Redist install failed:', vcErr.message?.slice(0, 200));
+            sendSetupLog('vc-redist', false, '', (vcErr.stderr || vcErr.message).slice(0, 2000));
+          }
+        }
+      }
+
       const pipCmd = shared.IS_MAC ? 'python3 -m pip' : 'python -m pip';
-      const { stdout } = await runCmd(`${pipCmd} install ${pkg}`);
-      console.log(`[Setup] ${pkg} installed successfully`);
-      res.json({ ok: true, package: pkg, output: stdout.slice(-500) });
+      const { stdout, stderr } = await runCmd(`${pipCmd} install ${pkg}`, { timeout: 300 * 1000 });
+      console.log(`[Setup] ${pkg} pip install finished`);
+
+      // Verify the install actually worked by importing
+      const modName = pkg === 'faster-whisper' ? 'faster_whisper' : pkg.replace(/-/g, '_');
+      let verify = checkTool(`python -c "import ${modName}; print('OK')"`);
+      if (!verify.ok && shared.IS_MAC) {
+        verify = checkTool(`python3 -c "import ${modName}; print('OK')"`);
+      }
+
+      if (verify.ok) {
+        succeed({ ok: true, package: pkg, output: stdout.slice(-500) });
+      } else {
+        // pip said OK but import fails — capture the actual error for remote logging
+        let importErr = '';
+        try {
+          execSync(`python -c "import ${modName}"`, { encoding: 'utf-8', timeout: 8000, windowsHide: true });
+        } catch (ie) {
+          importErr = (ie.stderr || ie.message || '').slice(0, 2000);
+        }
+        const pipOut = (stdout + '\n' + (stderr || '')).slice(-1500);
+        sendSetupLog(pkg, false, pipOut, `import ${modName} failed: ${importErr}`);
+        fail(500, { ok: false,
+          error: `${pkg} was installed by pip but failed to load. This usually means a system library is missing.`,
+          details: importErr.slice(0, 500) });
+      }
     }
   } catch (err) {
     console.error(`[Setup] Failed to install ${pkg}:`, err.message?.slice(0, 200));
-    res.status(500).json({ ok: false, error: `Failed to install ${pkg}`, details: (err.stderr || err.message).slice(0, 500) });
+    fail(500, { ok: false, error: `Failed to install ${pkg}`, details: (err.stderr || err.message).slice(0, 500) });
   }
 });
 

@@ -142,6 +142,16 @@ function openSpaceSettings(spaceId) {
   document.getElementById('spacePersonaAudience').value = p.audience || '';
   document.getElementById('spacePersonaTone').value = p.tone || '';
   document.getElementById('spacePersonaExtra').value = p.extra || '';
+  // Restore photo
+  const photoEl = document.getElementById('spacePersonaPhoto');
+  if (photoEl) {
+    if (p.photo) {
+      photoEl.innerHTML = `<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    } else {
+      photoEl.innerHTML = '<span class="space-photo-placeholder">+</span>';
+    }
+    photoEl._photoData = p.photo || null;
+  }
 
   // Populate project dropdown
   const sel = document.getElementById('spaceProjectInput');
@@ -200,11 +210,42 @@ function saveSpaceSettings() {
     tone: document.getElementById('spacePersonaTone').value.trim(),
     extra: document.getElementById('spacePersonaExtra').value.trim(),
   };
-  space.persona = Object.values(persona).some(v => v) ? persona : null;
+  const photoEl = document.getElementById('spacePersonaPhoto');
+  if (photoEl && photoEl._photoData) persona.photo = photoEl._photoData;
+  const { photo, ...textFields } = persona;
+  space.persona = Object.values(textFields).some(v => v) ? persona : null;
 
   saveSpaces();
   renderSpaceTabs();
   closeSpaceModal();
+}
+
+function handleSpacePersonaPhoto(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const size = 150;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      const target = document.getElementById('spacePersonaPhoto');
+      if (target) {
+        target.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+        target._photoData = dataUrl;
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 async function deleteCurrentSpace() {

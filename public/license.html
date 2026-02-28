@@ -250,7 +250,7 @@
             successMsg.classList.add('show');
             setTimeout(() => window.electronAPI.goToApp(), 1000);
           } else {
-            errorMsg.textContent = 'Invalid license key. Please check and try again.';
+            errorMsg.textContent = result?.error || 'Invalid license key. Please check and try again.';
             errorMsg.classList.add('show');
           }
         } else {

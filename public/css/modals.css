@@ -748,6 +748,36 @@ details[open] .advanced-toggle::before { transform: rotate(90deg); }
 }
 .ob-field input::placeholder, .ob-field textarea::placeholder { color: #555; }
 
+/* Persona photo upload */
+.ob-photo-row { display: flex; align-items: flex-start; gap: 14px; }
+.persona-photo-upload {
+  width: 56px; height: 56px; min-width: 56px; border-radius: 50%;
+  background: rgba(123, 47, 242, 0.15); border: 2px dashed rgba(123, 47, 242, 0.4);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: border-color 0.2s, background 0.2s;
+  overflow: hidden; margin-top: 18px;
+}
+.persona-photo-upload:hover {
+  border-color: rgba(123, 47, 242, 0.7); background: rgba(123, 47, 242, 0.25);
+}
+.persona-photo-placeholder {
+  font-size: 22px; color: rgba(123, 47, 242, 0.6); line-height: 1;
+}
+/* Space settings photo (smaller) */
+.space-photo-upload {
+  width: 48px; height: 48px; min-width: 48px; border-radius: 50%;
+  background: rgba(123, 47, 242, 0.12); border: 2px dashed rgba(123, 47, 242, 0.35);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: border-color 0.2s, background 0.2s;
+  overflow: hidden;
+}
+.space-photo-upload:hover {
+  border-color: rgba(123, 47, 242, 0.6); background: rgba(123, 47, 242, 0.2);
+}
+.space-photo-placeholder {
+  font-size: 18px; color: rgba(123, 47, 242, 0.5); line-height: 1;
+}
+
 /* Legacy welcome (kept for reference) */
 .ob-welcome { text-align: center; }
 .ob-logo {

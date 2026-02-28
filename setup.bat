@@ -13,7 +13,7 @@ echo  Just follow the prompts!
 echo.
 
 :: ── Step 1: Check / Install Node.js ──
-echo  [1/6] Checking Node.js...
+echo  [1/5] Checking Node.js...
 node --version >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -70,7 +70,7 @@ if errorlevel 1 (
 )
 
 :: ── Step 2: Check / Install Claude CLI ──
-echo  [2/6] Checking Claude CLI...
+echo  [2/5] Checking Claude CLI...
 claude --version >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -108,7 +108,7 @@ if errorlevel 1 (
 )
 
 :: ── Step 3: Install app dependencies ──
-echo  [3/6] Installing app dependencies...
+echo  [3/5] Installing app dependencies...
 call npm install --silent 2>nul
 if errorlevel 1 (
     echo  Retrying...
@@ -117,7 +117,7 @@ if errorlevel 1 (
 echo  OK - Dependencies installed
 
 :: ── Step 4: Create workspace folders ──
-echo  [4/6] Setting up workspace...
+echo  [4/5] Setting up workspace...
 if not exist results mkdir results
 if not exist logs mkdir logs
 if not exist uploads mkdir uploads
@@ -136,14 +136,14 @@ if not exist projects.json (
 echo  OK - Workspace ready
 
 :: ── Step 5: Log in to Claude ──
-echo  [5/6] Claude Login...
+echo  [5/5] Claude Login...
 echo.
 echo  -----------------------------------------------
-echo   You need to log in to your Claude Max account
+echo   You need to log in to your Claude account
 echo  -----------------------------------------------
 echo.
 echo  A browser window will open. Log in with the
-echo  account that has your Claude Max subscription.
+echo  account that has your Claude subscription.
 echo.
 echo  After logging in, come back to this window.
 echo.
@@ -157,28 +157,6 @@ if /i "!DO_LOGIN!"=="y" (
 ) else (
     echo.
     echo  Skipped. Run this later:  claude login
-)
-
-:: ── Step 6: Enable autonomous mode ──
-echo  [6/6] Enabling autonomous mode...
-echo.
-echo  -----------------------------------------------
-echo   One last thing!
-echo  -----------------------------------------------
-echo.
-echo  The task manager needs Claude to run without
-echo  asking permission for every single action.
-echo.
-echo  A Claude window will open. Just type "y" when
-echo  it asks about trusting files, then press Ctrl+C.
-echo.
-set /p ENABLE_AUTO="  Ready? (y/n): "
-if /i "!ENABLE_AUTO!"=="y" (
-    start /wait cmd /c "claude --dangerously-skip-permissions"
-    echo  OK - Autonomous mode enabled!
-) else (
-    echo.
-    echo  Skipped. Run later:  claude --dangerously-skip-permissions
 )
 
 :: ── Done! ──

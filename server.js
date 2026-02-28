@@ -212,8 +212,8 @@ if (IS_PACKAGED_ELECTRON) {
   if (fs.existsSync(bundledSkillsJson)) {
     try {
       const bundled = JSON.parse(fs.readFileSync(bundledSkillsJson, 'utf-8'));
-      const local = fs.existsSync(shared.SKILLS_FILE)
-        ? JSON.parse(fs.readFileSync(shared.SKILLS_FILE, 'utf-8'))
+      const local = fs.existsSync(SKILLS_FILE)
+        ? JSON.parse(fs.readFileSync(SKILLS_FILE, 'utf-8'))
         : {};
       // Load saved configs (protected file that survives all merges/syncs)
       const savedConfigs = fs.existsSync(SKILL_CONFIGS_FILE)
@@ -227,7 +227,7 @@ if (IS_PACKAGED_ELECTRON) {
         // Restore config_values from protected file (highest priority)
         if (savedConfigs[name]) merged[name].config_values = savedConfigs[name];
       }
-      fs.writeFileSync(shared.SKILLS_FILE, JSON.stringify(merged, null, 2));
+      fs.writeFileSync(SKILLS_FILE, JSON.stringify(merged, null, 2));
       console.log(`[Server] Skills registry: ${Object.keys(merged).length} skills (${Object.keys(bundled).length} bundled)`);
     } catch (e) {
       console.error(`[Server] Failed to merge skills.json: ${e.message}`);
@@ -407,6 +407,8 @@ app.use('/api', require('./routes/stories'));
 // ── Claude CLI check ──
 let claudeCliOk = false;
 let claudeCliVersion = '';
+let claudeLoggedIn = false;
+let claudeEmail = '';
 function checkClaudeCli() {
   try {
     const result = execSync('claude --version', { timeout: 10000, encoding: 'utf-8', windowsHide: true }).trim();
@@ -419,13 +421,33 @@ function checkClaudeCli() {
     return false;
   }
 }
+function checkClaudeAuth() {
+  try {
+    const out = execSync('claude auth status', {
+      stdio: 'pipe', timeout: 8000, windowsHide: true, encoding: 'utf-8',
+      env: { ...process.env }
+    });
+    const parsed = JSON.parse(out.trim());
+    claudeLoggedIn = !!parsed.loggedIn;
+    claudeEmail = parsed.email || '';
+  } catch (_) {
+    claudeLoggedIn = false;
+    claudeEmail = '';
+  }
+}
 
 // Override the /api/health route with the extended version that includes uptime
+// Re-checks Claude CLI + auth status on every call (not cached from boot time)
+// so banner updates after user installs Claude via Setup
 app.get('/api/health', (req, res) => {
+  checkClaudeCli();
+  if (claudeCliOk) checkClaudeAuth();
   res.json({
     ok: true,
     claude_cli: claudeCliOk,
     claude_version: claudeCliVersion,
+    claude_logged_in: claudeLoggedIn,
+    claude_email: claudeEmail,
     tasks: helpers.readTasks().length,
     uptime: process.uptime()
   });
@@ -451,6 +473,13 @@ function startServer() {
 
     if (checkClaudeCli()) {
       console.log(`  ✓ Claude CLI found: ${claudeCliVersion}`);
+      checkClaudeAuth();
+      if (claudeLoggedIn) {
+        console.log(`  ✓ Logged in as: ${claudeEmail}`);
+      } else {
+        console.log('  ⚠ Claude CLI installed but NOT logged in');
+        console.log('    Run "claude auth login" to connect your account');
+      }
     } else {
       console.log('  ⚠ Claude CLI not found in PATH!');
       console.log('    Tasks will fail until "claude" is available.');
