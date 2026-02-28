@@ -201,9 +201,11 @@ function showOnboarding() {
     }
   ];
 
+  let firstRender = true;
   function render() {
-    // Save current step data before leaving
-    if (steps[currentStep] && steps[currentStep].onLeave) steps[currentStep].onLeave();
+    // Save current step data before leaving (skip on first render — DOM not yet built)
+    if (!firstRender && steps[currentStep] && steps[currentStep].onLeave) steps[currentStep].onLeave();
+    firstRender = false;
 
     overlay.innerHTML = `
       <div class="ob-modal">
@@ -295,6 +297,8 @@ function _saveOnboardingPersona() {
 
 function finishOnboarding() {
   _saveOnboardingPersona();
+  // Refresh in-memory spaces so getActiveSpace() sees the new persona
+  if (typeof loadSpaces === 'function') loadSpaces();
   localStorage.setItem(ONBOARDING_KEY, 'true');
   const overlay = document.getElementById('onboardingOverlay');
   if (overlay) {

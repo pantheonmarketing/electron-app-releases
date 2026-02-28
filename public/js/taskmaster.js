@@ -199,7 +199,8 @@ async function approvePlan() {
       plan: currentPlan,
       space_id: activeSpaceId,
       working_dir: space.working_dir || null,
-      context: space.context || []
+      context: space.context || [],
+      persona: space.persona || undefined
     });
 
     if (!result.ok) {
@@ -311,7 +312,8 @@ async function runRoutine(routineId) {
       context: space.context || [],
       extra_context: [],
       working_dir: space.working_dir || null,
-      space_id: activeSpaceId
+      space_id: activeSpaceId,
+      persona: space.persona || undefined
     });
     created++;
   }

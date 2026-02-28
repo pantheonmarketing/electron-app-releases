@@ -91,7 +91,7 @@ The "depends_on" array contains the order numbers of steps this step needs outpu
 });
 
 router.post('/plan/approve', (req, res) => {
-  const { plan, space_id, working_dir, context } = req.body;
+  const { plan, space_id, working_dir, context, persona } = req.body;
   if (!plan || !plan.steps || plan.steps.length === 0) {
     return res.status(400).json({ error: 'Plan with steps required' });
   }
@@ -116,6 +116,7 @@ router.post('/plan/approve', (req, res) => {
       priority: step.order, model: step.model || 'sonnet', max_turns: 25,
       context: context || [], extra_context: [],
       working_dir: working_dir || null, space_id: space_id || 'general',
+      persona: persona || null,
       plan_id: plan.plan_name, plan_step: step.order, plan_total: totalSteps,
       worker: null, started_at: null, completed_at: null, result_file: null, error: null
     };

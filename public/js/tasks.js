@@ -638,7 +638,8 @@ async function submitFollowUp() {
       context: parentTask.context || [],
       extra_context: parentTask.extra_context || [],
       working_dir: parentTask.working_dir || null,
-      space_id: parentTask.space_id || 'general'
+      space_id: parentTask.space_id || 'general',
+      persona: parentTask.persona || undefined
     });
 
     // Success — close modal, refresh, and auto-run immediately

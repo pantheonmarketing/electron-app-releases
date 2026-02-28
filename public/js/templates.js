@@ -139,7 +139,8 @@ async function createTaskFromTemplate(tpl, vars) {
     context: space.context || [],
     extra_context: [],
     working_dir: space.working_dir || null,
-    space_id: activeSpaceId
+    space_id: activeSpaceId,
+    persona: space.persona || undefined
   };
 
   await api.createTask(taskData);

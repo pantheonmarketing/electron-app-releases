@@ -719,6 +719,7 @@ details[open] .advanced-toggle::before { transform: rotate(90deg); }
 }
 
 .ob-content { min-height: 240px; display: flex; align-items: center; justify-content: center; overflow-y: auto; max-height: 60vh; }
+.ob-content:has(.ob-persona) { align-items: flex-start; }
 
 /* Step 0: AI Memory / Persona */
 .ob-persona { width: 100%; }

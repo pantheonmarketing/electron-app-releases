@@ -5,7 +5,7 @@ function loadSpaces() {
   } catch (e) { spaces = []; }
   if (spaces.length === 0) {
     // Create default "General" space
-    spaces = [{ id: 'general', name: 'General', project_id: null, working_dir: null, context: [] }];
+    spaces = [{ id: 'general', name: 'General', project_id: null, working_dir: null, context: [], persona: null }];
     saveSpaces();
   }
   activeSpaceId = localStorage.getItem('claude-tm-active-space') || spaces[0].id;
@@ -114,7 +114,7 @@ function createNewSpace() {
     alert('A space with that ID already exists');
     return;
   }
-  spaces.push({ id, name: name.trim(), project_id: null, working_dir: null, context: [] });
+  spaces.push({ id, name: name.trim(), project_id: null, working_dir: null, context: [], persona: null });
   activeSpaceId = id;
   saveSpaces();
   renderSpaceTabs();
