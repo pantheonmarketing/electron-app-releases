@@ -718,9 +718,36 @@ details[open] .advanced-toggle::before { transform: rotate(90deg); }
   background: #7B2FF2; width: 24px; border-radius: 4px;
 }
 
-.ob-content { min-height: 240px; display: flex; align-items: center; justify-content: center; }
+.ob-content { min-height: 240px; display: flex; align-items: center; justify-content: center; overflow-y: auto; max-height: 60vh; }
 
-/* Step 0: Welcome */
+/* Step 0: AI Memory / Persona */
+.ob-persona { width: 100%; }
+.ob-persona .ob-logo {
+  font-size: 36px; font-weight: 800; letter-spacing: -1.5px;
+  background: linear-gradient(135deg, #7B2FF2, #C084FC, #E9D5FF);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; margin-bottom: 4px; text-align: center;
+}
+.ob-persona .ob-tagline { font-size: 16px; color: #C084FC; margin-bottom: 8px; text-align: center; font-weight: 600; }
+.ob-persona .ob-desc { font-size: 13px; color: #888; line-height: 1.5; text-align: center; }
+.ob-persona .ob-hint { font-size: 11px; color: #555; text-align: center; margin-top: 12px; }
+.ob-form { display: flex; flex-direction: column; gap: 10px; }
+.ob-field label {
+  display: block; font-size: 12px; font-weight: 600; color: #aaa;
+  margin-bottom: 4px;
+}
+.ob-field input, .ob-field textarea {
+  width: 100%; padding: 8px 12px; font-size: 13px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; color: #e0e0e0; outline: none;
+  transition: border-color 0.2s; font-family: inherit; resize: vertical;
+}
+.ob-field input:focus, .ob-field textarea:focus {
+  border-color: rgba(123,47,242,0.5);
+}
+.ob-field input::placeholder, .ob-field textarea::placeholder { color: #555; }
+
+/* Legacy welcome (kept for reference) */
 .ob-welcome { text-align: center; }
 .ob-logo {
   font-size: 52px; font-weight: 800; letter-spacing: -2px;

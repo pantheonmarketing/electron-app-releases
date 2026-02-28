@@ -530,7 +530,8 @@ async function wfRun() {
       routine_id: wfEditingRoutineId,
       space_id: activeSpaceId,
       working_dir: space.working_dir || null,
-      context: space.context || []
+      context: space.context || [],
+      persona: space.persona || undefined
     });
     if (res.ok) {
       wfStartExecMode(res.run);
@@ -550,7 +551,8 @@ async function wfRunDirect(routineId) {
       routine_id: routineId,
       space_id: activeSpaceId,
       working_dir: space.working_dir || null,
-      context: space.context || []
+      context: space.context || [],
+      persona: space.persona || undefined
     });
     if (res.ok) {
       // Open the workflow on canvas and enter exec mode

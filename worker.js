@@ -211,7 +211,7 @@ function readFolderFiles(folderPath, maxDepth = 2, currentDepth = 0) {
 function runClaude(task) {
   const resultFile = path.join(RESULTS_DIR, `task-${task.id}.json`);
 
-  // Build the full prompt: skill + context + task description
+  // Build the full prompt: persona + skill + context + task description
   // We pipe the full prompt via stdin to avoid command-line length limits
   let fullPrompt = '';
   let skillInjected = false;
@@ -221,6 +221,21 @@ function runClaude(task) {
 
   // Helper: resolve skill/context paths (relative to app dir, or absolute)
   const resolvePath = (p) => path.isAbsolute(p) ? p : path.join(BASE_DIR, p);
+
+  // 0. Inject persona context (AI Memory from space)
+  if (task.persona) {
+    const p = task.persona;
+    const parts = [];
+    if (p.name) parts.push(`You're working for ${p.name}.`);
+    if (p.business) parts.push(p.business);
+    if (p.audience) parts.push(`Target audience: ${p.audience}`);
+    if (p.tone) parts.push(`Tone/style: ${p.tone}`);
+    if (p.extra) parts.push(p.extra);
+    if (parts.length > 0) {
+      fullPrompt += `<persona>\n${parts.join('\n')}\n</persona>\n\n`;
+      log(`  Persona injected: ${parts.length} fields`);
+    }
+  }
 
   // 1. Inject skill content
   if (task.skill && skills[task.skill]) {

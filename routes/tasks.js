@@ -24,7 +24,7 @@ router.get('/tasks', (req, res) => {
 });
 
 router.post('/tasks', (req, res) => {
-  const { task, skill, priority, model, max_turns, max_budget_usd, allowed_tools, working_dir, context, space_id, extra_context } = req.body;
+  const { task, skill, priority, model, max_turns, max_budget_usd, allowed_tools, working_dir, context, space_id, extra_context, persona } = req.body;
   if (!task) return res.status(400).json({ error: 'Task description required' });
   const tasks = readTasks();
   const newTask = {
@@ -36,6 +36,7 @@ router.post('/tasks', (req, res) => {
   };
   if (max_budget_usd) newTask.max_budget_usd = max_budget_usd;
   if (allowed_tools) newTask.allowed_tools = allowed_tools;
+  if (persona) newTask.persona = persona;
   tasks.push(newTask);
   writeTasks(tasks);
   res.json(newTask);
@@ -52,7 +53,7 @@ router.put('/tasks/:id', (req, res) => {
     'working_dir', 'space_id', 'worker', 'started_at', 'completed_at',
     'result_file', 'error', 'archived', 'archived_at',
     'plan_id', 'plan_step', 'plan_total', 'claudeSessionId', 'terminalSessionId',
-    'timeout_mins'
+    'timeout_mins', 'persona'
   ];
   for (const key of ALLOWED_FIELDS) {
     if (key in req.body) tasks[idx][key] = req.body[key];

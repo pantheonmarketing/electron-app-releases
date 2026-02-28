@@ -286,9 +286,10 @@ async function saveTask() {
     extra_context: extraContext, // store separately so we can show in edit
   };
 
-  // Set context + working_dir from space (merged with extra)
+  // Set context + working_dir + persona from space (merged with extra)
   if (mergedContext.length > 0) data.context = mergedContext;
   if (space.working_dir) data.working_dir = space.working_dir;
+  if (space.persona) data.persona = space.persona;
 
   if (!data.task) return alert('Enter a task description');
   if (editId) await api.updateTask(editId, data);
@@ -337,7 +338,8 @@ async function goLive() {
         skill,
         model,
         task: taskText,
-        context: mergedContext.length > 0 ? mergedContext : undefined
+        context: mergedContext.length > 0 ? mergedContext : undefined,
+        persona: space.persona || undefined
       })
     });
     const data = await result.json();

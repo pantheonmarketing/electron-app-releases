@@ -6,7 +6,7 @@ const { readTasks, writeTasks, readTemplates, readWorkflowRuns, writeWorkflowRun
 const router = express.Router();
 
 router.post('/workflow-runs', (req, res) => {
-  const { routine_id, space_id, working_dir, context } = req.body;
+  const { routine_id, space_id, working_dir, context, persona } = req.body;
   const tplData = readTemplates();
   const routine = tplData.routines.find(r => r.id === routine_id);
   if (!routine) return res.status(404).json({ error: 'Routine not found' });
@@ -25,6 +25,7 @@ router.post('/workflow-runs', (req, res) => {
   const run = {
     id: runId, routine_id, routine_name: routine.name, status: 'running',
     space_id: space_id || 'general', working_dir: working_dir || null, context: context || [],
+    persona: persona || null,
     current_node_index: 0, nodes, started_at: new Date().toISOString(), completed_at: null, error: null
   };
   const prompt = buildWorkflowPrompt(tpl, firstNode.variables, run, 0);
@@ -34,6 +35,7 @@ router.post('/workflow-runs', (req, res) => {
     id: taskId, task: prompt, skill: tpl.skill || null, status: 'pending', priority: 1,
     model: tpl.model || 'sonnet', max_turns: tpl.max_turns || 25, context: context || [],
     extra_context: [], working_dir: working_dir || null, space_id: space_id || 'general',
+    persona: persona || null,
     worker: null, started_at: null, completed_at: null, result_file: null, error: null,
     workflow_run_id: runId, workflow_node_index: 0
   };
@@ -103,6 +105,7 @@ function checkWorkflowProgress() {
           id: newTaskId, task: prompt, skill: tpl.skill || null, status: 'pending', priority: 1,
           model: tpl.model || 'sonnet', max_turns: tpl.max_turns || 25, context: run.context || [],
           extra_context: [], working_dir: run.working_dir || null, space_id: run.space_id || 'general',
+          persona: run.persona || null,
           worker: null, started_at: null, completed_at: null, result_file: null, error: null,
           workflow_run_id: run.id, workflow_node_index: nextIndex
         };

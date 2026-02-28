@@ -20,7 +20,7 @@ router.post('/terminal/sessions', (req, res) => {
 // ── Live Task: create session + inject skill + send first message ──
 // MUST be registered before :id routes to avoid matching "live" as an id
 router.post('/terminal/sessions/live', (req, res) => {
-  const { name, workingDir, skill, model, task, context } = req.body;
+  const { name, workingDir, skill, model, task, context, persona } = req.body;
   if (!task) return res.status(400).json({ error: 'task is required' });
 
   try {
@@ -32,8 +32,21 @@ router.post('/terminal/sessions/live', (req, res) => {
       model: model || 'sonnet'
     });
 
-    // Build the first message with skill injection
+    // Build the first message with persona + skill injection
     let firstMessage = '';
+
+    // 0. Inject persona context (AI Memory from space)
+    if (persona) {
+      const parts = [];
+      if (persona.name) parts.push(`You're working for ${persona.name}.`);
+      if (persona.business) parts.push(persona.business);
+      if (persona.audience) parts.push(`Target audience: ${persona.audience}`);
+      if (persona.tone) parts.push(`Tone/style: ${persona.tone}`);
+      if (persona.extra) parts.push(persona.extra);
+      if (parts.length > 0) {
+        firstMessage += `<persona>\n${parts.join('\n')}\n</persona>\n\n`;
+      }
+    }
 
     // 1. Inject skill content if specified
     if (skill) {

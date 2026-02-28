@@ -2,10 +2,11 @@
  * onboarding.js — 4-step welcome wizard for first-time users
  *
  * Shows on first launch (after setup) when localStorage key is missing and no tasks exist.
- * Steps: Welcome → How It Works → Quick Tour → Get Started
+ * Steps: AI Memory → How It Works → Quick Tour → Get Started
  */
 
 const ONBOARDING_KEY = 'aiceo_onboarding_done';
+let _obPersona = {};
 
 function shouldShowOnboarding() {
   if (localStorage.getItem(ONBOARDING_KEY)) return false;
@@ -24,14 +25,60 @@ function showOnboarding() {
 
   let currentStep = 0;
   const steps = [
-    // Step 0: Welcome
+    // Step 0: AI Memory — teach AI about your business
     {
       html: `
-        <div class="ob-welcome">
+        <div class="ob-persona">
           <div class="ob-logo">AI CEO</div>
-          <div class="ob-tagline">Your AI-Powered Studio</div>
-          <p class="ob-desc">Automate tasks, create content, and run your business with AI agents — all from one dashboard.</p>
-        </div>`
+          <div class="ob-tagline">Let's personalize your AI</div>
+          <p class="ob-desc" style="margin-bottom:18px;">Tell us a bit about you and your business. Your AI agents will use this on every task to give you better, more relevant results.</p>
+          <div class="ob-form">
+            <div class="ob-field">
+              <label>Your name</label>
+              <input type="text" id="obPersonaName" placeholder="e.g. Sarah Chen" autocomplete="off">
+            </div>
+            <div class="ob-field">
+              <label>What's your business?</label>
+              <textarea id="obPersonaBusiness" placeholder="e.g. I run a digital marketing agency for e-commerce brands" rows="2"></textarea>
+            </div>
+            <div class="ob-field">
+              <label>Who's your audience?</label>
+              <input type="text" id="obPersonaAudience" placeholder="e.g. Small business owners looking to grow online" autocomplete="off">
+            </div>
+            <div class="ob-field">
+              <label>What tone should AI use?</label>
+              <input type="text" id="obPersonaTone" placeholder="e.g. Friendly and professional, no jargon" autocomplete="off">
+            </div>
+            <div class="ob-field">
+              <label>Anything else AI should know?</label>
+              <textarea id="obPersonaExtra" placeholder="e.g. Based in Austin, TX. Main platforms: Instagram and TikTok" rows="2"></textarea>
+            </div>
+          </div>
+          <p class="ob-hint">You can always update this later in Space Settings.</p>
+        </div>`,
+      onLeave() {
+        _obPersona = {
+          name: (document.getElementById('obPersonaName') || {}).value?.trim() || '',
+          business: (document.getElementById('obPersonaBusiness') || {}).value?.trim() || '',
+          audience: (document.getElementById('obPersonaAudience') || {}).value?.trim() || '',
+          tone: (document.getElementById('obPersonaTone') || {}).value?.trim() || '',
+          extra: (document.getElementById('obPersonaExtra') || {}).value?.trim() || '',
+        };
+      },
+      onEnter() {
+        setTimeout(() => {
+          const el = document.getElementById('obPersonaName');
+          if (el) { el.value = _obPersona.name || ''; }
+          const el2 = document.getElementById('obPersonaBusiness');
+          if (el2) { el2.value = _obPersona.business || ''; }
+          const el3 = document.getElementById('obPersonaAudience');
+          if (el3) { el3.value = _obPersona.audience || ''; }
+          const el4 = document.getElementById('obPersonaTone');
+          if (el4) { el4.value = _obPersona.tone || ''; }
+          const el5 = document.getElementById('obPersonaExtra');
+          if (el5) { el5.value = _obPersona.extra || ''; }
+        }, 0);
+      }
     },
     // Step 1: How It Works
     {
@@ -155,6 +202,9 @@ function showOnboarding() {
   ];
 
   function render() {
+    // Save current step data before leaving
+    if (steps[currentStep] && steps[currentStep].onLeave) steps[currentStep].onLeave();
+
     overlay.innerHTML = `
       <div class="ob-modal">
         <button class="ob-skip" onclick="finishOnboarding()">Skip</button>
@@ -168,17 +218,83 @@ function showOnboarding() {
         </div>
       </div>`;
 
+    // Restore step data after rendering
+    if (steps[currentStep] && steps[currentStep].onEnter) steps[currentStep].onEnter();
+
     const backBtn = overlay.querySelector('#obBack');
     const nextBtn = overlay.querySelector('#obNext');
-    if (backBtn) backBtn.addEventListener('click', () => { currentStep--; render(); });
-    if (nextBtn) nextBtn.addEventListener('click', () => { currentStep++; render(); });
+    if (backBtn) backBtn.addEventListener('click', () => {
+      if (steps[currentStep] && steps[currentStep].onLeave) steps[currentStep].onLeave();
+      currentStep--;
+      renderStep();
+    });
+    if (nextBtn) nextBtn.addEventListener('click', () => {
+      if (steps[currentStep] && steps[currentStep].onLeave) steps[currentStep].onLeave();
+      currentStep++;
+      renderStep();
+    });
+  }
+
+  function renderStep() {
+    const content = overlay.querySelector('.ob-content');
+    const dots = overlay.querySelectorAll('.ob-dot');
+    const nav = overlay.querySelector('.ob-nav');
+    if (content) content.innerHTML = steps[currentStep].html;
+    dots.forEach((d, i) => d.classList.toggle('active', i === currentStep));
+    if (nav) {
+      nav.innerHTML = `
+        ${currentStep > 0 ? '<button class="ob-nav-btn ob-back" id="obBack">Back</button>' : '<div></div>'}
+        ${currentStep < steps.length - 1 ? '<button class="ob-nav-btn ob-next" id="obNext">Next</button>' : ''}`;
+      const backBtn = nav.querySelector('#obBack');
+      const nextBtn = nav.querySelector('#obNext');
+      if (backBtn) backBtn.addEventListener('click', () => {
+        if (steps[currentStep] && steps[currentStep].onLeave) steps[currentStep].onLeave();
+        currentStep--;
+        renderStep();
+      });
+      if (nextBtn) nextBtn.addEventListener('click', () => {
+        if (steps[currentStep] && steps[currentStep].onLeave) steps[currentStep].onLeave();
+        currentStep++;
+        renderStep();
+      });
+    }
+    if (steps[currentStep] && steps[currentStep].onEnter) steps[currentStep].onEnter();
   }
 
   document.body.appendChild(overlay);
   requestAnimationFrame(() => { overlay.classList.add('active'); render(); });
 }
 
+function _saveOnboardingPersona() {
+  // Grab latest values from DOM if fields are still visible
+  const nameEl = document.getElementById('obPersonaName');
+  if (nameEl) {
+    _obPersona = {
+      name: nameEl.value.trim(),
+      business: (document.getElementById('obPersonaBusiness') || {}).value?.trim() || '',
+      audience: (document.getElementById('obPersonaAudience') || {}).value?.trim() || '',
+      tone: (document.getElementById('obPersonaTone') || {}).value?.trim() || '',
+      extra: (document.getElementById('obPersonaExtra') || {}).value?.trim() || '',
+    };
+  }
+  const hasData = Object.values(_obPersona).some(v => v);
+  if (!hasData) return;
+  // Save persona to the default General space
+  try {
+    let spaces = JSON.parse(localStorage.getItem('claude-tm-spaces') || '[]');
+    if (spaces.length === 0) {
+      spaces = [{ id: 'general', name: 'General', project_id: null, working_dir: null, context: [], persona: null }];
+    }
+    const general = spaces.find(s => s.id === 'general') || spaces[0];
+    general.persona = _obPersona;
+    localStorage.setItem('claude-tm-spaces', JSON.stringify(spaces));
+  } catch (e) {
+    console.error('[Onboarding] Failed to save persona:', e);
+  }
+}
+
 function finishOnboarding() {
+  _saveOnboardingPersona();
   localStorage.setItem(ONBOARDING_KEY, 'true');
   const overlay = document.getElementById('onboardingOverlay');
   if (overlay) {

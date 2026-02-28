@@ -135,6 +135,14 @@ function openSpaceSettings(spaceId) {
   document.getElementById('spaceContextInput').value = (space.context || []).join('\n');
   document.getElementById('deleteSpaceBtn').style.display = space.id === 'general' ? 'none' : '';
 
+  // Populate AI Memory (persona) fields
+  const p = space.persona || {};
+  document.getElementById('spacePersonaName').value = p.name || '';
+  document.getElementById('spacePersonaBusiness').value = p.business || '';
+  document.getElementById('spacePersonaAudience').value = p.audience || '';
+  document.getElementById('spacePersonaTone').value = p.tone || '';
+  document.getElementById('spacePersonaExtra').value = p.extra || '';
+
   // Populate project dropdown
   const sel = document.getElementById('spaceProjectInput');
   sel.innerHTML = '<option value="">None (general workspace)</option>';
@@ -183,6 +191,16 @@ function saveSpaceSettings() {
   space.working_dir = document.getElementById('spaceWorkdirInput').value.trim() || null;
   const ctxRaw = document.getElementById('spaceContextInput').value.trim();
   space.context = ctxRaw ? ctxRaw.split('\n').map(l => l.trim()).filter(Boolean) : [];
+
+  // Save AI Memory (persona)
+  const persona = {
+    name: document.getElementById('spacePersonaName').value.trim(),
+    business: document.getElementById('spacePersonaBusiness').value.trim(),
+    audience: document.getElementById('spacePersonaAudience').value.trim(),
+    tone: document.getElementById('spacePersonaTone').value.trim(),
+    extra: document.getElementById('spacePersonaExtra').value.trim(),
+  };
+  space.persona = Object.values(persona).some(v => v) ? persona : null;
 
   saveSpaces();
   renderSpaceTabs();
