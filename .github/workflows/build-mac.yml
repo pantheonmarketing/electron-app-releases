@@ -1,4 +1,4 @@
-name: Build Mac DMG
+name: Build Mac
 
 on:
   release:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to attach DMG to (e.g. v1.4.0)'
+        description: 'Release tag to attach builds to (e.g. v1.4.0)'
         required: true
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
           unzip ffmpeg.zip -d bin/mac/
           chmod +x bin/mac/ffmpeg
 
-      - name: Build Mac DMG
+      - name: Build Mac (DMG + ZIP)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --mac --publish never
@@ -50,21 +50,21 @@ jobs:
 
       - name: Generate latest-mac.yml
         run: |
-          DMG_FILE=$(ls dist/*.dmg | head -1)
-          DMG_NAME=$(basename "$DMG_FILE")
+          ZIP_FILE=$(ls dist/*.zip | head -1)
+          ZIP_NAME=$(basename "$ZIP_FILE")
           VERSION=$(echo "${{ steps.tag.outputs.tag }}" | sed 's/^v//')
-          SIZE=$(stat -f%z "$DMG_FILE")
-          SHA=$(shasum -a 512 "$DMG_FILE" | awk '{print $1}' | xxd -r -p | base64)
+          ZIP_SIZE=$(stat -f%z "$ZIP_FILE")
+          ZIP_SHA=$(shasum -a 512 "$ZIP_FILE" | awk '{print $1}' | xxd -r -p | base64)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
 
           cat > dist/latest-mac.yml << EOF
           version: ${VERSION}
           files:
-            - url: ${DMG_NAME}
-              sha512: ${SHA}
-              size: ${SIZE}
-          path: ${DMG_NAME}
-          sha512: ${SHA}
+            - url: ${ZIP_NAME}
+              sha512: ${ZIP_SHA}
+              size: ${ZIP_SIZE}
+          path: ${ZIP_NAME}
+          sha512: ${ZIP_SHA}
           releaseDate: '${DATE}'
           EOF
 
@@ -73,12 +73,15 @@ jobs:
           echo "Generated latest-mac.yml:"
           cat dist/latest-mac.yml
 
-      - name: Upload DMG and latest-mac.yml to release
+      - name: Upload assets to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DMG_FILE=$(ls dist/*.dmg | head -1)
-          echo "Uploading $DMG_FILE to release ${{ steps.tag.outputs.tag }}"
+          ZIP_FILE=$(ls dist/*.zip | head -1)
+          echo "Uploading $DMG_FILE"
           gh release upload "${{ steps.tag.outputs.tag }}" "$DMG_FILE" --clobber
+          echo "Uploading $ZIP_FILE"
+          gh release upload "${{ steps.tag.outputs.tag }}" "$ZIP_FILE" --clobber
           echo "Uploading latest-mac.yml"
           gh release upload "${{ steps.tag.outputs.tag }}" "dist/latest-mac.yml" --clobber
