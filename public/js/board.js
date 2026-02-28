@@ -311,6 +311,20 @@ function formatDuration(startIso, endIso) {
   return `${Math.floor(sec/60)}m ${sec%60}s`;
 }
 
+function formatCompletedAt(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (isToday) return `Today ${time}`;
+  if (isYesterday) return `Yesterday ${time}`;
+  const month = d.toLocaleString([], { month: 'short' });
+  return `${month} ${d.getDate()} ${time}`;
+}
+
 // ── Render Board ──
 function renderBoard() {
   const spaceTasks = getSpaceTasks();
@@ -407,10 +421,10 @@ function renderCard(t) {
   tags.push(`<span class="tag tag-model">${t.model || 'sonnet'}</span>`);
   if (t.priority && t.priority <= 2) tags.push(`<span class="tag tag-priority">P${t.priority}</span>`);
   if (isDone && t.started_at && t.completed_at) {
-    tags.push(`<span class="tag tag-done-check">completed in ${formatDuration(t.started_at, t.completed_at)}</span>`);
+    tags.push(`<span class="tag tag-done-check">completed in ${formatDuration(t.started_at, t.completed_at)} · ${formatCompletedAt(t.completed_at)}</span>`);
   }
   if (isFailed && t.started_at && t.completed_at) {
-    tags.push(`<span class="tag tag-duration">${formatDuration(t.started_at, t.completed_at)}</span>`);
+    tags.push(`<span class="tag tag-duration">${formatDuration(t.started_at, t.completed_at)} · ${formatCompletedAt(t.completed_at)}</span>`);
   }
 
   let runningHtml = '';
