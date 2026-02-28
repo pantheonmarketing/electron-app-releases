@@ -310,7 +310,7 @@
 .rm-preset-save-btn:hover { background: rgba(123,47,242,0.25); border-style: solid; }
 
 /* Scene image remove button */
-.rm-scene-img-wrap { position: relative; display: inline-block; }
+.rm-scene-img-wrap { position: relative; display: inline-block; width: 48px; height: 48px; flex-shrink: 0; overflow: hidden; border-radius: 6px; }
 .rm-scene-img-wrap .rm-scene-img-remove {
   display: none; position: absolute; top: -4px; right: -4px; width: 18px; height: 18px;
   border-radius: 50%; background: rgba(220,38,38,0.9); color: white; border: none; cursor: pointer;

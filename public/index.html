@@ -325,6 +325,7 @@
             <div class="rm-upload-text">Drop video clips, images, or audio here</div>
             <div class="rm-upload-sub">MP4, MOV, WebM, JPG, PNG, MP3, WAV — max 500MB each</div>
             <button class="btn btn-primary" onclick="document.getElementById('rmFileInput').click()">Browse Files</button>
+            <button class="btn btn-outline" onclick="rmUploadAudioClip()" style="margin-top:8px;">🎙 Upload Audio Clip (for transcription)</button>
             <input type="file" id="rmFileInput" multiple accept="video/*,image/*,audio/*" style="display:none;" onchange="rmHandleFiles(this.files); this.value=''">
           </div>
           <div class="rm-clip-list" id="rmClipList"></div>
@@ -356,6 +357,17 @@
               <button class="btn btn-ghost btn-sm" onclick="rmGenerateScenes()">🔄 Auto-Generate</button>
               <button class="btn btn-ghost btn-sm" onclick="rmRegenerateScenes()" id="rmRegenBtn" style="display:none; color:#FBBF24;">♻ Regenerate</button>
             </div>
+          </div>
+          <div id="rmPresentationBar" style="display:none; background:#1a1a2e; border:1px solid #333; border-radius:8px; padding:10px 14px; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:14px;">🎬</span>
+                <span style="color:#e0e0e0; font-size:13px; font-weight:600;">Presentation Mode</span>
+                <span style="color:#888; font-size:11px;">All scenes → Motion Graphics</span>
+              </div>
+              <button id="rmPresentationToggleBtn" class="btn btn-outline btn-sm" onclick="rmTogglePresentationMode(!rmCurrentProject.presentationMode)" style="font-size:11px; min-width:80px;"></button>
+            </div>
+            <div id="rmMfxBgBar" style="display:none;"></div>
           </div>
           <div class="rm-timeline" id="rmTimeline"></div>
           <div class="rm-step-actions">

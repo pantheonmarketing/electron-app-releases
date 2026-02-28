@@ -160,9 +160,9 @@ async function init() {
         } catch (_) { tier = 'lifetime'; }
       }
       const health = await api.health();
-      if (health.claude_cli && !health.claude_logged_in) {
+      if (health.claude && !health.claude_logged_in) {
         showServerBanner('⚠ Claude installed but not logged in — click Setup in the sidebar to connect your account', 'warning');
-      } else if (!health.claude_cli) {
+      } else if (!health.claude) {
         showServerBanner('⚠ Claude CLI not installed — click Setup in the sidebar to fix this', 'warning');
       }
     } catch (_) {}

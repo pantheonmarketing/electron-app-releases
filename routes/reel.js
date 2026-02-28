@@ -130,7 +130,7 @@ router.put('/reel/projects/:id', (req, res) => {
   let project = readReelProject(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   // Merge top-level fields
-  const allowed = ['name', 'clips', 'scenes', 'music', 'style', 'output', 'mode'];
+  const allowed = ['name', 'clips', 'scenes', 'music', 'style', 'output', 'mode', 'presentationMode'];
   for (const key of allowed) {
     if (req.body[key] !== undefined) project[key] = req.body[key];
   }
@@ -159,7 +159,7 @@ router.post('/reel/projects/:projectId/upload', (req, res, next) => {
       const ext = path.extname(f.originalname).toLowerCase();
       let type = 'clip';
       if (/\.(jpg|jpeg|png|gif|webp)$/i.test(ext)) type = 'image';
-      else if (/\.(mp3|wav|aac|m4a|ogg)$/i.test(ext)) type = 'music';
+      else if (/\.(mp3|wav|aac|m4a|ogg)$/i.test(ext)) type = req.query.upload_as === 'clip' ? 'clip' : 'music';
 
       const clipObj = {
         id: 'clip-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
@@ -786,6 +786,15 @@ router.post('/reel/projects/:projectId/render', (req, res) => {
       mediaMap[project.music.path] = destName;
     }
   }
+  // Also copy MFX background image
+  if (project.style?.mfxBackground?.type === 'image' && project.style.mfxBackground.value) {
+    const srcPath = path.join(shared.BASE_DIR, project.style.mfxBackground.value);
+    if (fs.existsSync(srcPath)) {
+      const destName = path.basename(project.style.mfxBackground.value);
+      try { fs.copyFileSync(srcPath, path.join(configDir, destName)); } catch (_) {}
+      mediaMap[project.style.mfxBackground.value] = destName;
+    }
+  }
   fs.writeFileSync(path.join(configDir, 'media-map.json'), JSON.stringify(mediaMap, null, 2));
 
   // 3. Build a compact summary for the task prompt (no whisper data inline)
@@ -796,15 +805,28 @@ router.post('/reel/projects/:projectId/render', (req, res) => {
   const video = style.video || {};
   const sceneCount = (project.scenes || []).length;
   const sceneSummary = (project.scenes || []).map((s, i) =>
-    `  ${i+1}. "${s.text}" (${s.start?.toFixed(1)}s-${s.end?.toFixed(1)}s) [${s.display_mode || 'subtitles'}]${s.images?.length > 1 ? ` [${s.images.length} images - slideshow]` : s.images?.length ? ' [has image]' : ''}${s.images?.length && s.img_position && s.img_position !== 'top' ? ` [img_position: ${s.img_position}]` : ''}${s.images?.length && s.img_border && s.img_border !== 'none' ? ` [img_border: ${s.img_border}]` : ''}${s.broll?.length ? ' [has B-roll video]' : ''}${s.display_mode === 'mfx' && s.mfx_preset && s.mfx_preset !== 'none' ? ` [mfx: ${s.mfx_preset}]` : ''}${s.display_mode === 'mfx' && s.mfx_instructions ? ` [instructions: ${s.mfx_instructions}]` : ''}`
+    `  ${i+1}. "${s.text}" (${s.start?.toFixed(1)}s-${s.end?.toFixed(1)}s) [${s.display_mode || 'subtitles'}]${s.images?.length > 1 ? ` [${s.images.length} images - slideshow]` : s.images?.length ? ' [has image]' : ''}${s.images?.length && s.img_position && s.img_position !== 'top' ? ` [img_position: ${s.img_position}]` : ''}${s.images?.length && s.img_border && s.img_border !== 'none' ? ` [img_border: ${s.img_border}]` : ''}${s.broll?.length ? ` [has B-roll video${s.broll_span > 1 ? `, spans ${s.broll_span} scenes` : ''}${s.broll_muted === false ? ', audio ON' : ', muted'}]` : ''}${s.display_mode === 'mfx' && s.mfx_preset && s.mfx_preset !== 'none' ? ` [mfx: ${s.mfx_preset}]` : ''}${s.display_mode === 'mfx' && s.mfx_instructions ? ` [instructions: ${s.mfx_instructions}]` : ''}`
   ).join('\n');
+
+  // Presentation mode + MFX background
+  const presentationMode = project.presentationMode || false;
+  const mfxBg = project.style?.mfxBackground || { type: 'video' };
 
   const prompt = `Build and render a Remotion FB Story video from the config file.
 
 CONFIG FILE: public/reel-data/config.json (read this file for full scene data, whisper words, and settings)
 MEDIA FILES: public/reel-data/ (video clips, images, music are copied here)
 MEDIA MAP: public/reel-data/media-map.json (maps original paths to filenames in reel-data/)
-
+${presentationMode ? `
+PRESENTATION MODE: ON — This is a presentation/explainer video.
+All scenes use motion graphics. Text IS the primary visual.
+Each scene should have dynamic kinetic typography with engaging animations.
+No talking head — the text and animations tell the story.
+` : ''}${mfxBg.type !== 'video' ? `
+MFX BACKGROUND: ${mfxBg.type} ${mfxBg.type === 'color' ? mfxBg.value : (mfxBg.type === 'image' ? path.basename(mfxBg.value || '') : '')}
+- ${mfxBg.type === 'color' ? `Use <AbsoluteFill style={{background: '${mfxBg.value}'}}> as the background behind all text/motion graphics (instead of video).` : ''}
+- ${mfxBg.type === 'image' ? `Use <Img src={staticFile('reel-data/${path.basename(mfxBg.value || '')}')} style={{width:'100%',height:'100%',objectFit:'cover'}} /> as the background behind all text/motion graphics (instead of video).` : ''}
+` : ''}
 SUMMARY (${sceneCount} scenes):
 ${sceneSummary}
 
@@ -850,7 +872,8 @@ ${(project.mode === 'split') ? `- SPLIT SCREEN MODE: The frame has two zones: TO
   * "glow": border-radius:12px; margin:4%; box-shadow: 0 0 20px rgba(123,47,242,0.5)
   When margin is applied, adjust width/height to 92% to account for the inset.
 - SLIDESHOW: If a scene has multiple images (check scenes[i].images array length), cycle through them evenly within the scene duration. For example, 3 images in a 3s scene = 1s per image. Use opacity transitions (fade in/out) to switch between them. Stack them absolutely on top of each other and animate opacity.
-- B-ROLL: If a scene has a broll array (scenes[i].broll), use the B-roll video INSTEAD of the main video for that scene's duration. Use <OffthreadVideo> with the B-roll file from reel-data/.
+- B-ROLL: If a scene has a broll array (scenes[i].broll), use the B-roll video INSTEAD of the main video for that scene's duration. Use <OffthreadVideo> with the B-roll file from reel-data/. If broll_muted is true (default), mute the B-roll video. If broll_muted is false, include the B-roll audio.
+- B-ROLL SPANNING: If a scene has broll_span > 1, continue using this B-roll for the next N scenes (e.g. broll_span=3 means this scene + next 2). Seek the B-roll video to the accumulated time offset for each subsequent scene so it plays continuously across all spanned scenes.
 
 INSTRUCTIONS:
 1. Read public/reel-data/config.json for the full project data (scenes with word-level timestamps)

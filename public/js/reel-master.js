@@ -18,8 +18,9 @@ const rmApi = {
   async getProject(id) { return (await safeFetch(`/api/reel/projects/${id}`)).json(); },
   async updateProject(id,d) { return (await safeFetch(`/api/reel/projects/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) })).json(); },
   async deleteProject(id) { return (await safeFetch(`/api/reel/projects/${id}`, { method:'DELETE' })).json(); },
-  async upload(projectId, formData) {
-    const r = await fetch(`/api/reel/projects/${projectId}/upload`, { method:'POST', body: formData });
+  async upload(projectId, formData, queryParams) {
+    const qs = queryParams ? '?' + new URLSearchParams(queryParams).toString() : '';
+    const r = await fetch(`/api/reel/projects/${projectId}/upload${qs}`, { method:'POST', body: formData });
     if (!r.ok) throw new Error(`Upload failed: ${r.status}`);
     return r.json();
   },
@@ -245,7 +246,9 @@ function rmRenderClips() {
   el.innerHTML = clips.map(c => {
     const name = c.filename || c.path?.split('/').pop() || 'untitled';
     let thumbHTML = '';
-    if (c.type === 'clip') {
+    if (c.type === 'clip' && c.mime?.startsWith('audio/')) {
+      thumbHTML = `<span class="placeholder">🎙</span>`;
+    } else if (c.type === 'clip') {
       thumbHTML = `<video src="/${c.path}" preload="metadata" muted></video>`;
     } else if (c.type === 'image') {
       thumbHTML = `<img src="/${c.path}" alt="${esc(name)}">`;
@@ -275,6 +278,34 @@ function rmRemoveClip(clipId) {
   rmUpdateStepStates();
 }
 
+// ── Upload Audio as Clip (for transcription) ──
+function rmUploadAudioClip() {
+  if (!rmCurrentProject) return;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'audio/*';
+  input.onchange = async () => {
+    if (!input.files[0]) return;
+    const zone = document.getElementById('rmUploadZone');
+    const origHTML = zone.innerHTML;
+    zone.innerHTML = `<div class="rm-upload-progress"><div class="rm-upload-progress-text">Uploading audio clip...</div><div class="rm-upload-progress-bar"><div class="rm-upload-progress-fill" style="width:50%"></div></div></div>`;
+    try {
+      const formData = new FormData();
+      formData.append('files', input.files[0]);
+      const res = await rmApi.upload(rmCurrentProject.id, formData, { upload_as: 'clip' });
+      rmCurrentProject.clips = rmCurrentProject.clips || [];
+      res.files.forEach(f => rmCurrentProject.clips.push(f));
+      showToast('Audio clip uploaded — ready for transcription', 'success');
+      rmRenderClips();
+      rmUpdateStepStates();
+    } catch (e) {
+      showToast('Audio clip upload failed: ' + e.message, 'error');
+    }
+    zone.innerHTML = origHTML;
+  };
+  input.click();
+}
+
 // ── Whisper (Step 2) ──
 function rmRenderWhisperList() {
   if (!rmCurrentProject) return;
@@ -282,7 +313,7 @@ function rmRenderWhisperList() {
   const el = document.getElementById('rmWhisperList');
 
   if (clips.length === 0) {
-    el.innerHTML = '<div class="rm-scene-empty">No video clips to transcribe. Go back and upload some clips first.</div>';
+    el.innerHTML = '<div class="rm-scene-empty">No video or audio clips to transcribe. Go back and upload some clips first.</div>';
     return;
   }
 
@@ -297,7 +328,7 @@ function rmRenderWhisperList() {
     }
     return `
       <div class="rm-whisper-card" id="rmWhisperCard-${c.id}">
-        <div class="rm-whisper-card-icon">🎬</div>
+        <div class="rm-whisper-card-icon">${c.mime?.startsWith('audio/') ? '🎙' : '🎬'}</div>
         <div class="rm-whisper-card-info">
           <div class="rm-whisper-card-name">${esc(c.filename)}</div>
           <div class="rm-whisper-card-status">${statusHTML}</div>
@@ -432,6 +463,7 @@ function rmRenderTimeline() {
   // Show/hide regenerate button
   const regenBtn = document.getElementById('rmRegenBtn');
   if (regenBtn) regenBtn.style.display = scenes.length > 0 ? '' : 'none';
+  rmUpdatePresentationBar();
 
   if (scenes.length === 0) {
     el.innerHTML = '<div class="rm-scene-empty">No scenes yet. Click "Auto-Generate" to create scenes from your transcriptions, or go back and transcribe your clips first.</div>';
@@ -460,9 +492,32 @@ function rmRenderTimeline() {
         <button class="rm-chip ${s.img_border === 'glow' ? 'active' : ''}" onclick="event.stopPropagation(); rmSetImgBorder(${i}, 'glow')">Glow</button>
       </div>
     </div>` : '';
-    const brollHTML = (s.broll || []).length > 0
-      ? `<div class="rm-scene-images">${s.broll.map((vid, vidIdx) => `<div class="rm-scene-img-wrap"><video class="rm-scene-img-thumb" src="/${vid}" muted></video><div class="rm-scene-broll-badge">B-roll</div><button class="rm-scene-img-remove" onclick="event.stopPropagation(); rmRemoveSceneBroll(${i}, ${vidIdx})" title="Remove B-roll">&times;</button></div>`).join('')}</div>`
-      : '';
+    const maxSpan = scenes.length - i;
+    // Check if this scene is covered by a previous scene's b-roll span
+    let coveredByBroll = null;
+    for (let pi = 0; pi < i; pi++) {
+      const ps = scenes[pi];
+      if (ps.broll?.length && ps.broll_span > 1 && pi + ps.broll_span > i) {
+        coveredByBroll = pi;
+        break;
+      }
+    }
+    let brollHTML = '';
+    if ((s.broll || []).length > 0) {
+      const muteChecked = s.broll_muted !== false;
+      brollHTML = `<div class="rm-scene-images" style="align-items:center;">
+        ${s.broll.map((vid, vidIdx) => `<div class="rm-scene-img-wrap"><video class="rm-scene-img-thumb" src="/${vid}" muted></video><div class="rm-scene-broll-badge">B-roll</div><button class="rm-scene-img-remove" onclick="event.stopPropagation(); rmRemoveSceneBroll(${i}, ${vidIdx})" title="Remove B-roll">&times;</button></div>`).join('')}
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
+          ${maxSpan > 1 ? `<span style="color:#888;font-size:11px;">Span:</span><input type="range" min="1" max="${maxSpan}" value="${s.broll_span || 1}" oninput="this.nextElementSibling.textContent=this.value==1?'1 scene':this.value+' scenes'" onchange="event.stopPropagation(); rmUpdateBrollSpan(${i}, parseInt(this.value))" style="width:80px;height:4px;accent-color:#7B2FF2;"><span style="color:#ccc;font-size:11px;min-width:55px;">${(s.broll_span||1)==1?'1 scene':(s.broll_span||1)+' scenes'}</span>` : ''}
+          <label style="display:flex;align-items:center;gap:3px;cursor:pointer;margin-left:4px;" onclick="event.stopPropagation();">
+            <input type="checkbox" ${muteChecked ? 'checked' : ''} onchange="event.stopPropagation(); rmToggleBrollMute(${i}, this.checked)" style="accent-color:#7B2FF2;width:12px;height:12px;">
+            <span style="color:#888;font-size:10px;">${muteChecked ? '🔇 Muted' : '🔊 Audio'}</span>
+          </label>
+        </div>
+      </div>`;
+    } else if (coveredByBroll !== null) {
+      brollHTML = `<div style="margin-top:6px;"><span style="background:rgba(123,47,242,0.2);color:#C084FC;font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid rgba(123,47,242,0.3);">🎬 B-roll from scene ${coveredByBroll + 1}</span></div>`;
+    }
     const overlayVal = s.text_overlay || '';
     const hasOriginal = s.original_text && (s.text !== s.original_text || (s.text_overlay && s.text_overlay !== s.original_text));
     return `
@@ -577,6 +632,144 @@ function rmUpdateSceneMfxInstructions(idx, value) {
   if (!rmCurrentProject || !rmCurrentProject.scenes[idx]) return;
   rmCurrentProject.scenes[idx].mfx_instructions = value;
   rmSaveProject();
+}
+
+// ── Presentation Mode ──
+function rmTogglePresentationMode(enabled) {
+  if (!rmCurrentProject) return;
+  const scenes = rmCurrentProject.scenes || [];
+  if (enabled) {
+    // Save original modes and set all to MFX
+    for (const s of scenes) {
+      s._prev_display_mode = s.display_mode || 'subtitles';
+      s.display_mode = 'mfx';
+      if (!s.mfx_instructions) {
+        s.mfx_instructions = 'Animate this text as engaging motion graphics — kinetic typography with dynamic reveals';
+      }
+    }
+    rmCurrentProject.presentationMode = true;
+  } else {
+    // Restore original modes
+    for (const s of scenes) {
+      if (s._prev_display_mode) {
+        s.display_mode = s._prev_display_mode;
+        delete s._prev_display_mode;
+      }
+    }
+    rmCurrentProject.presentationMode = false;
+  }
+  rmRenderTimeline();
+  rmUpdatePresentationBar();
+  rmSaveProject();
+}
+
+function rmUpdatePresentationBar() {
+  const bar = document.getElementById('rmPresentationBar');
+  const btn = document.getElementById('rmPresentationToggleBtn');
+  const bgBar = document.getElementById('rmMfxBgBar');
+  if (!bar || !btn || !rmCurrentProject) return;
+  const on = rmCurrentProject.presentationMode;
+  bar.style.display = '';
+  bar.style.borderColor = on ? '#7B2FF2' : '#333';
+  btn.className = `btn btn-sm ${on ? 'btn-primary' : 'btn-outline'}`;
+  btn.textContent = on ? '✓ ON' : 'OFF';
+
+  // Show MFX background options when presentation mode is on
+  if (bgBar) {
+    if (on) {
+      const bg = rmCurrentProject.style?.mfxBackground || { type: 'video' };
+      bgBar.style.display = '';
+      bgBar.innerHTML = `
+        <div style="border-top:1px solid #333; margin-top:10px; padding-top:10px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <span style="color:#ccc; font-size:12px; font-weight:600;">Background:</span>
+            <button class="btn btn-sm ${bg.type === 'video' ? 'btn-primary' : 'btn-outline'}" onclick="rmSetMfxBg('video')" style="font-size:10px; padding:2px 8px;">Video</button>
+            <button class="btn btn-sm ${bg.type === 'color' ? 'btn-primary' : 'btn-outline'}" onclick="rmSetMfxBg('color')" style="font-size:10px; padding:2px 8px;">Color</button>
+            <button class="btn btn-sm ${bg.type === 'image' ? 'btn-primary' : 'btn-outline'}" onclick="rmSetMfxBg('image')" style="font-size:10px; padding:2px 8px;">Image</button>
+            ${bg.type === 'color' ? `<input type="color" value="${bg.value || '#0f0f1a'}" oninput="rmSetMfxBgValue(this.value)" style="width:24px;height:24px;border:none;background:none;cursor:pointer;padding:0;">` : ''}
+            ${bg.type === 'image' ? `<button class="btn btn-outline btn-sm" onclick="rmUploadMfxBgImage()" style="font-size:10px; padding:2px 8px;">${bg.value ? '🖼 Change' : '📁 Upload'}</button>` : ''}
+            ${bg.type === 'image' && bg.value ? `<div style="width:28px;height:28px;border-radius:4px;overflow:hidden;border:1px solid #444;"><img src="/${bg.value}" style="width:100%;height:100%;object-fit:cover;"></div>` : ''}
+          </div>
+        </div>`;
+    } else {
+      bgBar.style.display = 'none';
+      bgBar.innerHTML = '';
+    }
+  }
+}
+
+// ── MFX Background ──
+function rmRenderMfxBackgroundUI() {
+  const bg = rmCurrentProject.style?.mfxBackground || { type: 'video' };
+  return `
+    <div class="rm-customize-section">
+      <h4>MFX Background</h4>
+      <p style="font-size: 11px; color: #888; margin: 0 0 8px;">What appears behind the motion graphics text</p>
+      <div style="display:flex; gap:6px; margin-bottom:10px;">
+        <button class="btn btn-sm ${bg.type === 'video' ? 'btn-primary' : 'btn-outline'}" onclick="rmSetMfxBg('video')" style="flex:1; font-size:11px;">Video Clip</button>
+        <button class="btn btn-sm ${bg.type === 'color' ? 'btn-primary' : 'btn-outline'}" onclick="rmSetMfxBg('color')" style="flex:1; font-size:11px;">Solid Color</button>
+        <button class="btn btn-sm ${bg.type === 'image' ? 'btn-primary' : 'btn-outline'}" onclick="rmSetMfxBg('image')" style="flex:1; font-size:11px;">Image</button>
+      </div>
+      ${bg.type === 'color' ? `
+        <div class="rm-row">
+          <span class="rm-row-label">Color</span>
+          <div class="rm-row-value">
+            <input type="color" class="rm-color-swatch" value="${bg.value || '#0f0f1a'}" oninput="rmSetMfxBgValue(this.value); this.nextElementSibling.value = this.value">
+            <input type="text" class="rm-color-input" value="${bg.value || '#0f0f1a'}" onchange="rmSetMfxBgValue(this.value); this.previousElementSibling.value = this.value">
+          </div>
+        </div>
+      ` : ''}
+      ${bg.type === 'image' ? `
+        <div style="display:flex; gap:8px; align-items:center;">
+          ${bg.value ? `<div style="width:60px;height:60px;border-radius:8px;overflow:hidden;border:1px solid #333;"><img src="/${bg.value}" style="width:100%;height:100%;object-fit:cover;"></div>` : ''}
+          <button class="btn btn-outline btn-sm" onclick="rmUploadMfxBgImage()" style="font-size:11px;">${bg.value ? 'Change Image' : 'Upload Background Image'}</button>
+        </div>
+      ` : ''}
+      ${bg.type === 'video' ? `<p style="font-size:10px; color:#666; margin:4px 0 0;">Uses the main video clip as background (default)</p>` : ''}
+    </div>
+  `;
+}
+
+function rmSetMfxBg(type) {
+  if (!rmCurrentProject) return;
+  if (!rmCurrentProject.style) rmCurrentProject.style = {};
+  const current = rmCurrentProject.style.mfxBackground || {};
+  rmCurrentProject.style.mfxBackground = { type, value: type === 'color' ? (current.value || '#0f0f1a') : current.value };
+  if (type === 'video') rmCurrentProject.style.mfxBackground.value = null;
+  rmUpdatePresentationBar();
+  rmSaveProject();
+}
+
+function rmSetMfxBgValue(value) {
+  if (!rmCurrentProject) return;
+  if (!rmCurrentProject.style) rmCurrentProject.style = {};
+  if (!rmCurrentProject.style.mfxBackground) rmCurrentProject.style.mfxBackground = { type: 'color' };
+  rmCurrentProject.style.mfxBackground.value = value;
+  rmSaveProject();
+}
+
+function rmUploadMfxBgImage() {
+  if (!rmCurrentProject) return;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = async () => {
+    if (!input.files[0]) return;
+    try {
+      const formData = new FormData();
+      formData.append('files', input.files[0]);
+      const res = await rmApi.upload(rmCurrentProject.id, formData);
+      if (res.files && res.files[0]) {
+        if (!rmCurrentProject.style) rmCurrentProject.style = {};
+        rmCurrentProject.style.mfxBackground = { type: 'image', value: res.files[0].path };
+        rmCurrentProject.clips.push(res.files[0]);
+        rmUpdatePresentationBar();
+        rmSaveProject();
+        showToast('Background image uploaded', 'success');
+      }
+    } catch (e) { showToast('Upload failed: ' + e.message, 'error'); }
+  };
+  input.click();
 }
 
 function rmMigrateGlobalMfxToScenes() {
@@ -757,6 +950,7 @@ _rmBrollInput.addEventListener('change', async () => {
       if (!scene.broll) scene.broll = [];
       scene.broll.push(res.files[0].path);
       rmCurrentProject.clips.push(res.files[0]);
+      scene.broll_span = 1;
       rmRenderTimeline();
       rmSaveProject();
     }
@@ -768,6 +962,19 @@ function rmAttachBroll(sceneIdx) {
   _rmBrollSceneIdx = sceneIdx;
   _rmBrollInput.value = '';
   _rmBrollInput.click();
+}
+
+function rmUpdateBrollSpan(sceneIdx, span) {
+  if (!rmCurrentProject || !rmCurrentProject.scenes[sceneIdx]) return;
+  rmCurrentProject.scenes[sceneIdx].broll_span = span;
+  rmRenderTimeline();
+  rmSaveProject();
+}
+
+function rmToggleBrollMute(sceneIdx, muted) {
+  if (!rmCurrentProject || !rmCurrentProject.scenes[sceneIdx]) return;
+  rmCurrentProject.scenes[sceneIdx].broll_muted = muted;
+  rmSaveProject();
 }
 
 function rmRemoveSceneBroll(sceneIdx, brollIdx) {
@@ -1394,6 +1601,8 @@ function rmRenderAnimationsTab() {
                onchange="rmUpdateStyle('subtitleAnimation.highlightColor', this.value); rmRenderCustomizeTab('animations');">
       </div>
     </div>` : ''}
+
+    ${rmCurrentProject.presentationMode ? rmRenderMfxBackgroundUI() : ''}
 
     <div class="rm-customize-section">
       <h4>Motion Graphics</h4>
