@@ -388,7 +388,10 @@ router.post('/setup/install', express.json(), async (req, res) => {
       if (!npmCheck.ok) {
         return fail(400, { ok: false, error: 'Node.js must be installed first (it provides npm). Install Node.js above, then retry.' });
       }
-      const { stdout } = await runCmd('npm install -g @anthropic-ai/claude-code');
+      const installCmd = shared.IS_MAC
+        ? `osascript -e 'do shell script "npm install -g @anthropic-ai/claude-code" with administrator privileges'`
+        : 'npm install -g @anthropic-ai/claude-code';
+      const { stdout } = await runCmd(installCmd, { timeout: 120 * 1000 });
       const npmGlobalBin = path.join(require('os').homedir(), 'AppData', 'Roaming', 'npm');
       if (shared.IS_WIN && !process.env.PATH.includes(npmGlobalBin)) {
         process.env.PATH = npmGlobalBin + ';' + process.env.PATH;

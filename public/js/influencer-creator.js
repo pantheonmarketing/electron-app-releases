@@ -453,7 +453,7 @@ function icGetPlaceholder() {
   const ph = {
     recreate: 'Optional: add custom instructions...',
     merge: 'Optional: specify which features from each face...',
-    edit: 'Use @img tags to reference images, e.g. "she\\'s wearing the outfit from @img3"',
+    edit: 'Use @img tags to reference images, e.g. "she\'s wearing the outfit from @img3"',
     swap: 'Optional: "wearing the dress from @img2", "sunset lighting"...',
   };
   return ph[icSelectedMethod] || '';
@@ -473,7 +473,7 @@ function icRenderRightPanel() {
       <input type="password" class="ic-prompt-textarea" id="icApiKeyInput" value="${esc(icGetApiKey())}" placeholder="AIzaSy..." style="min-height:auto;padding:8px 10px;flex:1;font-size:11px;">
       <button class="btn btn-primary btn-sm" onclick="icSaveApiKey()" style="white-space:nowrap;">Save Key</button>
     </div>
-    ${icGetApiKey() ? '<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key saved — stored locally in your browser</div>' : '<div style="font-size:10px;color:#F59E0B;margin-top:6px;">No key set — generation won\\'t work without it</div>'}
+    ${icGetApiKey() ? '<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key saved — stored locally in your browser</div>' : '<div style="font-size:10px;color:#F59E0B;margin-top:6px;">No key set — generation won\'t work without it</div>'}
   </div>` : '';
 
   // Find active gallery
