@@ -821,7 +821,11 @@ ${presentationMode ? `
 PRESENTATION MODE: ON — This is a presentation/explainer video.
 All scenes use motion graphics. Text IS the primary visual.
 Each scene should have dynamic kinetic typography with engaging animations.
-No talking head — the text and animations tell the story.
+${mfxBg.type === 'video' ? `MFX BACKGROUND: video — The uploaded video clip plays FULL-SCREEN as the background layer behind all motion graphics text.
+- Render the video with <OffthreadVideo> filling the entire frame (100% width, 100% height, objectFit cover).
+- Then overlay all text animations, kinetic typography, and motion graphics ON TOP of the video.
+- The video is a visual backdrop — the animated text is still the primary content the viewer reads.
+- Do NOT hide or skip the video. It must be visible behind the text at all times.` : `No talking head — the text and animations tell the story.`}
 ` : ''}${mfxBg.type !== 'video' ? `
 MFX BACKGROUND: ${mfxBg.type} ${mfxBg.type === 'color' ? mfxBg.value : (mfxBg.type === 'image' ? path.basename(mfxBg.value || '') : '')}
 - ${mfxBg.type === 'color' ? `Use <AbsoluteFill style={{background: '${mfxBg.value}'}}> as the background behind all text/motion graphics (instead of video).` : ''}

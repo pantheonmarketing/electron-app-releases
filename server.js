@@ -158,10 +158,11 @@ const HEYGEN_CONFIG_FILE = path.join(BASE_DIR, 'heygen-config.json');
 const SCHEDULES_FILE = path.join(BASE_DIR, 'schedules.json');
 const SKILL_VERSIONS_DIR = path.join(BASE_DIR, 'skill-versions');
 const SKILL_CONFIGS_FILE = path.join(BASE_DIR, 'skill-configs.json');
+const INFLUENCER_PROJECTS_DIR = path.join(BASE_DIR, 'influencer-projects');
 
 // ── Ensure directories exist ──
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
-[RESULTS_DIR, LOGS_DIR, UPLOADS_DIR, REEL_PROJECTS_DIR, REEL_PRESETS_DIR, WHISPER_CACHE_DIR, HEYGEN_PROJECTS_DIR, SKILL_VERSIONS_DIR, STORY_PROJECTS_DIR, STORY_PRESETS_DIR].forEach(d => {
+[RESULTS_DIR, LOGS_DIR, UPLOADS_DIR, REEL_PROJECTS_DIR, REEL_PRESETS_DIR, WHISPER_CACHE_DIR, HEYGEN_PROJECTS_DIR, SKILL_VERSIONS_DIR, STORY_PROJECTS_DIR, STORY_PRESETS_DIR, INFLUENCER_PROJECTS_DIR].forEach(d => {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
@@ -357,7 +358,7 @@ Object.assign(shared, {
   RESULTS_DIR, LOGS_DIR, WORKFLOW_RUNS_FILE, UPLOADS_DIR,
   REEL_PROJECTS_DIR, REEL_PRESETS_DIR, WHISPER_CACHE_DIR,
   HEYGEN_PROJECTS_DIR, HEYGEN_CONFIG_FILE, STORY_PROJECTS_DIR, STORY_PRESETS_DIR,
-  SCHEDULES_FILE, FFMPEG_BIN,
+  SCHEDULES_FILE, FFMPEG_BIN, INFLUENCER_PROJECTS_DIR,
   IS_WIN, IS_MAC,
   terminalManager, reelUpload,
   launchWorkerProcess, killProcessTree, openInFolder, getAppDataDir, getLicenseTier,
@@ -403,6 +404,7 @@ app.use('/api', require('./routes/workflows'));
 app.use('/api', require('./routes/reel'));
 app.use('/api', require('./routes/heygen'));
 app.use('/api', require('./routes/stories'));
+app.use('/api', require('./routes/influencer'));
 
 // ── Claude CLI check ──
 let claudeCliOk = false;

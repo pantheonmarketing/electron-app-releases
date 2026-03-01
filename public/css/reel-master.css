@@ -38,9 +38,16 @@
 }
 .rm-toolbar-name:focus { border-color: rgba(123,47,242,0.5); }
 .rm-mode-toggle { display: flex; gap: 2px; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 2px; margin: 0 12px; }
-.rm-mode-btn { padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; color: #888; background: transparent; border: none; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.rm-mode-btn { padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; color: #888; background: transparent; border: none; cursor: pointer; transition: all 0.15s; white-space: nowrap; position: relative; }
 .rm-mode-btn.active { background: rgba(123,47,242,0.3); color: #fff; }
 .rm-mode-btn:hover:not(.active) { color: #bbb; }
+.rm-mode-preview { display: none; position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%); background: #1e1e2e; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.5); pointer-events: none; flex-direction: column; align-items: center; gap: 6px; }
+.rm-mode-preview::before { content: ''; position: absolute; top: -5px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 8px; height: 8px; background: #1e1e2e; border-top: 1px solid rgba(255,255,255,0.1); border-left: 1px solid rgba(255,255,255,0.1); }
+.rm-mode-btn:hover .rm-mode-preview { display: flex; }
+.rm-mode-preview span { font-size: 10px; color: #888; white-space: nowrap; }
+.rm-mode-preview-frame { border: 1px solid rgba(255,255,255,0.15); border-radius: 3px; display: flex; flex-direction: column; gap: 2px; padding: 2px; background: rgba(0,0,0,0.3); }
+.rm-mode-preview-vertical { width: 40px; height: 70px; }
+.rm-mode-preview-horizontal { width: 80px; height: 45px; }
 .rm-split-canvas-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: #444; font-size: 10px; border: 1px dashed rgba(255,255,255,0.1); border-radius: 4px; margin: 4px; }
 .rm-slideshow { position: relative; overflow: hidden; }
 .rm-slideshow-img { position: absolute; top: 0; left: 0; transition: opacity 0.4s ease; }

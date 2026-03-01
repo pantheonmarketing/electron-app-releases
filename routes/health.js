@@ -258,12 +258,41 @@ router.post('/setup/install', express.json(), async (req, res) => {
           fail(500, { ok: false, error: 'Failed to install Node.js automatically.', details: (e.stderr || e.message).slice(0, 500) });
         }
       } else if (shared.IS_MAC) {
+        // Try Homebrew first, then fall back to direct .pkg download
+        let installed = false;
         try {
           await runCmd('which brew');
           const { stdout } = await runCmd('brew install node', { timeout: 300 * 1000 });
+          installed = true;
           succeed({ ok: true, package: pkg, output: stdout.slice(-500) });
-        } catch (_) {
-          fail(500, { ok: false, error: 'Please install Homebrew first (brew.sh), then re-try.' });
+        } catch (_) {}
+
+        if (!installed) {
+          // Direct download of Node.js .pkg installer (works without Homebrew)
+          try {
+            const nodeVer = 'v22.14.0';
+            const nodeUrl = `https://nodejs.org/dist/${nodeVer}/node-${nodeVer}.pkg`; // universal .pkg
+            console.log(`[Setup] Downloading Node.js .pkg for Mac...`);
+
+            await runCmd(`curl -fsSL "${nodeUrl}" -o /tmp/node-install.pkg`, { timeout: 120 * 1000 });
+            console.log('[Setup] Installing Node.js .pkg...');
+            // installer requires sudo — use osascript to prompt for admin password
+            await runCmd(
+              `osascript -e 'do shell script "installer -pkg /tmp/node-install.pkg -target /" with administrator privileges'`,
+              { timeout: 120 * 1000 }
+            );
+
+            // Add to PATH for this process
+            const nodePaths = ['/usr/local/bin', '/opt/homebrew/bin'];
+            for (const p of nodePaths) {
+              if (!process.env.PATH.includes(p)) process.env.PATH = p + ':' + process.env.PATH;
+            }
+            console.log(`[Setup] Node.js installed via .pkg`);
+            succeed({ ok: true, package: pkg, message: 'Node.js installed! Click Re-check to update the list.' });
+          } catch (e) {
+            fail(500, { ok: false, error: 'Failed to install Node.js. A system dialog may have appeared asking for your password — please approve it and try again.',
+              details: (e.stderr || e.message || '').slice(0, 500) });
+          }
         }
       } else {
         fail(400, { ok: false, error: 'Use your package manager to install nodejs' });
@@ -465,19 +494,24 @@ router.post('/setup/install', express.json(), async (req, res) => {
       console.log(`[Setup] ${pkg} pip install finished`);
 
       // Verify the install actually worked by importing
+      // On Mac, python3 is the command — try it first to avoid false failures
       const modName = pkg === 'faster-whisper' ? 'faster_whisper' : pkg.replace(/-/g, '_');
-      let verify = checkTool(`python -c "import ${modName}; print('OK')"`);
-      if (!verify.ok && shared.IS_MAC) {
+      let verify;
+      if (shared.IS_MAC) {
         verify = checkTool(`python3 -c "import ${modName}; print('OK')"`);
+        if (!verify.ok) verify = checkTool(`python -c "import ${modName}; print('OK')"`);
+      } else {
+        verify = checkTool(`python -c "import ${modName}; print('OK')"`);
       }
 
       if (verify.ok) {
         succeed({ ok: true, package: pkg, output: stdout.slice(-500) });
       } else {
         // pip said OK but import fails — capture the actual error for remote logging
+        const pyCmd = shared.IS_MAC ? 'python3' : 'python';
         let importErr = '';
         try {
-          execSync(`python -c "import ${modName}"`, { encoding: 'utf-8', timeout: 8000, windowsHide: true });
+          execSync(`${pyCmd} -c "import ${modName}"`, { encoding: 'utf-8', timeout: 8000, windowsHide: true });
         } catch (ie) {
           importErr = (ie.stderr || ie.message || '').slice(0, 2000);
         }

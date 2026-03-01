@@ -246,5 +246,21 @@
     "context": [],
     "requirements": ["Claude CLI", "Chrome DevTools MCP or Playwright MCP", "HeyGen account + login cookies"],
     "chat_prompts": ["Change default avatar", "Update voice settings", "Add new video template"]
+  },
+  "skool-commenter-dm": {
+    "file": "skills/skool-commenter-dm-skill.md",
+    "description": "DM Skool members + reply to their comments",
+    "display_name": "Skool DM & Reply",
+    "icon": "\ud83d\udce8",
+    "category": "social",
+    "plain_description": "Sends personalized DMs to Skool community members and batch-replies to post comments via browser automation.",
+    "context": [],
+    "requirements": ["Claude CLI", "Playwright MCP", "Skool login cookies (active session)"],
+    "config": [
+      { "key": "community_slugs", "label": "Community Slugs", "type": "textarea", "placeholder": "ai-influencer-academy2026, ai-ceo-accelerator-7600", "hint": "Comma-separated Skool community slugs (from the URL)" },
+      { "key": "dm_template", "label": "DM Message Template", "type": "textarea", "placeholder": "Hey {NAME}! Your license is ready...", "hint": "Use {NAME}, {KEY}, {PLATFORM}, {DOWNLOAD_URL} as placeholders" },
+      { "key": "reply_template", "label": "Comment Reply Template", "type": "textarea", "placeholder": "@{NAME} Check your inbox! Just sent you...", "hint": "Use {NAME} as placeholder. Will be typed after the auto @mention." }
+    ],
+    "chat_prompts": ["Update DM template", "Change reply message", "Add new community slug", "Update download URLs"]
   }
 }

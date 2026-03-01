@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="css/heygen.css">
   <link rel="stylesheet" href="css/scripter.css">
   <link rel="stylesheet" href="css/story-editor.css">
+  <link rel="stylesheet" href="css/influencer-creator.css">
 </head>
 <body>
 
@@ -66,6 +67,10 @@
     <div class="sidebar-item" id="nav-heygen" data-view="heygen" data-tooltip="Create" onclick="switchView('heygen')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
       <span class="sidebar-label">Create</span>
+    </div>
+    <div class="sidebar-item" id="nav-influencer" data-view="influencer" data-tooltip="Influencer Creator" onclick="switchView('influencer')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span class="sidebar-label">Faces</span>
     </div>
   </nav>
   <div class="sidebar-spacer"></div>
@@ -279,9 +284,31 @@
         <button class="rm-toolbar-back" onclick="rmBackToList()" title="Back to projects">←</button>
         <input type="text" class="rm-toolbar-name" id="rmProjectName" placeholder="Reel name..." onchange="rmSaveProject()">
         <div class="rm-mode-toggle" id="rmModeToggle">
-          <button class="rm-mode-btn active" data-mode="full" onclick="rmSetMode('full')">Full Video</button>
-          <button class="rm-mode-btn" data-mode="split" onclick="rmSetMode('split')">Split Screen</button>
-          <button class="rm-mode-btn" data-mode="youtube" onclick="rmSetMode('youtube')">YouTube</button>
+          <button class="rm-mode-btn active" data-mode="full" onclick="rmSetMode('full')">TikTok / IG
+            <div class="rm-mode-preview">
+              <div class="rm-mode-preview-frame rm-mode-preview-vertical">
+                <div class="rm-mode-preview-block" style="height:100%;background:rgba(123,47,242,0.3);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#aaa;">9:16</div>
+              </div>
+              <span>Full vertical video</span>
+            </div>
+          </button>
+          <button class="rm-mode-btn" data-mode="split" onclick="rmSetMode('split')">TikTok / IG Split
+            <div class="rm-mode-preview">
+              <div class="rm-mode-preview-frame rm-mode-preview-vertical">
+                <div class="rm-mode-preview-block" style="height:48%;background:rgba(123,47,242,0.3);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;color:#aaa;">Video</div>
+                <div class="rm-mode-preview-block" style="height:48%;background:rgba(255,255,255,0.08);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;color:#666;">Image</div>
+              </div>
+              <span>Video top + image bottom</span>
+            </div>
+          </button>
+          <button class="rm-mode-btn" data-mode="youtube" onclick="rmSetMode('youtube')">YouTube
+            <div class="rm-mode-preview">
+              <div class="rm-mode-preview-frame rm-mode-preview-horizontal">
+                <div class="rm-mode-preview-block" style="height:100%;background:rgba(123,47,242,0.3);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#aaa;">16:9</div>
+              </div>
+              <span>Landscape video</span>
+            </div>
+          </button>
         </div>
         <div style="flex:1;"></div>
         <button class="btn btn-ghost btn-sm" onclick="rmSaveProject()">💾 Save</button>
@@ -740,6 +767,21 @@
       <div class="st-panel st-panel-active" id="stPanelBrand"></div>
     </div>
   </div><!-- /view-stories -->
+
+  <!-- ═══ View: Influencer Creator ═══ -->
+  <div class="view view-influencer" id="influencerView">
+    <div class="ic-landing" id="icLanding">
+      <div class="ic-landing-header">
+        <div>
+          <div class="ic-landing-title">Influencer Creator</div>
+          <div class="ic-landing-subtitle">Create unique AI influencer face portraits using NanoBanana Pro 2</div>
+        </div>
+        <button class="btn btn-primary" onclick="icNewProject()">+ New Influencer</button>
+      </div>
+      <div class="ic-project-list" id="icProjectList"></div>
+    </div>
+    <div class="ic-studio" id="icStudio" style="display:none;"></div>
+  </div><!-- /view-influencer -->
 
   <!-- Image Search Modal (Multi-source) -->
   <div class="rm-img-search-backdrop" id="rmImgSearchBackdrop" onclick="rmCloseImageSearch()"></div>
@@ -2355,6 +2397,7 @@ async function deactivateLicense() {
 <script src="js/heygen.js"></script>
 <script src="js/scripter.js"></script>
 <script src="js/story-editor.js"></script>
+<script src="js/influencer-creator.js"></script>
 <!-- ═══ Skill Editor Modal ═══ -->
 <div class="modal-overlay" id="skillEditorOverlay" onclick="if(event.target===this)closeSkillEditor()">
   <div class="se-modal" style="position:relative;">

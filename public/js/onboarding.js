@@ -88,6 +88,11 @@ function showOnboarding() {
               <label>Anything else AI should know?</label>
               <textarea id="obPersonaExtra" placeholder="e.g. Based in Austin, TX. Main platforms: Instagram and TikTok" rows="2"></textarea>
             </div>
+            <div class="ob-field" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+              <label>Project folder <span style="color:#555;font-weight:400;">(where your files live)</span></label>
+              <input type="text" id="obWorkingDir" placeholder="e.g. C:\\Users\\you\\Projects\\my-app" autocomplete="off" style="font-size:12px;font-family:'SF Mono',Monaco,monospace;">
+              <span style="font-size:11px;color:#666;margin-top:4px;display:block;">AI will always work from this folder. You can change it later in Space Settings.</span>
+            </div>
           </div>
           <p class="ob-hint">You can always update this later in Space Settings.</p>
         </div>`,
@@ -99,6 +104,7 @@ function showOnboarding() {
           audience: (document.getElementById('obPersonaAudience') || {}).value?.trim() || '',
           tone: (document.getElementById('obPersonaTone') || {}).value?.trim() || '',
           extra: (document.getElementById('obPersonaExtra') || {}).value?.trim() || '',
+          working_dir: (document.getElementById('obWorkingDir') || {}).value?.trim() || '',
         };
       },
       onEnter() {
@@ -113,6 +119,8 @@ function showOnboarding() {
           if (el4) { el4.value = _obPersona.tone || ''; }
           const el5 = document.getElementById('obPersonaExtra');
           if (el5) { el5.value = _obPersona.extra || ''; }
+          const el6 = document.getElementById('obWorkingDir');
+          if (el6) { el6.value = _obPersona.working_dir || ''; }
           // Restore photo if already uploaded
           const photoEl = document.getElementById('obPersonaPhoto');
           if (photoEl && _obPersona.photo) {
@@ -321,10 +329,10 @@ function _saveOnboardingPersona() {
       extra: (document.getElementById('obPersonaExtra') || {}).value?.trim() || '',
     };
   }
-  const { photo, ...textFields } = _obPersona;
-  const hasData = Object.values(textFields).some(v => v);
+  const { photo, working_dir, ...textFields } = _obPersona;
+  const hasData = Object.values(textFields).some(v => v) || working_dir;
   if (!hasData) return;
-  // Save persona to the default General space
+  // Save persona + working_dir to the default General space
   try {
     let spaces = JSON.parse(localStorage.getItem('claude-tm-spaces') || '[]');
     if (spaces.length === 0) {
@@ -332,6 +340,7 @@ function _saveOnboardingPersona() {
     }
     const general = spaces.find(s => s.id === 'general') || spaces[0];
     general.persona = _obPersona;
+    if (working_dir) general.working_dir = working_dir;
     localStorage.setItem('claude-tm-spaces', JSON.stringify(spaces));
   } catch (e) {
     console.error('[Onboarding] Failed to save persona:', e);
