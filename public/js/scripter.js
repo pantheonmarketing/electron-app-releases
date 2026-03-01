@@ -264,17 +264,25 @@ function scrCopyClean() {
   }
 
   const result = clean.join('\n\n');
-  navigator.clipboard.writeText(result).then(() => {
-    showToast('Clean script copied — ready to paste!', 'success');
-  }).catch(() => showToast('Failed to copy', 'error'));
+  scrClipCopy(result, 'Clean script copied — ready to paste!');
 }
 
 function scrCopyScript() {
   const content = document.querySelector('.scr-script-content');
   if (!content) return;
-  navigator.clipboard.writeText(content.innerText).then(() => {
-    showToast('Script copied to clipboard', 'success');
-  }).catch(() => showToast('Failed to copy', 'error'));
+  scrClipCopy(content.innerText, 'Script copied to clipboard');
+}
+
+function scrClipCopy(text, msg) {
+  const ok = () => showToast(msg, 'success');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(ok).catch(() => { _fbCopy(text); ok(); });
+  } else { _fbCopy(text); ok(); }
+}
+function _fbCopy(t) {
+  const ta = document.createElement('textarea');
+  ta.value = t; ta.style.cssText = 'position:fixed;left:-9999px';
+  document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
 }
 
 function scrSendToHeyGen() {

@@ -137,6 +137,20 @@
   display: none; align-items: center; justify-content: center; font-size: 12px;
 }
 .ic-ref-card:hover .ic-ref-card-delete { display: flex; }
+.ic-ref-card-portrait-btn {
+  position: absolute; bottom: 3px; right: 3px;
+  background: rgba(0,0,0,0.7); color: #C084FC; border: none;
+  width: 20px; height: 20px; border-radius: 50%; cursor: pointer;
+  display: none; align-items: center; justify-content: center; font-size: 11px;
+  line-height: 1;
+}
+.ic-ref-card:hover .ic-ref-card-portrait-btn { display: flex; }
+.ic-ref-card-portrait {
+  position: absolute; top: 3px; left: 3px;
+  font-size: 12px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+  pointer-events: none;
+}
+.ic-ref-portrait { border-color: #C084FC !important; box-shadow: 0 0 8px rgba(192,132,252,0.4); }
 
 /* ── Method Tabs ── */
 .ic-method-tabs {

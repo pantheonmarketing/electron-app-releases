@@ -599,11 +599,31 @@ function copyResult() {
   } else {
     text = el.innerText;
   }
-  navigator.clipboard.writeText(text.trim()).then(() => {
+  const trimmed = text.trim();
+  const onSuccess = () => {
     const btn = document.getElementById('copyBtn');
     btn.textContent = '✅ Copied!';
     setTimeout(() => { btn.innerHTML = '📋 Copy'; }, 2000);
-  });
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(trimmed).then(onSuccess).catch(() => {
+      fallbackCopy(trimmed);
+      onSuccess();
+    });
+  } else {
+    fallbackCopy(trimmed);
+    onSuccess();
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
 }
 
 async function submitFollowUp() {

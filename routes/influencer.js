@@ -36,7 +36,7 @@ function listProjects() {
 
 function guessMime(filename) {
   const ext = path.extname(filename).toLowerCase();
-  const map = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
+  const map = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.jfif': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.bmp': 'image/bmp' };
   return map[ext] || 'image/jpeg';
 }
 
@@ -57,7 +57,7 @@ const icUpload = multer({
   storage: icStorage,
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (/\.(jpg|jpeg|png|webp|gif)$/i.test(file.originalname)) cb(null, true);
+    if (/\.(jpg|jpeg|jfif|png|webp|gif|bmp)$/i.test(file.originalname)) cb(null, true);
     else cb(new Error('Only image files are allowed'));
   }
 });
@@ -248,7 +248,9 @@ router.post('/influencer/projects/:id/generate', async (req, res) => {
 
     // Find an item by id across references and generations
     function findItem(id) {
-      return project.references.find(r => r.id === id)
+      // Handle "ref:refId" prefix used for reference-based portraits
+      const cleanId = id?.startsWith('ref:') ? id.slice(4) : id;
+      return project.references.find(r => r.id === cleanId)
         || project.generations.find(g => g.id === id);
     }
 
@@ -466,6 +468,64 @@ Be very specific about colors and shapes. Output ONLY the feature list, no intro
 
   writeProject(project);
   res.json({ ok: true, portraitDescription: project.portraitDescription || null });
+});
+
+// Set a reference image as portrait
+router.post('/influencer/projects/:id/references/:refId/set-portrait', async (req, res) => {
+  const project = readProject(req.params.id);
+  if (!project) return res.status(404).json({ ok: false, error: 'Not found' });
+
+  const ref = project.references.find(r => r.id === req.params.refId);
+  if (!ref) return res.status(404).json({ ok: false, error: 'Reference not found' });
+
+  // Clear previous portrait from generations
+  project.generations.forEach(g => { g.isPortrait = false; });
+  // Store portrait info — use "ref:" prefix to distinguish from generation IDs
+  project.portraitId = 'ref:' + ref.id;
+  project.portraitPath = ref.path;
+
+  // Auto-analyze face features
+  const apiKey = (req.body && req.body.geminiApiKey) || process.env.GEMINI_API_KEY;
+  const needsAnalysis = !project.portraitDescription || project._analyzedPortraitId !== project.portraitId;
+  if (apiKey && needsAnalysis) {
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const filePath = path.join(shared.BASE_DIR, ref.path);
+      if (fs.existsSync(filePath)) {
+        const imgData = fs.readFileSync(filePath).toString('base64');
+        const analyzeResponse = await ai.models.generateContent({
+          model: GEMINI_TEXT_MODEL,
+          contents: [
+            { inlineData: { mimeType: guessMime(ref.filename), data: imgData } },
+            { text: `Analyze this person's face and describe their distinctive physical features in a concise, factual list. Include:
+- Hair: color, length, texture, style
+- Eyes: color, shape, size, any unique features
+- Eyebrows: shape, thickness, color
+- Nose: shape, size, bridge
+- Lips: fullness, shape
+- Face shape: oval, heart, round, square, diamond, etc.
+- Skin: tone, texture, freckles, moles, beauty marks
+- Bone structure: cheekbones, jawline, chin
+- Any other distinctive features
+
+Be very specific about colors and shapes. Output ONLY the feature list, no introduction or commentary.` }
+          ],
+        });
+        const parts = analyzeResponse?.candidates?.[0]?.content?.parts || [];
+        const textPart = parts.find(p => p.text);
+        if (textPart?.text) {
+          project.portraitDescription = textPart.text.trim();
+          project._analyzedPortraitId = project.portraitId;
+        }
+      }
+    } catch (err) {
+      console.warn('[Influencer] Ref portrait analysis failed:', err.message?.slice(0, 100));
+    }
+  }
+
+  writeProject(project);
+  res.json({ ok: true, portraitId: project.portraitId, portraitDescription: project.portraitDescription || null });
 });
 
 // Delete generation

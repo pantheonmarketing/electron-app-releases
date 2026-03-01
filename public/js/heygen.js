@@ -909,7 +909,15 @@ function hgSendToReelMaster() {
     return;
   }
   // Copy URL to clipboard and switch to Reel Master
-  navigator.clipboard.writeText(hgCurrentProject.videoUrl).catch(() => {});
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(hgCurrentProject.videoUrl).catch(() => {});
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = hgCurrentProject.videoUrl; ta.style.cssText = 'position:fixed;left:-9999px';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    }
+  } catch (_) {}
   showToast('Video URL copied! Create a new Reel and paste the URL to import.', 'info');
   switchView('reelmaster');
 }

@@ -164,6 +164,11 @@ const icApi = {
     const body = key ? { geminiApiKey: key } : {};
     return (await safeFetch(`/api/influencer/projects/${id}/generations/${genId}/set-portrait`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
   },
+  async setRefPortrait(id, refId) {
+    const key = icGetApiKey();
+    const body = key ? { geminiApiKey: key } : {};
+    return (await safeFetch(`/api/influencer/projects/${id}/references/${refId}/set-portrait`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+  },
   async deleteGen(id, genId) { return (await safeFetch(`/api/influencer/projects/${id}/generations/${genId}`, { method: 'DELETE' })).json(); },
   // Gallery collection endpoints
   async listGalleries(id) { return (await safeFetch(`/api/influencer/projects/${id}/galleries`)).json(); },
@@ -223,9 +228,16 @@ function icRenderProjectList() {
   }
 
   el.innerHTML = icProjects.map(p => {
-    const portrait = p.generations?.find(g => g.id === p.portraitId);
-    const thumbHtml = portrait
-      ? `<img src="/${portrait.path}" alt="">`
+    let portraitPath = null;
+    if (p.portraitId?.startsWith('ref:')) {
+      const ref = p.references?.find(r => r.id === p.portraitId.slice(4));
+      if (ref) portraitPath = ref.path;
+    } else if (p.portraitId) {
+      const gen = p.generations?.find(g => g.id === p.portraitId);
+      if (gen) portraitPath = gen.path;
+    }
+    const thumbHtml = portraitPath
+      ? `<img src="/${portraitPath}" alt="">`
       : `<span class="ic-card-thumb-placeholder">👤</span>`;
 
     return `<div class="ic-project-card" onclick="icOpenProject('${p.id}')">
@@ -408,10 +420,13 @@ function icRenderRefGrid() {
   return (p.references || []).map(ref => {
     const selected = icSelectedRefs.includes(ref.id);
     const tagLabel = ref.tag ? `@img${ref.tag}` : '';
-    return `<div class="ic-ref-card ${selected ? 'selected' : ''}" onclick="icToggleRef('${ref.id}')" title="${esc(ref.originalName || ref.filename)}${tagLabel ? ' — ' + tagLabel : ''}">
+    const isPortrait = p.portraitId === 'ref:' + ref.id;
+    return `<div class="ic-ref-card ${selected ? 'selected' : ''} ${isPortrait ? 'ic-ref-portrait' : ''}" onclick="icToggleRef('${ref.id}')" title="${esc(ref.originalName || ref.filename)}${tagLabel ? ' — ' + tagLabel : ''}">
       <img src="/${ref.path}" alt="" loading="lazy">
       ${tagLabel ? `<span class="ic-ref-card-tag">${tagLabel}</span>` : ''}
       ${ref.fromGeneration ? '<span class="ic-ref-card-badge">GEN</span>' : ''}
+      ${isPortrait ? '<span class="ic-ref-card-portrait">⭐</span>' : ''}
+      <button class="ic-ref-card-portrait-btn" onclick="event.stopPropagation(); icSetRefPortrait('${ref.id}')" title="Set as Portrait">⭐</button>
       <button class="ic-ref-card-delete" onclick="event.stopPropagation(); icDeleteRef('${ref.id}')" title="Remove">×</button>
     </div>`;
   }).join('');
@@ -429,13 +444,20 @@ function icRenderMethodHint() {
 
 function icRenderSwapPortraitInfo() {
   const p = icCurrentProject;
-  const portraitGen = p.generations?.find(g => g.id === p.portraitId);
-  if (portraitGen) {
+  let portraitPath = null;
+  if (p.portraitId?.startsWith('ref:')) {
+    const ref = p.references?.find(r => r.id === p.portraitId.slice(4));
+    if (ref) portraitPath = ref.path;
+  } else if (p.portraitId) {
+    const gen = p.generations?.find(g => g.id === p.portraitId);
+    if (gen) portraitPath = gen.path;
+  }
+  if (portraitPath) {
     const descHtml = p.portraitDescription
       ? `<div style="font-size:9px;color:#666;margin-top:4px;max-height:60px;overflow-y:auto;line-height:1.4;">${esc(p.portraitDescription.slice(0, 200))}${p.portraitDescription.length > 200 ? '...' : ''}</div>`
       : `<div style="font-size:9px;color:#F59E0B;margin-top:4px;">⏳ Re-click "Set as Portrait" to auto-analyze features</div>`;
     return `<div class="ic-swap-portrait-info">
-      <div class="ic-swap-portrait-thumb"><img src="/${portraitGen.path}" alt=""></div>
+      <div class="ic-swap-portrait-thumb"><img src="/${portraitPath}" alt=""></div>
       <div class="ic-swap-portrait-text">
         <div style="font-size:11px;font-weight:600;color:#C084FC;">Face Identity (Portrait)</div>
         <div style="font-size:10px;color:#888;">This face + features will be swapped onto the scene photo</div>
@@ -445,7 +467,7 @@ function icRenderSwapPortraitInfo() {
   }
   return `<div class="ic-swap-portrait-info ic-swap-no-portrait">
     <div style="font-size:11px;color:#F87171;font-weight:600;">⚠ No portrait set</div>
-    <div style="font-size:10px;color:#888;">Generate a face first, then click "Set as Portrait" to use it for swaps</div>
+    <div style="font-size:10px;color:#888;">Upload your face or generate one, then click ⭐ to set as portrait</div>
   </div>`;
 }
 
@@ -731,7 +753,7 @@ async function icGenerate() {
   }
   if (icSelectedMethod === 'swap') {
     if (!icCurrentProject.portraitId) {
-      showToast('Set a portrait first — generate a face, then click "Set as Portrait"', 'error');
+      showToast('Set a portrait first — click ⭐ on any reference or generated face', 'error');
       return;
     }
     if (icSelectedRefs.length === 0) {
@@ -832,6 +854,23 @@ async function icSetPortrait(genId) {
         zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); icHandleDrop(e); });
       }
     }
+  }
+}
+
+async function icSetRefPortrait(refId) {
+  if (!icCurrentProject) return;
+  showToast('Setting portrait & analyzing features...', 'info');
+  const data = await icApi.setRefPortrait(icCurrentProject.id, refId);
+  if (data.ok) {
+    icCurrentProject.generations.forEach(g => { g.isPortrait = false; });
+    icCurrentProject.portraitId = 'ref:' + refId;
+    if (data.portraitDescription) {
+      icCurrentProject.portraitDescription = data.portraitDescription;
+      showToast('Portrait set + features analyzed!', 'success');
+    } else {
+      showToast('Portrait set!', 'success');
+    }
+    icRenderStudio();
   }
 }
 
