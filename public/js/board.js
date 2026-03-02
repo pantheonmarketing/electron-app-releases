@@ -16,6 +16,8 @@ function loadSpaces() {
 function saveSpaces() {
   localStorage.setItem('claude-tm-spaces', JSON.stringify(spaces));
   localStorage.setItem('claude-tm-active-space', activeSpaceId);
+  // Also persist to server so it survives app updates
+  if (typeof _persistPrefsToServer === 'function') _persistPrefsToServer();
 }
 
 function getActiveSpace() {

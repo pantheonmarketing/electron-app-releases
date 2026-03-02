@@ -177,7 +177,8 @@ async function init() {
   startPolling();
   wfInitCanvas();
 
-  // Onboarding wizard (first-time users)
+  // Restore prefs from server (survives app updates), then show onboarding if needed
+  if (typeof restorePrefsFromServer === 'function') await restorePrefsFromServer();
   if (typeof showOnboarding === 'function') showOnboarding();
 
   // Keyboard shortcuts

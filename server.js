@@ -438,6 +438,30 @@ function checkClaudeAuth() {
   }
 }
 
+// ── User preferences (persists across updates) ──
+const USER_PREFS_FILE = path.join(BASE_DIR, 'user-prefs.json');
+app.get('/api/user-prefs', (req, res) => {
+  try {
+    if (fs.existsSync(USER_PREFS_FILE)) {
+      res.json(JSON.parse(fs.readFileSync(USER_PREFS_FILE, 'utf-8')));
+    } else {
+      res.json({});
+    }
+  } catch (_) { res.json({}); }
+});
+app.post('/api/user-prefs', express.json({ limit: '2mb' }), (req, res) => {
+  try {
+    // Merge with existing prefs
+    let existing = {};
+    if (fs.existsSync(USER_PREFS_FILE)) {
+      try { existing = JSON.parse(fs.readFileSync(USER_PREFS_FILE, 'utf-8')); } catch (_) {}
+    }
+    const merged = { ...existing, ...req.body };
+    fs.writeFileSync(USER_PREFS_FILE, JSON.stringify(merged, null, 2));
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // Override the /api/health route with the extended version that includes uptime
 // Re-checks Claude CLI + auth status on every call (not cached from boot time)
 // so banner updates after user installs Claude via Setup

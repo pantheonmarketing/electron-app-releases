@@ -352,9 +352,43 @@ function finishOnboarding() {
   // Refresh in-memory spaces so getActiveSpace() sees the new persona
   if (typeof loadSpaces === 'function') loadSpaces();
   localStorage.setItem(ONBOARDING_KEY, 'true');
+  // Persist to disk so it survives app updates
+  _persistPrefsToServer();
   const overlay = document.getElementById('onboardingOverlay');
   if (overlay) {
     overlay.classList.remove('active');
     setTimeout(() => overlay.remove(), 300);
   }
+}
+
+// ── Persist prefs to server (survives updates) ──
+function _persistPrefsToServer() {
+  try {
+    const prefs = {
+      onboarding_done: true,
+      spaces: localStorage.getItem('claude-tm-spaces') || null,
+    };
+    fetch('/api/user-prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs)
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+// Restore prefs from server on startup (if localStorage is empty)
+async function restorePrefsFromServer() {
+  try {
+    // Already have onboarding data — no need to restore
+    if (localStorage.getItem(ONBOARDING_KEY)) return;
+    const res = await fetch('/api/user-prefs');
+    const prefs = await res.json();
+    if (prefs.onboarding_done) {
+      localStorage.setItem(ONBOARDING_KEY, 'true');
+      if (prefs.spaces && !localStorage.getItem('claude-tm-spaces')) {
+        localStorage.setItem('claude-tm-spaces', prefs.spaces);
+        if (typeof loadSpaces === 'function') loadSpaces();
+      }
+    }
+  } catch (_) {}
 }
