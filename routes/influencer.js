@@ -155,6 +155,12 @@ router.delete('/influencer/projects/:id/references/:refId', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Check if Gemini key is configured on server (profile/env) ──
+router.get('/influencer/gemini-status', (req, res) => {
+  const key = process.env.GEMINI_API_KEY || '';
+  res.json({ configured: !!key, masked: key ? key.slice(0, 4) + '...' + key.slice(-4) : '' });
+});
+
 // ══════════════════════════════════════
 // Generate — NanoBanana Pro 2 (Gemini)
 // ══════════════════════════════════════

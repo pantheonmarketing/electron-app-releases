@@ -141,8 +141,18 @@ const IC_METHOD_PROMPTS = {
 };
 
 // ── Gemini API Key (user's own key, stored in localStorage) ──
+// Also checks server env (profile settings) as fallback
 function icGetApiKey() { return localStorage.getItem('ic_gemini_api_key') || ''; }
 function icSetApiKey(key) { localStorage.setItem('ic_gemini_api_key', key.trim()); }
+let icServerGeminiStatus = null; // { configured, masked }
+async function icCheckServerGemini() {
+  if (icServerGeminiStatus !== null) return icServerGeminiStatus;
+  try {
+    const r = await safeFetch('/api/influencer/gemini-status');
+    icServerGeminiStatus = await r.json();
+  } catch (_) { icServerGeminiStatus = { configured: false, masked: '' }; }
+  return icServerGeminiStatus;
+}
 
 // ── API Layer ──
 const icApi = {
@@ -186,6 +196,7 @@ const icApi = {
 
 async function icInit() {
   if (!icInitialized) icInitialized = true;
+  icCheckServerGemini(); // fire-and-forget — caches for settings panel
   await icLoadProjects();
 }
 
@@ -492,15 +503,25 @@ function icRenderRightPanel() {
   const galleries = p.galleries || [];
   const totalGalItems = galleries.reduce((sum, g) => sum + (g.items?.length || 0), 0);
 
-  // Settings panel
+  // Settings panel — check both local key and server env key
+  const localKey = icGetApiKey();
+  const serverGemini = icServerGeminiStatus || { configured: false, masked: '' };
+  let keyStatusHtml;
+  if (localKey) {
+    keyStatusHtml = '<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key saved — stored locally in your browser</div>';
+  } else if (serverGemini.configured) {
+    keyStatusHtml = `<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key configured in Profile settings (${esc(serverGemini.masked)}) — you\'re all set</div>`;
+  } else {
+    keyStatusHtml = '<div style="font-size:10px;color:#F59E0B;margin-top:6px;">No key set — add it here or in your Profile settings (click your name in the sidebar)</div>';
+  }
   const settingsHtml = icShowSettings ? `<div class="ic-settings-panel">
     <div class="ic-section-title">⚙ Gemini API Key</div>
     <div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;">Enter your Google AI Studio API key to generate images.<br><a href="https://aistudio.google.com/api-keys" target="_blank" style="color:#C084FC;font-weight:600;text-decoration:underline;">Click here to get your free API key</a></div>
     <div style="display:flex;gap:8px;">
-      <input type="password" class="ic-prompt-textarea" id="icApiKeyInput" value="${esc(icGetApiKey())}" placeholder="AIzaSy..." style="min-height:auto;padding:8px 10px;flex:1;font-size:11px;">
+      <input type="password" class="ic-prompt-textarea" id="icApiKeyInput" value="${esc(localKey)}" placeholder="AIzaSy..." style="min-height:auto;padding:8px 10px;flex:1;font-size:11px;">
       <button class="btn btn-primary btn-sm" onclick="icSaveApiKey()" style="white-space:nowrap;">Save Key</button>
     </div>
-    ${icGetApiKey() ? '<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key saved — stored locally in your browser</div>' : '<div style="font-size:10px;color:#F59E0B;margin-top:6px;">No key set — generation won\'t work without it</div>'}
+    ${keyStatusHtml}
   </div>` : '';
 
   // Find active gallery
@@ -980,8 +1001,9 @@ async function icSaveProject() {
 }
 
 // ── Settings ──
-function icToggleSettings() {
+async function icToggleSettings() {
   icShowSettings = !icShowSettings;
+  if (icShowSettings) await icCheckServerGemini();
   const rightEl = document.getElementById('icRightPanel');
   if (rightEl) rightEl.innerHTML = icRenderRightPanel();
 }
