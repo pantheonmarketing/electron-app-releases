@@ -123,6 +123,14 @@ router.get('/health', (req, res) => {
   checks.python = checkPython().ok;
   checks.whisper = checkPythonImport('faster_whisper').ok;
   checks.claude = checkTool('claude --version').ok;
+  if (checks.claude) {
+    const auth = checkClaudeAuth();
+    checks.claude_logged_in = auth.loggedIn;
+    checks.claude_email = auth.email;
+  } else {
+    checks.claude_logged_in = false;
+    checks.claude_email = null;
+  }
   checks.ytdlp = checkTool('yt-dlp --version').ok;
   checks.all_good = checks.ffmpeg && checks.python && checks.whisper && checks.claude && checks.ytdlp;
   checks.version = require('../package.json').version;
