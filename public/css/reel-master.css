@@ -885,3 +885,42 @@
   0% { width: 0%; }
   100% { width: 100%; }
 }
+
+/* ── Inline Render Status Panel ── */
+.rm-render-status {
+  display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; padding: 20px;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+}
+.rm-render-status-header {
+  display: flex; align-items: center; gap: 10px;
+}
+.rm-render-status-icon { font-size: 18px; }
+.rm-render-status-title { font-size: 14px; font-weight: 600; color: #ddd; flex: 1; }
+.rm-render-status-time {
+  font-size: 13px; color: #888; font-family: 'SF Mono', Monaco, monospace;
+}
+.rm-render-progress-bar {
+  width: 100%; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden;
+}
+.rm-render-progress-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, #7B2FF2, #C084FC);
+  width: 0%; transition: width 0.5s ease;
+}
+.rm-render-progress-fill.indeterminate {
+  width: 30%; animation: rmRenderSlide 1.5s ease-in-out infinite;
+}
+@keyframes rmRenderSlide {
+  0% { margin-left: 0%; }
+  50% { margin-left: 70%; }
+  100% { margin-left: 0%; }
+}
+.rm-render-status-detail {
+  font-size: 12px; color: #777; min-height: 16px;
+}
+.rm-render-status-actions {
+  display: flex; gap: 8px; margin-top: 2px;
+}
+.rm-render-status-actions:empty { display: none; }
+.rm-render-status.done .rm-render-status-title { color: #4ade80; }
+.rm-render-status.failed .rm-render-status-title { color: #f87171; }

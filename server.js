@@ -377,6 +377,9 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 const LIFETIME_ONLY_PREFIXES = [
   '/api/plan', '/api/routines', '/api/schedules',
   '/api/terminal', '/api/workflow-runs', '/api/workers',
+  '/api/tasks', '/api/story', '/api/scripter',
+  '/api/heygen', '/api/giveaway', '/api/scout',
+  '/api/skills', '/api/projects', '/api/templates',
 ];
 app.use((req, res, next) => {
   if (!process.env.ELECTRON_MODE) return next();
@@ -534,6 +537,28 @@ function startServer() {
 // Auto-start when run directly or required by Electron
 startServer();
 
-// Clean up terminal sessions on shutdown
-process.on('SIGINT', () => { terminalManager.cleanup(); process.exit(); });
-process.on('SIGTERM', () => { terminalManager.cleanup(); process.exit(); });
+// Clean up on shutdown
+function gracefulShutdown() {
+  console.log('\n[Server] Shutting down...');
+  // Kill any tracked worker processes
+  if (shared.activeWorkers.size > 0) {
+    console.log(`[Server] Clearing ${shared.activeWorkers.size} active worker(s)...`);
+    shared.activeWorkers.clear();
+  }
+  // Reset running tasks back to pending so they're recovered on next start
+  try {
+    const tasks = helpers.readTasks();
+    let reset = 0;
+    for (const t of tasks) {
+      if (t.status === 'running') { t.status = 'pending'; t.worker = null; t.started_at = null; reset++; }
+    }
+    if (reset > 0) {
+      helpers.writeTasks(tasks);
+      console.log(`[Server] Reset ${reset} running task(s) to pending`);
+    }
+  } catch (_) {}
+  terminalManager.cleanup();
+  process.exit();
+}
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);

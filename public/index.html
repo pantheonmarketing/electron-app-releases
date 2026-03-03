@@ -83,6 +83,10 @@
       <span class="sidebar-label">Scout</span>
     </div>
   </nav>
+  <div class="sidebar-upgrade-cta" id="sidebarUpgradeCta" style="display:none;" onclick="showTierModal()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    <span>Upgrade</span>
+  </div>
   <div class="sidebar-spacer"></div>
   <nav class="sidebar-nav" style="margin-bottom:8px;">
     <div class="sidebar-item" data-tooltip="Schedules" onclick="openSchedules()">
@@ -454,6 +458,19 @@
                 <p style="margin-top:6px; font-size:11px; color:#666;">Click "Setup Remotion" to auto-create a project, or choose your own folder.</p>
               </div>
             </div>
+          </div>
+          <!-- Inline Render Status Panel (hidden by default) -->
+          <div class="rm-render-status" id="rmRenderStatus" style="display:none;">
+            <div class="rm-render-status-header">
+              <span class="rm-render-status-icon" id="rmRenderIcon">⏳</span>
+              <span class="rm-render-status-title" id="rmRenderTitle">Queued</span>
+              <span class="rm-render-status-time" id="rmRenderTime">0:00</span>
+            </div>
+            <div class="rm-render-progress-bar">
+              <div class="rm-render-progress-fill indeterminate" id="rmRenderProgressFill"></div>
+            </div>
+            <div class="rm-render-status-detail" id="rmRenderDetail">Waiting for worker...</div>
+            <div class="rm-render-status-actions" id="rmRenderActions"></div>
           </div>
           <div class="rm-step-actions">
             <button class="btn btn-ghost" onclick="rmGoStep('customize')">← Back</button>
@@ -1049,7 +1066,10 @@
         <div class="settings-avatar" id="settingsAvatar">J</div>
         <div>
           <div class="settings-name" id="settingsName">User</div>
-          <div class="settings-tier-badge" id="settingsTierBadge">Lifetime</div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="settings-tier-badge" id="settingsTierBadge">Lifetime</div>
+            <button class="btn btn-ghost btn-sm" id="devTierToggle" style="display:none; font-size:11px; padding:2px 8px; border:1px solid rgba(255,255,255,0.15); border-radius:6px;" onclick="toggleTierTest(); openSettingsModal();">Switch Tier</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1684,15 +1704,17 @@
 <!-- Lock overlays injected into views -->
 <div id="tierUpgradeModal" class="tier-upgrade-modal" onclick="if(event.target===this)closeTierModal()">
   <div class="tier-upgrade-box">
-    <h2>Upgrade to Lifetime</h2>
-    <p class="tier-lock-desc">Unlock the full power of the AI Task Manager with all features.</p>
+    <h2>Unlock All 10 Tools</h2>
+    <p class="tier-lock-desc">You have <strong>Faces</strong> and <strong>Reels</strong>. Upgrade to unlock everything:</p>
     <div class="tier-upgrade-features">
       <div><span>✓</span> AI Task Board — automate any workflow with Claude</div>
       <div><span>✓</span> Agent Terminals — interactive chat sessions</div>
       <div><span>✓</span> Visual Workflows — drag-and-drop automation</div>
-      <div><span>✓</span> Task Master — AI project planning</div>
-      <div><span>✓</span> Schedules & Routines — run tasks on autopilot</div>
-      <div><span>✓</span> Reel Master — already included in your plan</div>
+      <div><span>✓</span> Story Slides — create social media carousels</div>
+      <div><span>✓</span> Scripter — AI video script writer</div>
+      <div><span>✓</span> Create (HeyGen) — AI avatar video creation</div>
+      <div><span>✓</span> Funnels — build lead magnet pages</div>
+      <div><span>✓</span> Scout — find trending content ideas</div>
     </div>
     <a href="https://aicreatorworkshop.com/upgrade" target="_blank" class="tier-upgrade-btn" style="display:inline-block;text-decoration:none;">Get Lifetime Access</a>
     <br>
@@ -2163,11 +2185,89 @@ if (window.electronAPI) {
 // ── Tier Gating System ──
 window.APP_TIER = 'lifetime'; // default: unlocked (overridden below)
 
+const TIER_CONFIG = {
+  basic: { allowedViews: ['influencer', 'reelmaster'], defaultView: 'influencer' },
+  lifetime: { allowedViews: null, defaultView: 'board' }
+};
+
+// Lock icon SVG injected into locked sidebar items
+const LOCK_ICON_SVG = '<svg class="sidebar-lock-icon" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>';
+
 function closeTierModal() {
   document.getElementById('tierUpgradeModal').classList.remove('show');
 }
 function showTierModal() {
   document.getElementById('tierUpgradeModal').classList.add('show');
+}
+
+function applySidebarLocking() {
+  const config = TIER_CONFIG[window.APP_TIER];
+  if (!config || !config.allowedViews) return; // lifetime — nothing to lock
+
+  const allowed = config.allowedViews;
+
+  // Lock main sidebar nav items (data-view items)
+  document.querySelectorAll('.sidebar-item[data-view]').forEach(item => {
+    const view = item.getAttribute('data-view');
+    if (allowed.includes(view)) return; // keep unlocked
+    item.classList.add('tier-locked');
+    // Add lock icon if not already present
+    if (!item.querySelector('.sidebar-lock-icon')) {
+      item.insertAdjacentHTML('beforeend', LOCK_ICON_SVG);
+    }
+    // Override onclick to show modal
+    item.setAttribute('data-original-onclick', item.getAttribute('onclick') || '');
+    item.setAttribute('onclick', 'showTierModal()');
+  });
+
+  // Lock utility buttons: Schedules, History, Skills (keep Setup, Update, Reset)
+  document.querySelectorAll('.sidebar-item[data-tooltip]').forEach(item => {
+    const tooltip = item.getAttribute('data-tooltip') || '';
+    if (['Schedules', 'History', 'Skills'].includes(tooltip)) {
+      item.classList.add('tier-locked');
+      if (!item.querySelector('.sidebar-lock-icon')) {
+        item.insertAdjacentHTML('beforeend', LOCK_ICON_SVG);
+      }
+      item.setAttribute('data-original-onclick', item.getAttribute('onclick') || '');
+      item.setAttribute('onclick', 'showTierModal()');
+    }
+  });
+
+  // Show upgrade CTA pill
+  const cta = document.getElementById('sidebarUpgradeCta');
+  if (cta) cta.style.display = '';
+
+  // Guard switchView() so basic users can't navigate to locked views
+  if (!window._origSwitchView && typeof switchView === 'function') {
+    window._origSwitchView = switchView;
+    window.switchView = function(view) {
+      const cfg = TIER_CONFIG[window.APP_TIER];
+      if (cfg && cfg.allowedViews && !cfg.allowedViews.includes(view)) {
+        showTierModal();
+        return;
+      }
+      window._origSwitchView(view);
+    };
+  }
+}
+
+function removeSidebarLocking() {
+  // Remove tier-locked class and lock icons from all sidebar items
+  document.querySelectorAll('.sidebar-item.tier-locked').forEach(item => {
+    item.classList.remove('tier-locked');
+    const lockIcon = item.querySelector('.sidebar-lock-icon');
+    if (lockIcon) lockIcon.remove();
+    // Restore original onclick
+    const orig = item.getAttribute('data-original-onclick');
+    if (orig !== null) {
+      item.setAttribute('onclick', orig);
+      item.removeAttribute('data-original-onclick');
+    }
+  });
+
+  // Hide upgrade CTA pill
+  const cta = document.getElementById('sidebarUpgradeCta');
+  if (cta) cta.style.display = 'none';
 }
 
 async function initTierGating() {
@@ -2192,11 +2292,10 @@ async function initTierGating() {
 
   if (window.APP_TIER === 'lifetime') return; // Nothing to lock
 
-  // ── Basic users can SEE everything, but action buttons are locked ──
-  // They can navigate freely to Board, Terminals, Workflows — but can't
-  // create tasks, run skills, open terminals, or execute workflows.
+  // ── Apply sidebar locking (primary gating for basic tier) ──
+  applySidebarLocking();
 
-  // Lock action buttons that require Lifetime
+  // ── Defense-in-depth: lock action buttons inside locked views ──
   document.querySelectorAll('.btn-primary, .btn-success, .btn-taskmaster').forEach(btn => {
     const text = btn.textContent.trim();
     if (text.includes('New Task') || text.includes('Task Master') || text.includes('Run All') || text.includes('Stop All')) {
@@ -2207,25 +2306,12 @@ async function initTierGating() {
     }
   });
 
-  // Lock Quick Actions (routines bar) — clicking shows upgrade modal
+  // Lock Quick Actions (routines bar)
   document.querySelectorAll('.routine-chip, .template-chip').forEach(chip => {
     chip.classList.add('tier-btn-locked');
     chip.addEventListener('click', (e) => {
       if (window.APP_TIER === 'basic') { e.preventDefault(); e.stopPropagation(); showTierModal(); }
     }, true);
-  });
-
-  // ── Add upgrade banner inside locked views (not blocking — just a top banner) ──
-  ['boardView', 'terminalViewWrapper', 'workflowView'].forEach(viewId => {
-    const view = document.getElementById(viewId);
-    if (!view) return;
-    const banner = document.createElement('div');
-    banner.className = 'tier-view-banner';
-    banner.innerHTML = `
-      <span>This feature requires <strong>Lifetime</strong> access.</span>
-      <button class="tier-upgrade-btn" onclick="showTierModal()" style="padding:8px 20px;font-size:13px;">Upgrade</button>
-    `;
-    view.insertBefore(banner, view.firstChild);
   });
 
   // ── Intercept workflow actions ──
@@ -2271,7 +2357,7 @@ async function initTierGating() {
     };
   }
 
-  // ── Intercept bottom nav ──
+  // ── Intercept bottom nav (defense-in-depth, sidebar already locked) ──
   const origOpenSchedules = window.openSchedules;
   const origOpenHistory = window.openHistory;
   window.openSchedules = function() {
@@ -2283,9 +2369,10 @@ async function initTierGating() {
     origOpenHistory();
   };
 
-  // ── Auto-switch to Reel Master for basic users ──
-  if (typeof switchView === 'function') {
-    switchView('reelmaster');
+  // ── Default basic users to Faces view ──
+  const config = TIER_CONFIG[window.APP_TIER];
+  if (config && config.defaultView && typeof switchView === 'function') {
+    switchView(config.defaultView);
   }
 }
 
@@ -2311,6 +2398,7 @@ function toggleTierTest() {
   // Remove all lock state
   document.querySelectorAll('.tier-btn-locked').forEach(el => el.classList.remove('tier-btn-locked'));
   document.querySelectorAll('.tier-view-banner').forEach(el => el.remove());
+  removeSidebarLocking();
 
   // Hide/show CLI banner
   const cliBanner = document.getElementById('serverBanner');
@@ -2318,6 +2406,7 @@ function toggleTierTest() {
 
   // Re-apply if switched to basic
   if (newTier === 'basic') {
+    applySidebarLocking();
     // Lock action buttons
     document.querySelectorAll('.btn-primary, .btn-success, .btn-taskmaster').forEach(btn => {
       const text = btn.textContent.trim();
@@ -2329,19 +2418,12 @@ function toggleTierTest() {
     document.querySelectorAll('.routine-chip, .template-chip').forEach(chip => {
       chip.classList.add('tier-btn-locked');
     });
-    // Add upgrade banners to views
-    ['boardView', 'terminalViewWrapper', 'workflowView'].forEach(viewId => {
-      const view = document.getElementById(viewId);
-      if (!view) return;
-      const banner = document.createElement('div');
-      banner.className = 'tier-view-banner';
-      banner.innerHTML = `
-        <span>This feature requires <strong>Lifetime</strong> access.</span>
-        <button class="tier-upgrade-btn" onclick="showTierModal()" style="padding:8px 20px;font-size:13px;">Upgrade</button>
-      `;
-      view.insertBefore(banner, view.firstChild);
-    });
-    switchView('reelmaster');
+    // Switch to default basic view
+    const config = TIER_CONFIG.basic;
+    if (config && typeof switchView === 'function') switchView(config.defaultView);
+  } else {
+    // Switching to lifetime — go to board
+    if (typeof switchView === 'function') switchView('board');
   }
 
   updateTierBadge();
@@ -2487,8 +2569,10 @@ async function openSettingsModal() {
   if (window.electronAPI && window.electronAPI.getVersion) {
     const ver = await window.electronAPI.getVersion();
     document.getElementById('settingsVersion').textContent = 'v' + ver;
+    document.getElementById('devTierToggle').style.display = 'none';
   } else {
     document.getElementById('settingsVersion').textContent = 'Dev mode';
+    document.getElementById('devTierToggle').style.display = '';
   }
 
   modal.classList.add('active');

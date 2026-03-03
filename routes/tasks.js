@@ -289,4 +289,34 @@ router.post('/stop', (req, res) => {
   res.json({ ok: true, message: 'Worker tracking cleared. Close terminal windows manually if still open.' });
 });
 
+// Open a folder in the system file explorer
+router.post('/open-folder', (req, res) => {
+  const { path: folderPath } = req.body;
+  if (!folderPath || typeof folderPath !== 'string') {
+    return res.status(400).json({ error: 'Missing path' });
+  }
+  // Resolve and validate the path exists
+  const resolved = path.resolve(folderPath);
+  try {
+    const stat = fs.statSync(resolved);
+    const target = stat.isDirectory() ? resolved : path.dirname(resolved);
+    if (shared.openInFolder) {
+      shared.openInFolder(stat.isDirectory() ? resolved : resolved); // openInFolder handles file vs dir
+    } else {
+      // Fallback: open directory
+      const { spawn } = require('child_process');
+      if (process.platform === 'win32') {
+        spawn('explorer', [target.replace(/\//g, '\\')], { shell: false, detached: true }).unref();
+      } else if (process.platform === 'darwin') {
+        spawn('open', [target], { shell: false, detached: true }).unref();
+      } else {
+        spawn('xdg-open', [target], { shell: false, detached: true }).unref();
+      }
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(404).json({ error: 'Path not found: ' + resolved });
+  }
+});
+
 module.exports = router;

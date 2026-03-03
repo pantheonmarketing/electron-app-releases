@@ -5,6 +5,12 @@ const multer = require('multer');
 const shared = require('../lib/shared');
 const router = express.Router();
 
+// Sanitize IDs to prevent path traversal
+router.param('id', (req, res, next, id) => {
+  if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) return res.status(400).json({ error: 'Invalid ID' });
+  next();
+});
+
 // ──────────────────────────────────────────────
 // Giveaway Funnel — Helper Functions
 // ──────────────────────────────────────────────

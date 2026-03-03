@@ -34,18 +34,27 @@ const skills = JSON.parse(fs.readFileSync(SKILLS_FILE, 'utf-8'));
 const cleanEnv = { ...process.env };
 delete cleanEnv.CLAUDECODE;
 
-// Simple file lock (spin-wait)
+// Simple file lock (spin-wait with timeout)
 function acquireLock(maxWaitMs = 10000) {
   const start = Date.now();
   while (true) {
     try {
-      fs.writeFileSync(LOCK_FILE, `worker-${WORKER_ID}`, { flag: 'wx' });
+      fs.writeFileSync(LOCK_FILE, `worker-${WORKER_ID}:${Date.now()}`, { flag: 'wx' });
       return true;
     } catch (e) {
       if (Date.now() - start > maxWaitMs) {
+        // Stale lock — force-delete and acquire
+        log(`WARNING: Lock held for >${maxWaitMs}ms — forcing acquisition`);
         try { fs.unlinkSync(LOCK_FILE); } catch (_) {}
-        continue;
+        try {
+          fs.writeFileSync(LOCK_FILE, `worker-${WORKER_ID}:${Date.now()}`, { flag: 'wx' });
+          return true;
+        } catch (_) {
+          log('ERROR: Failed to acquire lock after force-delete');
+          return false;
+        }
       }
+      // Brief sleep (non-blocking would be better but sync context requires this)
       const waitUntil = Date.now() + 50;
       while (Date.now() < waitUntil) {}
     }
@@ -372,8 +381,8 @@ function runClaude(task) {
   // Smart max_turns: heavy skills and large prompts get more turns
   let maxTurns = task.max_turns || 25;
   const heavySkills = ['fb-stories', 'adcreator', 'fb-story-video', 'longform-editor', 'youtube-creator', 'webinar-page', 'fb-ads'];
-  if (task.skill && heavySkills.includes(task.skill) && maxTurns <= 25) {
-    maxTurns = 50;
+  if (task.skill && heavySkills.includes(task.skill) && maxTurns <= 50) {
+    maxTurns = Math.max(maxTurns, 80);
     log(`  Auto-increased max_turns to ${maxTurns} (heavy skill: ${task.skill})`);
   }
   // Plan tasks with dependencies get extra turns for the chained context
@@ -383,7 +392,9 @@ function runClaude(task) {
   }
 
   // Generate a session ID so the conversation can be resumed later in a terminal
-  const claudeSessionId = randomUUID();
+  // Or reuse one if this is a continuation task
+  const isResume = !!task.resume_session;
+  const claudeSessionId = task.resume_session || randomUUID();
 
   // Save claudeSessionId to task NOW (before execution) so the frontend can
   // create a terminal pane linked to this session while the task is running
@@ -397,12 +408,24 @@ function runClaude(task) {
     releaseLock();
   }
 
-  let cmd = `${catCmd} ${escapedPromptFile} | claude -p`;
-  cmd += ` --dangerously-skip-permissions`;
-  cmd += ` --output-format text`;
-  cmd += ` --model ${task.model || 'sonnet'}`;
-  cmd += ` --max-turns ${maxTurns}`;
-  cmd += ` --session-id ${claudeSessionId}`;
+  let cmd;
+  if (isResume) {
+    // Resume an existing session — prompt comes as the continuation message
+    cmd = `${catCmd} ${escapedPromptFile} | claude -p`;
+    cmd += ` --dangerously-skip-permissions`;
+    cmd += ` --output-format text`;
+    cmd += ` --model ${task.model || 'sonnet'}`;
+    cmd += ` --max-turns ${maxTurns}`;
+    cmd += ` --resume ${claudeSessionId}`;
+    log(`  Resuming session: ${claudeSessionId}`);
+  } else {
+    cmd = `${catCmd} ${escapedPromptFile} | claude -p`;
+    cmd += ` --dangerously-skip-permissions`;
+    cmd += ` --output-format text`;
+    cmd += ` --model ${task.model || 'sonnet'}`;
+    cmd += ` --max-turns ${maxTurns}`;
+    cmd += ` --session-id ${claudeSessionId}`;
+  }
 
   // Give Claude access to the working directory so it can read/write project files
   if (task.working_dir && fs.existsSync(task.working_dir)) {
@@ -453,8 +476,38 @@ function runClaude(task) {
       windowsHide: true
     });
 
-    child.stdout.on('data', (d) => { stdout += d.toString(); });
-    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    const MAX_BUFFER = 10 * 1024 * 1024; // 10MB cap to prevent OOM
+    child.stdout.on('data', (d) => {
+      stdout += d.toString();
+      if (stdout.length > MAX_BUFFER) stdout = stdout.slice(-MAX_BUFFER);
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d.toString();
+      if (stderr.length > MAX_BUFFER) stderr = stderr.slice(-MAX_BUFFER);
+    });
+
+    // Periodic live status updates so the UI shows activity
+    const spawnTime = Date.now();
+    const activityInterval = setInterval(() => {
+      if (killed) return;
+      const kb = (stdout.length / 1024).toFixed(0);
+      const elapsed = Math.floor((Date.now() - spawnTime) / 1000);
+      let detail = `Skill: ${task.skill || 'none'} · Working... (${kb}KB output)`;
+      // Try to extract Remotion render progress from stdout (e.g. "(45/120)" or "37%")
+      const progressMatch = stdout.match(/\((\d+)\/(\d+)\)/g);
+      const pctMatch = stdout.match(/(\d+)%/g);
+      if (progressMatch) {
+        const last = progressMatch[progressMatch.length - 1];
+        const m = last.match(/\((\d+)\/(\d+)\)/);
+        if (m) {
+          const pct = Math.round((parseInt(m[1]) / parseInt(m[2])) * 100);
+          detail = `Rendering: ${m[1]}/${m[2]} frames (${pct}%)`;
+        }
+      } else if (pctMatch) {
+        detail = `Rendering: ${pctMatch[pctMatch.length - 1]} complete`;
+      }
+      liveStatus(task.id, 'running', detail);
+    }, 3000);
 
     // Set up timeout that kills the ENTIRE process tree
     timeoutId = setTimeout(() => {
@@ -474,6 +527,7 @@ function runClaude(task) {
 
     child.on('close', (code) => {
       clearTimeout(timeoutId);
+      clearInterval(activityInterval);
 
       console.log('─'.repeat(60));
       console.log('');
@@ -499,7 +553,7 @@ function runClaude(task) {
           console.log('\x1b[33m--- End Output ---\x1b[0m');
         }
 
-        return reject({ resultFile, result, code: 124, error: `Timed out after ${task.timeout_mins || 30} minutes`, claudeSessionId });
+        return reject({ resultFile, result, code: 124, error: `Timed out after ${task.timeout_mins || 30} minutes`, claudeSessionId, timedOut: true });
       }
 
       if (code === 0) {
@@ -581,9 +635,50 @@ function notifyDone() {
   } catch (_) {}
 }
 
+// Recover tasks stuck in "running" after a worker crash
+// Checks live status file timestamp — if no update in 5 minutes, reset to pending
+function recoverStaleTasks() {
+  acquireLock();
+  try {
+    const tasks = readTasks();
+    const now = Date.now();
+    let recovered = 0;
+    for (const t of tasks) {
+      if (t.status !== 'running') continue;
+      // Check the live status file for this task
+      const liveFile = path.join(LOGS_DIR, `live-${t.id}.json`);
+      let lastUpdate = 0;
+      try {
+        const stat = fs.statSync(liveFile);
+        lastUpdate = stat.mtimeMs;
+      } catch (_) {
+        // No live file — use started_at as fallback
+        lastUpdate = t.started_at ? new Date(t.started_at).getTime() : 0;
+      }
+      const staleMinutes = (now - lastUpdate) / 60000;
+      if (staleMinutes > 5) {
+        log(`Recovering stale task #${t.id} (no update for ${Math.round(staleMinutes)}min) — resetting to pending`);
+        t.status = 'pending';
+        t.worker = null;
+        t.started_at = null;
+        liveStatus(t.id, 'pending', 'Recovered from stale state — re-queued');
+        recovered++;
+      }
+    }
+    if (recovered > 0) writeTasks(tasks);
+    return recovered;
+  } finally {
+    releaseLock();
+  }
+}
+
 // Main worker loop
 async function main() {
   log(`Worker ${WORKER_ID} started`);
+
+  // Recover any tasks stuck from previous worker crashes
+  const recovered = recoverStaleTasks();
+  if (recovered > 0) log(`Recovered ${recovered} stale task(s)`);
 
   while (true) {
     const task = grabNextTask();
@@ -607,9 +702,55 @@ async function main() {
       liveStatus(task.id, 'done', 'Completed successfully');
     } catch (err) {
       const errorMsg = err.error || `Exit code: ${err.code}`;
-      markTask(task.id, 'failed', err.resultFile || null, errorMsg, err.claudeSessionId || null);
-      log(`Task ${task.id} failed: ${errorMsg}`);
-      liveStatus(task.id, 'failed', errorMsg.slice(0, 200));
+      const isMaxTurns = errorMsg.includes('max turns') || errorMsg.includes('Max turns');
+      const isTimeout = !!err.timedOut;
+      const isRetryable = isMaxTurns || isTimeout;
+      const retryCount = task._retry_count || 0;
+
+      if (isRetryable && err.claudeSessionId && retryCount < 2) {
+        // Auto-continue: create a follow-up task that resumes the same Claude session
+        const reason = isTimeout ? 'Timed out' : 'Max turns reached';
+        log(`Task ${task.id} ${reason.toLowerCase()} — auto-creating continuation (retry ${retryCount + 1}/2)...`);
+        markTask(task.id, 'failed', err.resultFile || null, `${reason} — auto-continuing as new task`, err.claudeSessionId);
+        liveStatus(task.id, 'running', `${reason} — auto-continuing...`);
+
+        acquireLock();
+        try {
+          const tasks = readTasks();
+          let maxId = 0;
+          for (const t of tasks) { const n = parseInt(t.id) || 0; if (n > maxId) maxId = n; }
+          const newId = String(maxId + 1).padStart(Math.max(3, String(maxId + 1).length), '0');
+          const contTask = {
+            id: newId,
+            task: 'Continue where you left off. Complete any remaining work: fix errors, finish the render, and verify the output file exists. If the render was already running, check if the output file was created successfully.',
+            skill: task.skill || null,
+            status: 'pending',
+            priority: 1,
+            model: task.model || 'sonnet',
+            max_turns: 40,
+            context: [],
+            extra_context: [],
+            working_dir: task.working_dir || null,
+            space_id: task.space_id || 'general',
+            timeout_mins: task.timeout_mins || 30,
+            resume_session: err.claudeSessionId,
+            _retry_count: retryCount + 1,
+            _parent_task: task.id,
+            worker: null, started_at: null, completed_at: null, result_file: null, error: null, archived: false
+          };
+          tasks.push(contTask);
+          writeTasks(tasks);
+          log(`  Created continuation task #${newId} (session: ${err.claudeSessionId})`);
+          // Update the render status panel to point to the new task
+          liveStatus(task.id, 'running', `Continuing as task #${newId}...`);
+        } finally {
+          releaseLock();
+        }
+      } else {
+        markTask(task.id, 'failed', err.resultFile || null, errorMsg, err.claudeSessionId || null);
+        log(`Task ${task.id} failed: ${errorMsg}`);
+        liveStatus(task.id, 'failed', errorMsg.slice(0, 200));
+      }
     }
     currentTaskId = null;
 

@@ -7,6 +7,16 @@ const shared = require('../lib/shared');
 const { readTasks, writeTasks, generateId } = require('../lib/helpers');
 const router = express.Router();
 
+// Sanitize IDs to prevent path traversal
+router.param('id', (req, res, next, id) => {
+  if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) return res.status(400).json({ error: 'Invalid ID' });
+  next();
+});
+router.param('projectId', (req, res, next, id) => {
+  if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) return res.status(400).json({ error: 'Invalid project ID' });
+  next();
+});
+
 // ──────────────────────────────────────────────
 // Reel Helper Functions
 // ──────────────────────────────────────────────
@@ -891,7 +901,7 @@ INSTRUCTIONS:
 9. CRITICAL: Only show an image during its scene's time range. Never persist a previous scene's image.
 10. Apply spring(${JSON.stringify({damping: anim.damping || 18, stiffness: anim.stiffness || 120, mass: anim.mass || 0.7})}) animations
 11. Add background music with <Audio> at volume ${project.music?.volume || 0.12}
-12. Render: npx remotion render src/index.ts MainComp out/${(project.name || 'reel').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'reel'}.mp4 --codec h264 --crf ${project.output.crf || 18}`;
+12. Render: npx remotion render src/index.ts MainComp out/${(project.name || 'reel').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'reel'}.mp4 --codec h264 --crf ${project.output.crf || 18} --concurrency=4 --hardware-acceleration=if-possible`;
 
   const tasks = readTasks();
   const id = generateId(tasks);
@@ -902,12 +912,12 @@ INSTRUCTIONS:
     status: 'pending',
     priority: 1,
     model: 'sonnet',
-    max_turns: 50,
+    max_turns: 80,
     context: [],
     extra_context: [],
     working_dir: working_dir || null,
     space_id: space_id || 'general',
-    timeout_mins: 45,  // video renders need more time than default 30
+    timeout_mins: 60,  // video renders need more time than default 30
     worker: null, started_at: null, completed_at: null, result_file: null, error: null, archived: false
   };
   tasks.push(newTask);

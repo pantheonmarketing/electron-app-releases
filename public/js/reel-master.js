@@ -2,6 +2,14 @@
 // Reel Master
 // ════════════════════════════════════════════
 
+// Ensure esc() exists (fallback if board.js hasn't loaded yet)
+if (typeof window._rmEscReady === 'undefined') {
+  window._rmEscReady = true;
+  if (typeof esc !== 'function') {
+    window.esc = function(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+  }
+}
+
 let rmProjects = [];
 let rmCurrentProject = null;
 let rmCurrentStep = 'upload';
@@ -181,7 +189,7 @@ function rmGoStep(step) {
   if (step === 'whisper') rmRenderWhisperList();
   if (step === 'scenes') rmRenderTimeline();
   if (step === 'customize') { rmLoadPresets().then(() => rmRenderCustomizeTab(rmCurrentTab)); }
-  if (step === 'preview') rmRenderPreview();
+  if (step === 'preview') { rmRenderPreview(); rmResumeRenderIfActive(); }
 
   rmUpdateStepStates();
 }
@@ -2383,7 +2391,10 @@ async function rmRender() {
   }
   try {
     const res = await rmApi.render(rmCurrentProject.id, { working_dir: workingDir, space_id: activeSpaceId });
-    showToast(`Render task created: #${res.task_id} — check Board view`, 'success');
+    showToast('Render started!', 'success');
+    rmShowRenderProgress(res.task_id);
+    // Auto-start a worker so basic tier users don't need the Board
+    api.run().catch(() => {});
   } catch (e) { showToast('Render failed: ' + e.message, 'error'); }
 }
 
@@ -2402,5 +2413,185 @@ async function rmPreviewStudio() {
     const res = await rmApi.previewStudio(rmCurrentProject.id, { working_dir: workingDir });
     showToast(res.message || 'Remotion Studio opening in browser', 'success');
   } catch (e) { showToast('Preview failed: ' + e.message, 'error'); }
+}
+
+// ── Inline Render Status Panel ──
+let rmRenderPollInterval = null;
+let rmRenderTimerInterval = null;
+let rmRenderStartTime = null;
+let rmLastWorkerKick = 0; // timestamp of last api.run() call to avoid spamming
+
+function rmShowRenderProgress(taskId) {
+  // Persist task ID for step navigation / reload
+  sessionStorage.setItem('rm_render_task', taskId);
+  rmRenderStartTime = Date.now();
+
+  const panel = document.getElementById('rmRenderStatus');
+  if (!panel) return;
+  panel.style.display = 'flex';
+  panel.className = 'rm-render-status';
+
+  // Reset UI
+  document.getElementById('rmRenderIcon').textContent = '⏳';
+  document.getElementById('rmRenderTitle').textContent = 'Queued';
+  document.getElementById('rmRenderDetail').textContent = 'Waiting for worker...';
+  document.getElementById('rmRenderTime').textContent = '0:00';
+  document.getElementById('rmRenderActions').innerHTML = '';
+  const fill = document.getElementById('rmRenderProgressFill');
+  fill.style.width = '';
+  fill.className = 'rm-render-progress-fill indeterminate';
+
+  // Clear any previous intervals
+  rmClearRenderIntervals();
+
+  // Elapsed time ticker (every second)
+  rmRenderTimerInterval = setInterval(() => {
+    if (!rmRenderStartTime) return;
+    const elapsed = Math.floor((Date.now() - rmRenderStartTime) / 1000);
+    document.getElementById('rmRenderTime').textContent = rmFormatElapsed(elapsed);
+  }, 1000);
+
+  // Status polling (every 2 seconds)
+  rmRenderPollInterval = setInterval(() => rmPollRenderStatus(taskId), 2000);
+  // Immediate first poll
+  rmPollRenderStatus(taskId);
+}
+
+async function rmPollRenderStatus(taskId) {
+  try {
+    // Fetch task list to find our task
+    const tasksRes = await safeFetch('/api/tasks');
+    const tasks = await tasksRes.json();
+    const task = tasks.find(t => String(t.id) === String(taskId));
+    if (!task) return;
+
+    const panel = document.getElementById('rmRenderStatus');
+    const icon = document.getElementById('rmRenderIcon');
+    const title = document.getElementById('rmRenderTitle');
+    const detail = document.getElementById('rmRenderDetail');
+    const fill = document.getElementById('rmRenderProgressFill');
+    const actions = document.getElementById('rmRenderActions');
+
+    if (task.status === 'pending') {
+      icon.textContent = '⏳';
+      title.textContent = 'Queued — waiting for worker...';
+      detail.textContent = '';
+      fill.className = 'rm-render-progress-fill indeterminate';
+      fill.style.width = '';
+      // Watchdog: if pending for >15s, try kicking a worker again (max once per 30s)
+      if (rmRenderStartTime && (Date.now() - rmRenderStartTime > 15000) && (Date.now() - rmLastWorkerKick > 30000)) {
+        rmLastWorkerKick = Date.now();
+        api.run().catch(() => {});
+      }
+    } else if (task.status === 'running') {
+      icon.textContent = '🎬';
+      // Fetch live detail
+      try {
+        const liveRes = await safeFetch(`/api/tasks/${taskId}/live`);
+        const live = await liveRes.json();
+        if (live.detail) {
+          detail.textContent = live.detail;
+          // Check if detail contains a percentage (e.g. "Rendering: 45/120 frames (37%)")
+          const pctMatch = live.detail.match(/\((\d+)%\)/);
+          if (pctMatch) {
+            const pct = parseInt(pctMatch[1], 10);
+            title.textContent = `Rendering... ${pct}%`;
+            fill.className = 'rm-render-progress-fill';
+            fill.style.width = pct + '%';
+          } else {
+            title.textContent = 'Rendering...';
+            fill.className = 'rm-render-progress-fill indeterminate';
+            fill.style.width = '';
+          }
+        }
+      } catch (_) {}
+    } else if (task.status === 'done') {
+      icon.textContent = '✅';
+      title.textContent = 'Render Complete!';
+      panel.className = 'rm-render-status done';
+      fill.className = 'rm-render-progress-fill';
+      fill.style.width = '100%';
+      // Show the Remotion output folder, not the task JSON
+      const workingDir = (document.getElementById('rmRenderDir')?.value || '').trim();
+      const outFolder = workingDir ? workingDir + '/out' : '';
+      detail.textContent = outFolder ? 'Output: ' + outFolder : 'Render complete';
+      const escapedFolder = outFolder.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      actions.innerHTML = outFolder
+        ? `<button class="btn btn-primary btn-sm" onclick="rmOpenRenderFolder('${escapedFolder}')">📂 Open Folder</button>`
+        : '';
+      rmClearRenderIntervals();
+      sessionStorage.removeItem('rm_render_task');
+    } else if (task.status === 'failed') {
+      // Check if this task was auto-continued (error says "auto-continuing" — covers max turns + timeout)
+      if (task.error && task.error.includes('auto-continuing')) {
+        // Find the continuation task
+        const contTask = tasks.find(t => t._parent_task === task.id || (String(t._parent_task) === String(task.id)));
+        if (contTask) {
+          // Switch to tracking the continuation task
+          icon.textContent = '🔄';
+          title.textContent = 'Continuing render...';
+          detail.textContent = `Extended to task #${contTask.id}`;
+          sessionStorage.setItem('rm_render_task', contTask.id);
+          // Kick a worker in case the original one exited after creating this task
+          if (contTask.status === 'pending' && (Date.now() - rmLastWorkerKick > 30000)) {
+            rmLastWorkerKick = Date.now();
+            api.run().catch(() => {});
+          }
+          return; // keep polling — next poll will pick up the new task
+        }
+      }
+      icon.textContent = '❌';
+      title.textContent = 'Render Failed';
+      panel.className = 'rm-render-status failed';
+      fill.className = 'rm-render-progress-fill';
+      fill.style.width = '100%';
+      fill.style.background = '#f87171';
+      detail.textContent = task.error || 'Unknown error';
+      actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="rmRetryRender()">🔄 Retry Render</button>`;
+      rmClearRenderIntervals();
+      sessionStorage.removeItem('rm_render_task');
+    }
+  } catch (_) { /* network error — keep polling */ }
+}
+
+function rmClearRenderIntervals() {
+  if (rmRenderPollInterval) { clearInterval(rmRenderPollInterval); rmRenderPollInterval = null; }
+  if (rmRenderTimerInterval) { clearInterval(rmRenderTimerInterval); rmRenderTimerInterval = null; }
+}
+
+function rmHideRenderProgress() {
+  rmClearRenderIntervals();
+  const panel = document.getElementById('rmRenderStatus');
+  if (panel) panel.style.display = 'none';
+  sessionStorage.removeItem('rm_render_task');
+}
+
+function rmFormatElapsed(totalSec) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function rmOpenRenderFolder(folderPath) {
+  safeFetch('/api/open-folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: folderPath })
+  }).catch(() => { showToast('Could not open folder', 'error'); });
+}
+
+function rmRetryRender() {
+  rmHideRenderProgress();
+  rmRender();
+}
+
+function rmResumeRenderIfActive() {
+  const taskId = sessionStorage.getItem('rm_render_task');
+  if (taskId) {
+    rmRenderStartTime = Date.now(); // approximate — we don't know the original start
+    rmShowRenderProgress(taskId);
+  }
 }
 
