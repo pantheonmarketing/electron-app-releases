@@ -145,6 +145,18 @@
   line-height: 1;
 }
 .ic-ref-card:hover .ic-ref-card-portrait-btn { display: flex; }
+.ic-ref-save-bar {
+  position: absolute; bottom: 3px; left: 3px;
+  display: none; gap: 2px;
+}
+.ic-ref-card:hover .ic-ref-save-bar { display: flex; }
+.ic-ref-save-bar button {
+  background: rgba(0,0,0,0.7); border: none; color: #fff;
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 11px;
+  transition: background 0.15s;
+}
+.ic-ref-save-bar button:hover { background: rgba(123,47,242,0.7); }
 .ic-ref-card-portrait {
   position: absolute; top: 3px; left: 3px;
   font-size: 12px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));

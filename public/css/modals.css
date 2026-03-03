@@ -314,10 +314,9 @@ details[open] .advanced-toggle::before { transform: rotate(90deg); }
 
 /* ── Runner Bar ── */
 .runner-bar {
-  background: rgba(10, 10, 20, 0.85); border-top: 1px solid rgba(255,255,255,0.04);
+  background: rgba(10, 10, 20, 0.95); border-top: 1px solid rgba(255,255,255,0.06);
   padding: 10px 24px; display: flex; align-items: center; gap: 12px;
-  flex-shrink: 0; position: sticky; bottom: 0; z-index: 10;
-  backdrop-filter: blur(12px);
+  flex-shrink: 0; z-index: 10;
 }
 .runner-status { margin-left: auto; font-size: 13px; color: #666; }
 

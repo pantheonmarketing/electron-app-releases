@@ -177,6 +177,7 @@ const icApi = {
   async deleteGallery(id, galId) { return (await safeFetch(`/api/influencer/projects/${id}/galleries/${galId}`, { method: 'DELETE' })).json(); },
   async addToGallery(id, galId, genId) { return (await safeFetch(`/api/influencer/projects/${id}/galleries/${galId}/items/${genId}`, { method: 'POST' })).json(); },
   async removeFromGallery(id, galId, genId) { return (await safeFetch(`/api/influencer/projects/${id}/galleries/${galId}/items/${genId}`, { method: 'DELETE' })).json(); },
+  async refToGeneration(id, refId) { return (await safeFetch(`/api/influencer/projects/${id}/references/${refId}/to-generation`, { method: 'POST' })).json(); },
 };
 
 // ══════════════════════════════════════
@@ -428,6 +429,10 @@ function icRenderRefGrid() {
       ${isPortrait ? '<span class="ic-ref-card-portrait">⭐</span>' : ''}
       <button class="ic-ref-card-portrait-btn" onclick="event.stopPropagation(); icSetRefPortrait('${ref.id}')" title="Set as Portrait">⭐</button>
       <button class="ic-ref-card-delete" onclick="event.stopPropagation(); icDeleteRef('${ref.id}')" title="Remove">×</button>
+      <div class="ic-ref-save-bar">
+        <button onclick="event.stopPropagation(); icRefToGenerations('${ref.id}')" title="Save to Generations">🖼</button>
+        <button onclick="event.stopPropagation(); icRefToGallery('${ref.id}')" title="Save to Gallery">💎</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -737,6 +742,71 @@ async function icDeleteRef(refId) {
     zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
     zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); icHandleDrop(e); });
   }
+}
+
+// ── Save ref to Generations ──
+async function icRefToGenerations(refId) {
+  if (!icCurrentProject) return;
+  const data = await icApi.refToGeneration(icCurrentProject.id, refId);
+  if (data.ok) {
+    if (!data.alreadyExists) {
+      icCurrentProject.generations.push(data.generation);
+    }
+    showToast(data.alreadyExists ? 'Already in generations' : 'Saved to generations', 'success');
+    icRefreshRight();
+  } else {
+    showToast(data.error || 'Failed', 'error');
+  }
+}
+
+// ── Save ref to Gallery (imports to generations first, then shows gallery picker) ──
+async function icRefToGallery(refId) {
+  if (!icCurrentProject) return;
+  // First ensure it's in generations
+  const data = await icApi.refToGeneration(icCurrentProject.id, refId);
+  if (!data.ok) { showToast(data.error || 'Failed', 'error'); return; }
+  if (!data.alreadyExists) {
+    icCurrentProject.generations.push(data.generation);
+  }
+  const genId = data.generation.id;
+  const galleries = icCurrentProject.galleries || [];
+  if (galleries.length === 0) {
+    // No galleries — create one
+    const name = prompt('Create a gallery name:');
+    if (!name) return;
+    const galData = await icApi.createGallery(icCurrentProject.id, name);
+    if (galData.ok) {
+      icCurrentProject.galleries.push(galData.gallery);
+      const addData = await icApi.addToGallery(icCurrentProject.id, galData.gallery.id, genId);
+      if (addData.ok) {
+        galData.gallery.items = addData.gallery?.items || [{ id: genId, filename: data.generation.filename, path: data.generation.path, method: 'imported', addedAt: new Date().toISOString() }];
+        showToast(`Saved to "${name}"`, 'success');
+      }
+    }
+  } else {
+    // Pick a gallery
+    const names = galleries.map((g, i) => `${i + 1}. ${g.name}`).join('\n');
+    const choice = prompt(`Pick a gallery (enter number):\n${names}\n\nOr type a new name to create one:`);
+    if (!choice) return;
+    const idx = parseInt(choice) - 1;
+    let galId;
+    if (idx >= 0 && idx < galleries.length) {
+      galId = galleries[idx].id;
+    } else {
+      // Create new gallery
+      const galData = await icApi.createGallery(icCurrentProject.id, choice);
+      if (!galData.ok) { showToast('Failed to create gallery', 'error'); return; }
+      icCurrentProject.galleries.push(galData.gallery);
+      galId = galData.gallery.id;
+    }
+    const addData = await icApi.addToGallery(icCurrentProject.id, galId, genId);
+    if (addData.ok) {
+      const gal = icCurrentProject.galleries.find(g => g.id === galId);
+      if (gal && addData.gallery?.items) gal.items = addData.gallery.items;
+      showToast(`Saved to gallery`, 'success');
+    }
+  }
+  icRefreshRight();
 }
 
 // ── Generate ──

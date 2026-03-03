@@ -21,17 +21,17 @@
   width: 100%; align-items: center;
 }
 .sidebar-item {
-  position: relative; width: 56px; height: 52px; border-radius: 12px;
+  position: relative; width: 56px; height: 46px; border-radius: 10px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  cursor: pointer; color: #555; font-size: 18px; gap: 3px;
+  cursor: pointer; color: #777; font-size: 18px; gap: 2px;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid transparent;
 }
 .sidebar-item .sidebar-label {
   font-size: 9px; font-weight: 600; letter-spacing: 0.5px;
   text-transform: uppercase; font-family: 'Archivo', sans-serif;
-  opacity: 0.7;
+  opacity: 0.85;
 }
-.sidebar-item:hover { color: #bbb; background: rgba(255,255,255,0.04); }
+.sidebar-item:hover { color: #ccc; background: rgba(255,255,255,0.05); }
 .sidebar-item.active {
   color: #C084FC; background: rgba(123, 47, 242, 0.1);
   border-color: rgba(123, 47, 242, 0.2);
@@ -40,7 +40,7 @@
 .sidebar-label-sm {
   font-size: 8px; font-weight: 500; letter-spacing: 0.3px;
   text-transform: uppercase; font-family: 'Archivo', sans-serif;
-  opacity: 0.5; margin-top: 1px;
+  opacity: 0.6; margin-top: 1px;
 }
 .sidebar-item.active::before {
   content: ''; position: absolute; left: -1px; top: 10px; bottom: 10px;

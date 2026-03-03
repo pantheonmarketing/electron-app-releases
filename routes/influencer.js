@@ -408,6 +408,35 @@ router.post('/influencer/projects/:id/generations/:genId/use-as-ref', (req, res)
   res.json({ ok: true, reference: newRef });
 });
 
+// Import a reference image into generations (so user can add uploaded images to galleries)
+router.post('/influencer/projects/:id/references/:refId/to-generation', (req, res) => {
+  const project = readProject(req.params.id);
+  if (!project) return res.status(404).json({ ok: false, error: 'Not found' });
+
+  const ref = project.references.find(r => r.id === req.params.refId);
+  if (!ref) return res.status(404).json({ ok: false, error: 'Reference not found' });
+
+  // Check if already imported
+  if (project.generations.some(g => g.path === ref.path)) {
+    const existing = project.generations.find(g => g.path === ref.path);
+    return res.json({ ok: true, generation: existing, alreadyExists: true });
+  }
+
+  const generation = {
+    id: `gen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    method: 'imported',
+    prompt: '',
+    referenceIds: [ref.id],
+    filename: ref.filename,
+    path: ref.path,
+    createdAt: new Date().toISOString(),
+    isPortrait: false,
+  };
+  project.generations.push(generation);
+  writeProject(project);
+  res.json({ ok: true, generation });
+});
+
 // Set as portrait — also auto-analyzes face features via Gemini
 router.post('/influencer/projects/:id/generations/:genId/set-portrait', async (req, res) => {
   const project = readProject(req.params.id);
