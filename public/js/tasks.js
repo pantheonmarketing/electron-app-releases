@@ -463,6 +463,10 @@ async function viewResult(id, autoOpen) {
   const followUpSection = document.getElementById('followUpSection');
   followUpSection.style.display = t?.status === 'done' ? 'flex' : 'none';
   document.getElementById('followUpInput').value = '';
+  // Reset follow-up button state (may be stuck from previous follow-up)
+  const followUpBtn = document.getElementById('followUpBtn');
+  followUpBtn.disabled = false;
+  followUpBtn.textContent = '▶ Follow Up';
 
   document.getElementById('resultModal').classList.add('active');
 

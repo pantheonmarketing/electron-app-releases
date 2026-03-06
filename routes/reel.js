@@ -473,6 +473,25 @@ router.post('/reel/projects/:projectId/generate-scenes', (req, res) => {
     }
   }
 
+  // Move trailing lone numbers (e.g. "2.", "3.") to the start of the next scene
+  // Whisper often groups list numbers with the end of the previous sentence
+  for (let i = 0; i < scenes.length - 1; i++) {
+    const s = scenes[i];
+    const words = s.words || [];
+    if (words.length < 2) continue;
+    const lastWord = words[words.length - 1];
+    // Match standalone numbers like "1.", "2.", "10." etc at end of scene
+    if (/^\d{1,3}\.$/.test((lastWord.word || '').trim())) {
+      const moved = words.pop();
+      s.text = words.map(w => w.word).join(' ');
+      s.end = words[words.length - 1].end + 0.15;
+      const next = scenes[i + 1];
+      next.words = [moved, ...(next.words || [])];
+      next.text = next.words.map(w => w.word).join(' ');
+      next.start = moved.start;
+    }
+  }
+
   // Re-number scene IDs after merges
   scenes.forEach((s, idx) => { s.id = 'scene-' + (idx + 1); });
 
@@ -979,16 +998,36 @@ router.post('/reel/projects/:projectId/preview-studio', (req, res) => {
   }
   fs.writeFileSync(path.join(configDir, 'media-map.json'), JSON.stringify(mediaMap, null, 2));
 
-  // 3. Spawn Remotion Studio (detached)
-  const child = spawn('npx', ['remotion', 'studio', 'src/index.ts'], {
-    cwd: working_dir,
-    detached: true,
-    stdio: 'ignore',
-    shell: true
-  });
-  child.unref();
+  // 3. Kill any existing Remotion Studio, then spawn fresh
+  try {
+    const { execSync } = require('child_process');
+    // Kill any node process running remotion studio on port 3000
+    if (process.platform === 'win32') {
+      // Find PID using port 3000 and kill it
+      try {
+        const netstat = execSync('netstat -ano | findstr :3000 | findstr LISTENING', { encoding: 'utf8', timeout: 3000 });
+        const pids = [...new Set(netstat.trim().split('\n').map(l => l.trim().split(/\s+/).pop()).filter(Boolean))];
+        for (const pid of pids) {
+          try { execSync(`taskkill /F /PID ${pid}`, { timeout: 3000 }); } catch (_) {}
+        }
+      } catch (_) { /* no process on port 3000 */ }
+    } else {
+      try { execSync("lsof -ti:3000 | xargs kill -9", { timeout: 3000 }); } catch (_) {}
+    }
+  } catch (_) { /* ignore kill errors */ }
 
-  console.log(`[ReelMaster] Remotion Studio launched for project ${project.id} in ${working_dir}`);
+  // Small delay to let port release
+  setTimeout(() => {
+    const child = spawn('npx', ['remotion', 'studio', 'src/index.ts'], {
+      cwd: working_dir,
+      detached: true,
+      stdio: 'ignore',
+      shell: true
+    });
+    child.unref();
+    console.log(`[ReelMaster] Remotion Studio launched for project ${project.id} in ${working_dir}`);
+  }, 500);
+
   res.json({ ok: true, message: 'Remotion Studio launching on localhost:3000', config_path: configPath });
 });
 

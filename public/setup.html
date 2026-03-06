@@ -301,13 +301,6 @@
     </button>
     <button class="btn btn-ghost" onclick="runChecks()">Re-check</button>
 
-    <div id="debugPanel" style="margin-top:24px;padding:12px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <span style="font-size:11px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Debug Log</span>
-        <button onclick="document.getElementById('debugLog').textContent=''" style="font-size:10px;color:#555;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:2px 8px;cursor:pointer;">Clear</button>
-      </div>
-      <pre id="debugLog" style="font-family:monospace;font-size:11px;color:#888;line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap;margin:0;"></pre>
-    </div>
   </div>
 
   <script>
@@ -315,10 +308,7 @@
     let platform = 'win';
 
     function dbg(msg) {
-      const el = document.getElementById('debugLog');
-      const ts = new Date().toLocaleTimeString();
-      el.textContent += `[${ts}] ${msg}\n`;
-      el.scrollTop = el.scrollHeight;
+      console.log('[setup]', msg);
     }
 
     // Friendly display names and install package mappings
@@ -530,6 +520,7 @@
           if (installBtn) { installBtn.disabled = false; installBtn.className = 'btn-install'; installBtn.innerHTML = 'Retry'; }
           if (card) card.className = 'dep-card missing';
           if (icon) { icon.className = 'dep-icon missing'; icon.innerHTML = '✗'; }
+          if (key === 'node') showNodeManualInstall(card);
         }
       } catch (e) {
         dbg(`ERROR ${key}: ${e.message}`);
@@ -537,8 +528,26 @@
         if (installBtn) { installBtn.disabled = false; installBtn.className = 'btn-install'; installBtn.innerHTML = 'Retry'; }
         if (card) card.className = 'dep-card missing';
         if (icon) { icon.className = 'dep-icon missing'; icon.innerHTML = '✗'; }
+        if (key === 'node') showNodeManualInstall(card);
       } finally {
         installingKeys.delete(key);
+      }
+    }
+
+    function showNodeManualInstall(card) {
+      if (!card || card.querySelector('.node-manual-btn')) return;
+      const action = card.querySelector('.dep-action');
+      if (action) {
+        const manualBtn = document.createElement('button');
+        manualBtn.className = 'btn-install node-manual-btn';
+        manualBtn.style.cssText = 'margin-left:8px;background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);';
+        manualBtn.textContent = 'Install Manually';
+        manualBtn.onclick = function() {
+          window.open('https://nodejs.org/en/download', '_blank');
+          const msg = document.getElementById('msg-node');
+          if (msg) { msg.className = 'install-msg'; msg.style.display = 'block'; msg.innerHTML = 'Download and install Node.js from the website, then click <strong>Re-check</strong>.'; msg.style.color = '#fbbf24'; }
+        };
+        action.appendChild(manualBtn);
       }
     }
 

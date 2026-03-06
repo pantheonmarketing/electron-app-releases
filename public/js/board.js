@@ -497,7 +497,6 @@ function renderCard(t) {
       ${t.status === 'pending' ? `<button class="card-btn" onclick="event.stopPropagation();runSingleTask('${t.id}')" title="Run this task" style="color:#4ADE80;font-size:13px;">&#9654;</button>` : ''}
       ${t.status === 'pending' ? `<button class="card-btn" onclick="event.stopPropagation();editTask('${t.id}')" title="Edit">&#9998;</button>` : ''}
       ${t.status === 'pending' ? `<button class="card-btn" onclick="event.stopPropagation();openInTerminal('${t.id}')" title="Open in Terminal" style="color:#7B2FF2;font-size:12px;">💻</button>` : ''}
-      ${(isRunning || isDone || isFailed) && hasSession ? `<button class="card-btn" onclick="event.stopPropagation();openTaskTerminal('${t.id}')" title="Chat with agent" style="color:#4ADE80;font-size:13px;">💬</button>` : ''}
       ${isFailed ? `<button class="card-btn" onclick="event.stopPropagation();retryById('${t.id}')" title="Retry" style="color:#FBBF24;">&#8635;</button>` : ''}
       ${(isDone || isFailed) ? `<button class="card-btn" onclick="event.stopPropagation();archiveTask('${t.id}')" title="Hide this task — find it later in History" style="color:#666;font-size:12px;">📁</button>` : ''}
       <button class="card-btn delete" onclick="event.stopPropagation();deleteTask('${t.id}')" title="Delete">&times;</button>

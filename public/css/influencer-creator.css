@@ -397,3 +397,67 @@
   .ic-left-panel { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.05); max-height: 45vh; }
   .ic-detail-panel { flex-direction: column; }
 }
+
+/* ── API Key Gate Overlay ── */
+#icApiKeyGate {
+  position: absolute; inset: 0; z-index: 100;
+  background: rgb(10, 10, 18);
+  display: flex; align-items: center; justify-content: center;
+  overflow-y: auto; padding: 32px;
+}
+.ic-gate-card {
+  max-width: 520px; width: 100%; text-align: center;
+}
+.ic-gate-icon {
+  font-size: 48px; margin-bottom: 12px;
+}
+.ic-gate-title {
+  font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
+.ic-gate-desc {
+  color: #999; font-size: 14px; line-height: 1.6; margin-bottom: 24px;
+}
+.ic-gate-video {
+  margin-bottom: 24px; border-radius: 12px; overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+}
+.ic-gate-video iframe {
+  width: 100%; aspect-ratio: 16/9; border: none; display: block;
+}
+.ic-gate-video-placeholder {
+  width: 100%; aspect-ratio: 16/9;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #555;
+}
+.ic-gate-steps {
+  display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px;
+  text-align: left;
+}
+.ic-gate-step {
+  display: flex; align-items: center; gap: 12px;
+  color: #ccc; font-size: 14px;
+}
+.ic-gate-step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg, #7B2FF2, #9333ea);
+  color: #fff; font-weight: 700; font-size: 13px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.ic-gate-input-row {
+  display: flex; gap: 10px; margin-bottom: 16px;
+}
+.ic-gate-input {
+  flex: 1; padding: 10px 14px; border-radius: 8px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+  color: #fff; font-size: 14px; font-family: 'SF Mono', Consolas, monospace;
+  outline: none; transition: border-color 0.2s;
+}
+.ic-gate-input:focus {
+  border-color: rgba(123, 47, 242, 0.5);
+}
+.ic-gate-input::placeholder { color: #555; font-family: inherit; }
+.ic-gate-note {
+  color: #555; font-size: 12px;
+}

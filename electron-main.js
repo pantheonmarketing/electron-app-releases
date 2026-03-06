@@ -5,7 +5,7 @@
  * and gates access behind a license key.
  */
 
-const { app, BrowserWindow, ipcMain, Menu, net, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, net, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -236,6 +236,12 @@ function createWindow(url) {
   if (!IS_DEV) {
     mainWindow.webContents.on('context-menu', (e) => e.preventDefault());
   }
+
+  // Open external links (target="_blank") in the system browser, not inside the app
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;

@@ -490,9 +490,11 @@ function runClaude(task) {
     const spawnTime = Date.now();
     const activityInterval = setInterval(() => {
       if (killed) return;
-      const kb = (stdout.length / 1024).toFixed(0);
       const elapsed = Math.floor((Date.now() - spawnTime) / 1000);
-      let detail = `Skill: ${task.skill || 'none'} · Working... (${kb}KB output)`;
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+      let detail = `Skill: ${task.skill || 'none'} · Working... (${timeStr})`;
       // Try to extract Remotion render progress from stdout (e.g. "(45/120)" or "37%")
       const progressMatch = stdout.match(/\((\d+)\/(\d+)\)/g);
       const pctMatch = stdout.match(/(\d+)%/g);
@@ -696,10 +698,33 @@ async function main() {
     liveStatus(task.id, 'preparing', task.skill ? `Loading skill: ${task.skill}` : 'Building prompt...');
 
     try {
-      const { resultFile, claudeSessionId } = await runClaude(task);
+      const { resultFile, result, claudeSessionId } = await runClaude(task);
       markTask(task.id, 'done', resultFile, null, claudeSessionId);
       log(`Task ${task.id} completed successfully (session: ${claudeSessionId})`);
-      liveStatus(task.id, 'done', 'Completed successfully');
+      // Try to extract output file path from Claude's stdout (e.g. rendered video path)
+      let doneDetail = 'Completed successfully';
+      const output = (result && result.claude_response && result.claude_response.result) || '';
+      // Look for file paths in output — common patterns from Remotion/ffmpeg/etc
+      const pathPatterns = [
+        /(?:saved|output|rendered|wrote|created|generated)[^\n]*?([A-Za-z]:\\[^\s"']+\.(?:mp4|webm|mov|mkv|avi|mp3|wav|png|jpg|gif))/i,
+        /(?:saved|output|rendered|wrote|created|generated)[^\n]*?(\/[^\s"']+\.(?:mp4|webm|mov|mkv|avi|mp3|wav|png|jpg|gif))/i,
+        /(out[/\\][^\s"']+\.(?:mp4|webm|mov|mkv|avi))/i,
+        /([A-Za-z]:\\[^\s"']*?out[/\\][^\s"']+\.(?:mp4|webm|mov|mkv|avi))/i,
+        /(\/[^\s"']*?out\/[^\s"']+\.(?:mp4|webm|mov|mkv|avi))/i
+      ];
+      for (const pat of pathPatterns) {
+        const m = output.match(pat);
+        if (m) {
+          let filePath = m[1] || m[0];
+          // If relative path, resolve against task's working directory
+          if (filePath && !path.isAbsolute(filePath) && task.working_dir) {
+            filePath = path.resolve(task.working_dir, filePath);
+          }
+          doneDetail = `Output: ${filePath}`;
+          break;
+        }
+      }
+      liveStatus(task.id, 'done', doneDetail);
     } catch (err) {
       const errorMsg = err.error || `Exit code: ${err.code}`;
       const isMaxTurns = errorMsg.includes('max turns') || errorMsg.includes('Max turns');

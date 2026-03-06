@@ -23,6 +23,14 @@ schedules.json.bak
 user-env.json
 heygen-config.json
 
+# Local project data (per-user, not shared)
+giveaway-projects/
+influencer-projects/
+remotion-project/
+ig-cookies.json
+instagram-tracker-state.json
+student-messages.txt
+
 # Large binaries (bundled during build, not tracked in git)
 bin/win/ffmpeg.exe
 bin/mac/ffmpeg

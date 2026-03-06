@@ -196,8 +196,60 @@ const icApi = {
 
 async function icInit() {
   if (!icInitialized) icInitialized = true;
-  icCheckServerGemini(); // fire-and-forget — caches for settings panel
+  await icCheckServerGemini(); // wait for server key check before gate
+  icCheckApiKeyGate();
   await icLoadProjects();
+}
+
+// ── API Key Gate — blocks entire view until key is entered ──
+function icHasApiKey() {
+  return !!(icGetApiKey() || (icServerGeminiStatus && icServerGeminiStatus.configured));
+}
+
+function icCheckApiKeyGate() {
+  const view = document.getElementById('influencerView');
+  if (!view) return;
+  let gate = document.getElementById('icApiKeyGate');
+  if (icHasApiKey()) {
+    if (gate) gate.remove();
+    return;
+  }
+  if (gate) return; // already showing
+  gate = document.createElement('div');
+  gate.id = 'icApiKeyGate';
+  gate.innerHTML = `
+    <div class="ic-gate-card">
+      <div class="ic-gate-icon">🔑</div>
+      <h2 class="ic-gate-title">API Key Required</h2>
+      <p class="ic-gate-desc">The Influencer Creator needs a free Google AI API key to generate images. Watch the short tutorial below, then paste your key.</p>
+      <div class="ic-gate-video">
+        <iframe src="https://www.tella.tv/video/vid_cmmd1ue47024e04l46js3f0i8/embed?b=1&title=1&a=1&loop=0&t=0&muted=0&wt=1&o=1" allowfullscreen allowtransparency></iframe>
+      </div>
+      <div class="ic-gate-steps">
+        <div class="ic-gate-step"><span class="ic-gate-step-num">1</span> Watch the tutorial above</div>
+        <div class="ic-gate-step"><span class="ic-gate-step-num">2</span> Go to <a href="https://aistudio.google.com/api-keys" target="_blank" style="color:#C084FC;font-weight:600;">Google AI Studio</a> and create a free API key</div>
+        <div class="ic-gate-step"><span class="ic-gate-step-num">3</span> Paste your key below and click Activate</div>
+      </div>
+      <div class="ic-gate-input-row">
+        <input type="text" id="icGateKeyInput" class="ic-gate-input" placeholder="Paste your API key here (starts with AIza...)" autocomplete="off" spellcheck="false">
+        <button class="btn btn-primary" onclick="icGateSubmitKey()">Activate</button>
+      </div>
+      <p class="ic-gate-note">Your key is stored locally on your computer and never shared.</p>
+    </div>
+  `;
+  view.prepend(gate);
+}
+
+function icGateSubmitKey() {
+  const input = document.getElementById('icGateKeyInput');
+  if (!input) return;
+  const key = input.value.trim();
+  if (!key) { showToast('Please enter your API key', 'error'); return; }
+  if (!key.startsWith('AIza')) { showToast('Invalid key — it should start with "AIza"', 'error'); return; }
+  icSetApiKey(key);
+  showToast('API key activated!', 'success');
+  const gate = document.getElementById('icApiKeyGate');
+  if (gate) gate.remove();
 }
 
 async function icLoadProjects() {

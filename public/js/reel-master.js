@@ -538,7 +538,7 @@ function rmRenderTimeline() {
         <div class="rm-scene-body">
           <div class="rm-scene-text" contenteditable="true"
                onblur="rmUpdateSceneText(${i}, this.textContent)"
-               onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}">${esc(s.text)}</div>
+               onkeydown="if(event.key==='Enter'){event.preventDefault(); rmSplitSceneAtCursor(${i}, this);}else if(event.key==='Backspace'){rmMergeSceneUp(${i}, this, event);}">${esc(s.text)}</div>
           <div class="rm-scene-time">${timeStart}s — ${timeEnd}s</div>
           ${imagesHTML}
           ${imgControlsHTML}
@@ -817,6 +817,73 @@ function rmSplitScene(idx) {
   rmSaveProject();
 }
 
+function rmSplitSceneAtCursor(idx, el) {
+  if (!rmCurrentProject) return;
+  const scene = rmCurrentProject.scenes[idx];
+  if (!scene) return;
+
+  // Get cursor position in the text
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  const offset = range.startOffset;
+  const fullText = el.textContent;
+
+  // Find which word the cursor is before
+  // Split text into words, find the word index at the cursor offset
+  const words = fullText.split(/\s+/).filter(w => w);
+  if (words.length < 2) return; // can't split a single word
+
+  let charPos = 0;
+  let splitWordIdx = words.length; // default: end (no split)
+  for (let w = 0; w < words.length; w++) {
+    const wordStart = fullText.indexOf(words[w], charPos);
+    if (offset <= wordStart) {
+      splitWordIdx = w;
+      break;
+    }
+    charPos = wordStart + words[w].length;
+  }
+
+  // If cursor is at the very start or very end, don't split
+  if (splitWordIdx <= 0 || splitWordIdx >= words.length) return;
+
+  // If scene has word timestamps, split using them
+  if (scene.words && scene.words.length >= 2) {
+    // Map split point — scene.words may differ from displayed text if edited
+    // Use the ratio of word position to find the best split in scene.words
+    const ratio = splitWordIdx / words.length;
+    let wordSplitIdx = Math.round(ratio * scene.words.length);
+    // Clamp to valid range
+    wordSplitIdx = Math.max(1, Math.min(scene.words.length - 1, wordSplitIdx));
+
+    // Try to find exact match: see if displayed words align with scene.words
+    if (scene.words.length === words.length) {
+      wordSplitIdx = splitWordIdx; // perfect 1:1 alignment
+    }
+
+    const words1 = scene.words.slice(0, wordSplitIdx);
+    const words2 = scene.words.slice(wordSplitIdx);
+    const scene1 = { ...scene, id: 'scene-' + Date.now() + 'a', words: words1, text: words1.map(w => w.word).join(' '), end: words1[words1.length - 1].end + 0.15, images: [], text_overlay: '' };
+    const scene2 = { ...scene, id: 'scene-' + Date.now() + 'b', words: words2, text: words2.map(w => w.word).join(' '), start: words2[0].start, images: [], text_overlay: '' };
+    rmCurrentProject.scenes.splice(idx, 1, scene1, scene2);
+  } else {
+    // No word timestamps — split text only
+    const text1 = words.slice(0, splitWordIdx).join(' ');
+    const text2 = words.slice(splitWordIdx).join(' ');
+    const duration = (scene.end || 0) - (scene.start || 0);
+    const splitRatio = splitWordIdx / words.length;
+    const midTime = (scene.start || 0) + duration * splitRatio;
+    const scene1 = { ...scene, id: 'scene-' + Date.now() + 'a', text: text1, end: midTime, words: [], images: [], text_overlay: '' };
+    const scene2 = { ...scene, id: 'scene-' + Date.now() + 'b', text: text2, start: midTime, words: [], images: [], text_overlay: '' };
+    rmCurrentProject.scenes.splice(idx, 1, scene1, scene2);
+  }
+
+  rmRenderTimeline();
+  rmSaveProject();
+  showToast('Scene split at cursor', 'info');
+}
+
 function rmMergeScene(idx) {
   if (!rmCurrentProject) return;
   const scenes = rmCurrentProject.scenes;
@@ -839,6 +906,25 @@ function rmMergeScene(idx) {
   scenes.splice(idx, 2, merged);
   rmRenderTimeline();
   rmSaveProject();
+}
+
+function rmMergeSceneUp(idx, el, event) {
+  if (!rmCurrentProject || idx <= 0) return;
+  // Only merge if cursor is at the very start of the text
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  if (range.startOffset !== 0 || !range.collapsed) return;
+  // Check we're at the very beginning (not just start of a child node)
+  let node = range.startContainer;
+  while (node && node !== el) {
+    if (node.previousSibling) return; // there's content before cursor
+    node = node.parentNode;
+  }
+  event.preventDefault();
+  // Merge current scene into previous (use idx-1 so rmMergeScene merges prev+current)
+  rmMergeScene(idx - 1);
+  showToast('Merged with previous scene', 'info');
 }
 
 function rmDeleteScene(idx) {
@@ -2511,12 +2597,32 @@ async function rmPollRenderStatus(taskId) {
       panel.className = 'rm-render-status done';
       fill.className = 'rm-render-progress-fill';
       fill.style.width = '100%';
-      // Show the Remotion output folder, not the task JSON
-      const workingDir = (document.getElementById('rmRenderDir')?.value || '').trim();
-      const outFolder = workingDir ? workingDir + '/out' : '';
-      detail.textContent = outFolder ? 'Output: ' + outFolder : 'Render complete';
-      const escapedFolder = outFolder.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      actions.innerHTML = outFolder
+      // Get output path from live status detail (worker extracts it from stdout)
+      let outputPath = '';
+      try {
+        const liveRes = await safeFetch(`/api/tasks/${taskId}/live`);
+        const live = await liveRes.json();
+        if (live.detail && live.detail.startsWith('Output: ')) {
+          outputPath = live.detail.replace('Output: ', '');
+        }
+      } catch (_) {}
+      // Fallback: use working dir /out folder
+      if (!outputPath) {
+        const workingDir = (document.getElementById('rmRenderDir')?.value || '').trim();
+        if (workingDir) {
+          const sep = workingDir.includes('\\') ? '\\' : '/';
+          outputPath = workingDir + sep + 'out';
+        }
+      }
+      detail.textContent = outputPath ? 'Output: ' + outputPath : 'Render complete';
+      // Determine the folder to open (parent of file, or folder itself)
+      let openFolder = outputPath;
+      if (outputPath && /\.\w{2,4}$/.test(outputPath)) {
+        // It's a file path — get parent directory
+        openFolder = outputPath.replace(/[/\\][^/\\]+$/, '');
+      }
+      const escapedFolder = openFolder.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      actions.innerHTML = openFolder
         ? `<button class="btn btn-primary btn-sm" onclick="rmOpenRenderFolder('${escapedFolder}')">📂 Open Folder</button>`
         : '';
       rmClearRenderIntervals();
@@ -2574,12 +2680,20 @@ function rmFormatElapsed(totalSec) {
   return `${m}:${String(s).padStart(2,'0')}`;
 }
 
-function rmOpenRenderFolder(folderPath) {
-  safeFetch('/api/open-folder', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: folderPath })
-  }).catch(() => { showToast('Could not open folder', 'error'); });
+async function rmOpenRenderFolder(folderPath) {
+  try {
+    const res = await safeFetch('/api/open-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: folderPath })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      showToast('Could not open folder: ' + (data.error || 'Unknown error'), 'error');
+    }
+  } catch (_) {
+    showToast('Could not open folder', 'error');
+  }
 }
 
 function rmRetryRender() {
