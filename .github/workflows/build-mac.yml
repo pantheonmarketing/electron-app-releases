@@ -15,6 +15,9 @@ permissions:
 jobs:
   build-mac:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [arm64, x64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,10 +37,10 @@ jobs:
           unzip ffmpeg.zip -d bin/mac/
           chmod +x bin/mac/ffmpeg
 
-      - name: Build Mac (DMG + ZIP)
+      - name: Build Mac (${{ matrix.arch }})
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --mac --publish never
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
 
       - name: Get release tag
         id: tag
@@ -48,7 +51,8 @@ jobs:
             echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Generate latest-mac.yml
+      - name: Generate latest-mac.yml (arm64 only)
+        if: matrix.arch == 'arm64'
         run: |
           ZIP_FILE=$(ls dist/*.zip | head -1)
           ZIP_NAME=$(basename "$ZIP_FILE")
@@ -68,7 +72,6 @@ jobs:
           releaseDate: '${DATE}'
           EOF
 
-          # Remove leading whitespace from heredoc
           sed -i '' 's/^          //' dist/latest-mac.yml
           echo "Generated latest-mac.yml:"
           cat dist/latest-mac.yml
@@ -83,5 +86,7 @@ jobs:
           gh release upload "${{ steps.tag.outputs.tag }}" "$DMG_FILE" --clobber
           echo "Uploading $ZIP_FILE"
           gh release upload "${{ steps.tag.outputs.tag }}" "$ZIP_FILE" --clobber
-          echo "Uploading latest-mac.yml"
-          gh release upload "${{ steps.tag.outputs.tag }}" "dist/latest-mac.yml" --clobber
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            echo "Uploading latest-mac.yml"
+            gh release upload "${{ steps.tag.outputs.tag }}" "dist/latest-mac.yml" --clobber
+          fi
