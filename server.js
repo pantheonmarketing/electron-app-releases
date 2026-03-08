@@ -250,14 +250,18 @@ if (IS_PACKAGED_ELECTRON) {
     console.log(`[Server] Extracted ${extracted} skill files to ${destSkillsDir}`);
   }
 
-  // Extract worker.js from app.asar to BASE_DIR so plain `node` can execute it.
-  const workerSrc = path.join(APP_DIR, 'worker.js');
-  const workerDest = path.join(BASE_DIR, 'worker.js');
-  try {
-    extractFile(workerSrc, workerDest);
-    console.log(`[Server] Extracted worker.js to ${workerDest}`);
-  } catch (e) {
-    console.error(`[Server] Failed to extract worker.js: ${e.message}`);
+  // Extract executable scripts from app.asar to BASE_DIR so plain `node` can run them.
+  for (const script of ['worker.js', 'giveaway-scout-apify.cjs', 'transcribe.py']) {
+    const src = path.join(APP_DIR, script);
+    const dest = path.join(BASE_DIR, script);
+    try {
+      if (fs.existsSync(src)) {
+        extractFile(src, dest);
+        console.log(`[Server] Extracted ${script} to ${dest}`);
+      }
+    } catch (e) {
+      console.error(`[Server] Failed to extract ${script}: ${e.message}`);
+    }
   }
 }
 
@@ -294,16 +298,66 @@ function loadUserEnv() {
 loadUserEnv();
 
 // ── License tier ──
+let _cachedTier = null;
+let _tierLastChecked = 0;
+const TIER_REFRESH_MS = 10 * 60 * 1000; // re-check every 10 min
+
 function getLicenseTier() {
+  // Use cached tier if fresh (avoids file reads on every request)
+  if (_cachedTier && (Date.now() - _tierLastChecked < TIER_REFRESH_MS)) {
+    return _cachedTier;
+  }
   try {
     const licFile = path.join(getAppDataDir(), 'electron', 'license.json');
     if (fs.existsSync(licFile)) {
       const lic = JSON.parse(fs.readFileSync(licFile, 'utf-8'));
-      return lic.tier || 'basic';
+      _cachedTier = lic.tier || 'basic';
+      _tierLastChecked = Date.now();
+      return _cachedTier;
     }
   } catch (_) {}
   return process.env.ELECTRON_MODE ? 'basic' : 'lifetime';
 }
+
+// Live-sync tier from server on startup + every 10 min
+// This fixes stale license.json that still says "basic" after an admin upgrade
+function refreshLicenseTier() {
+  try {
+    const licFile = path.join(getAppDataDir(), 'electron', 'license.json');
+    if (!fs.existsSync(licFile)) return;
+    const lic = JSON.parse(fs.readFileSync(licFile, 'utf-8'));
+    if (!lic.key) return;
+
+    const https = require('https');
+    const body = JSON.stringify({ key: lic.key });
+    const req = https.request('https://www.aicreatorworkshop.com/api/license-validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const resp = JSON.parse(data);
+          if (resp.valid && resp.tier && resp.tier !== lic.tier) {
+            console.log(`[License] Tier updated: ${lic.tier} → ${resp.tier}`);
+            lic.tier = resp.tier;
+            fs.writeFileSync(licFile, JSON.stringify(lic, null, 2));
+            _cachedTier = resp.tier;
+            _tierLastChecked = Date.now();
+          }
+        } catch (_) {}
+      });
+    });
+    req.on('error', () => {}); // silently ignore network errors
+    req.write(body);
+    req.end();
+  } catch (_) {}
+}
+
+// Run immediately on startup, then every 10 min
+refreshLicenseTier();
+setInterval(refreshLicenseTier, TIER_REFRESH_MS);
 
 // ── Startup recovery for stuck tasks ──
 function recoverStuckTasks() {
@@ -380,6 +434,7 @@ const LIFETIME_ONLY_PREFIXES = [
   '/api/tasks', '/api/story', '/api/scripter',
   '/api/heygen', '/api/giveaway', '/api/scout',
   '/api/skills', '/api/projects', '/api/templates',
+  '/api/reel', '/api/influencer',
 ];
 app.use((req, res, next) => {
   if (!process.env.ELECTRON_MODE) return next();

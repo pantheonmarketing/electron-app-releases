@@ -273,6 +273,15 @@ router.post('/reel/projects/:projectId/whisper', (req, res) => {
   const proc = spawn('whisper', args, { windowsHide: true, shell: true });
   shared.whisperJobs.set(jobId, { status: 'processing', clip_id, project_id: req.params.projectId, progress: 0, proc });
 
+  // Catch spawn errors (e.g. whisper not installed)
+  proc.on('error', (err) => {
+    const job = shared.whisperJobs.get(jobId);
+    if (job) {
+      job.status = 'error';
+      job.error = err.code === 'ENOENT' ? 'Whisper is not installed. Run Setup to install it.' : err.message;
+    }
+  });
+
   let stderrBuf = '';
   proc.stderr.on('data', (chunk) => {
     stderrBuf += chunk.toString();

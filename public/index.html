@@ -1108,9 +1108,12 @@
       </div>
     </div>
 
-    <div class="modal-actions">
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);display:flex;align-items:center;gap:6px;" onclick="deactivateLicense()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Log Out
+      </button>
       <button class="btn btn-ghost" onclick="closeSettingsModal()">Close</button>
-      <button class="btn" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);" onclick="deactivateLicense()">Deactivate License</button>
     </div>
   </div>
 </div>
@@ -2274,8 +2277,35 @@ async function initTierGating() {
       window.APP_TIER = data.tier || 'lifetime';
     }
   } catch (e) {
-    window.APP_TIER = 'lifetime'; // default to unlocked on error
+    // Fail closed in Electron (basic), fail open in dev browser
+    window.APP_TIER = (window.electronAPI) ? 'basic' : 'lifetime';
   }
+
+  // Auto-refresh tier every 5 min (catches admin upgrades without app restart)
+  setInterval(async () => {
+    try {
+      let newTier;
+      if (window.electronAPI && window.electronAPI.getLicenseTier) {
+        newTier = await window.electronAPI.getLicenseTier();
+      } else {
+        const resp = await fetch('/api/license-tier');
+        const data = await resp.json();
+        newTier = data.tier;
+      }
+      if (newTier && newTier !== window.APP_TIER) {
+        console.log('[License] Tier changed:', window.APP_TIER, '→', newTier);
+        window.APP_TIER = newTier;
+        if (newTier === 'lifetime') {
+          document.querySelectorAll('.tier-locked').forEach(el => el.classList.remove('tier-locked'));
+          document.querySelectorAll('.tier-btn-locked').forEach(el => el.classList.remove('tier-btn-locked'));
+          document.querySelectorAll('.tier-view-banner').forEach(el => el.remove());
+          const cta = document.getElementById('sidebarUpgradeCta');
+          if (cta) cta.style.display = 'none';
+        }
+        updateTierBadge();
+      }
+    } catch (_) {}
+  }, 5 * 60 * 1000);
 
   // Hide CLI warning for basic users (they don't need Claude)
   if (window.APP_TIER === 'basic') {
@@ -2679,7 +2709,7 @@ function prefillEnvKey(key) {
 }
 
 async function deactivateLicense() {
-  if (!confirm('Deactivate your license? You will need to re-enter your key to use the app.')) return;
+  if (!confirm('Log out? You will need to re-enter your license key.')) return;
   try {
     if (window.electronAPI && window.electronAPI.clearLicense) {
       await window.electronAPI.clearLicense();

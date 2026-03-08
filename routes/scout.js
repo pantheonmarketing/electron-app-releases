@@ -175,7 +175,9 @@ router.post('/scout/run', (req, res) => {
   const mode = req.body.mode || 'full'; // "quick" or "full"
   const postsPerAccount = mode === 'quick' ? 3 : (parseInt(req.body.posts) || 15);
   const batchSize = parseInt(req.body.batchSize) || 5;
-  const scriptPath = path.join(shared.BASE_DIR, 'giveaway-scout-apify.cjs');
+  // Check user data dir first, then fall back to app bundle dir
+  let scriptPath = path.join(shared.BASE_DIR, 'giveaway-scout-apify.cjs');
+  if (!fs.existsSync(scriptPath)) scriptPath = path.join(shared.APP_DIR, 'giveaway-scout-apify.cjs');
 
   if (!fs.existsSync(scriptPath)) return res.status(404).json({ ok: false, error: 'Scout script not found' });
   if (!fs.existsSync(ACCOUNTS_FILE)) return res.status(404).json({ ok: false, error: 'No accounts file. Add accounts first.' });

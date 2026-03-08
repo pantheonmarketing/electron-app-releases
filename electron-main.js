@@ -324,6 +324,10 @@ app.on('activate', async () => {
     if (license) {
       const result = await validateKey(license.key);
       if (result.valid) {
+        // Update stored tier from server (in case admin changed it)
+        if (license.key && result.tier && result.tier !== license.tier) {
+          saveLicense(license.key, license.name, result.tier);
+        }
         createWindow(`http://localhost:${serverPort}`);
       } else {
         createWindow(`http://localhost:${serverPort}/license.html`);

@@ -92,7 +92,8 @@ router.post('/scripter/transcribe', async (req, res) => {
     }
     const dlTime = Date.now() - startTime;
     console.log(`[Transcribe] Downloaded in ${dlTime}ms, transcribing with faster-whisper...`);
-    const transcribeScript = path.join(shared.BASE_DIR, 'transcribe.py');
+    let transcribeScript = path.join(shared.BASE_DIR, 'transcribe.py');
+    if (!fs.existsSync(transcribeScript)) transcribeScript = path.join(shared.APP_DIR, 'transcribe.py');
     const whisperCmd = `python "${transcribeScript}" "${actualAudio}" base`;
     const whisperEnv = { ...process.env, PYTHONIOENCODING: 'utf-8' };
     const { stdout: whisperOut } = await runCmd(whisperCmd, {
