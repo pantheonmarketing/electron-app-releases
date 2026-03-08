@@ -12,6 +12,8 @@
     "add-task.js",
     "status.js",
     "run.js",
+    "giveaway-scout-apify.cjs",
+    "transcribe.py",
     "lib/**",
     "public/**",
     "skills/**",
