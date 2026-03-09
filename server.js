@@ -434,7 +434,6 @@ const LIFETIME_ONLY_PREFIXES = [
   '/api/tasks', '/api/story', '/api/scripter',
   '/api/heygen', '/api/giveaway', '/api/scout',
   '/api/skills', '/api/projects', '/api/templates',
-  '/api/reel', '/api/influencer',
 ];
 app.use((req, res, next) => {
   if (!process.env.ELECTRON_MODE) return next();

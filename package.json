@@ -1,6 +1,6 @@
 {
   "name": "claude-task-manager",
-  "version": "1.9.6",
+  "version": "1.9.7",
   "description": "Trello-style AI task manager powered by Claude CLI",
   "main": "electron-main.js",
   "scripts": {
