@@ -6,6 +6,7 @@ const shared = require('../lib/shared');
 const router = express.Router();
 
 const ACCOUNTS_FILE = path.join(shared.BASE_DIR, 'scout-accounts.txt');
+const YT_CHANNELS_FILE = path.join(shared.BASE_DIR, 'scout-yt-channels.txt');
 
 // ──────────────────────────────────────────────
 // Scout — List available scout runs
@@ -27,6 +28,11 @@ router.get('/scout/runs', (req, res) => {
         const dateMatch = f.match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
         const dateStr = dateMatch ? dateMatch[1].replace(/-/g, (m, i) => i > 9 ? ':' : '-') : '';
         const dateObj = dateStr ? new Date(dateStr.replace(/T(\d{2}):(\d{2}):(\d{2})/, 'T$1:$2:$3')) : null;
+        // Detect source from posts data
+        const posts = data.giveawayPosts || [];
+        const hasIG = posts.some(p => !p.source || p.source === 'instagram');
+        const hasYT = posts.some(p => p.source === 'youtube');
+        const source = hasIG && hasYT ? 'both' : hasYT ? 'youtube' : 'instagram';
         return {
           filename: f,
           date: dateObj ? dateObj.toISOString() : '',
@@ -36,6 +42,7 @@ router.get('/scout/runs', (req, res) => {
           totalAccounts: data.totalAccounts || 0,
           totalPosts: data.totalPosts || 0,
           totalGiveaways: data.totalGiveaways || 0,
+          source,
         };
       } catch (_) { return null; }
     }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date));
@@ -87,8 +94,9 @@ router.get('/scout/img', async (req, res) => {
   // Only allow Instagram CDN domains
   try {
     const parsed = new URL(url);
-    if (!parsed.hostname.includes('cdninstagram.com') && !parsed.hostname.includes('fbcdn.net')) {
-      return res.status(403).json({ error: 'Only Instagram CDN URLs allowed' });
+    const allowed = ['cdninstagram.com', 'fbcdn.net', 'ytimg.com', 'ggpht.com', 'googleusercontent.com'];
+    if (!allowed.some(d => parsed.hostname.includes(d))) {
+      return res.status(403).json({ error: 'Only allowed CDN URLs' });
     }
   } catch { return res.status(400).end(); }
 
@@ -164,6 +172,48 @@ router.put('/scout/accounts', (req, res) => {
 });
 
 // ──────────────────────────────────────────────
+// Scout — Read YouTube channel list
+// ──────────────────────────────────────────────
+
+router.get('/scout/yt-channels', (req, res) => {
+  try {
+    if (!fs.existsSync(YT_CHANNELS_FILE)) return res.json({ ok: true, channels: [] });
+    const raw = fs.readFileSync(YT_CHANNELS_FILE, 'utf-8');
+    const channels = raw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    res.json({ ok: true, channels });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// Scout — Save YouTube channel list
+// ──────────────────────────────────────────────
+
+router.put('/scout/yt-channels', (req, res) => {
+  try {
+    const { channels } = req.body;
+    if (!Array.isArray(channels)) return res.status(400).json({ ok: false, error: 'channels must be an array' });
+    const clean = [...new Set(
+      channels.map(c => {
+        let s = String(c).trim();
+        // Normalize: accept @handle, full URL, or channel name
+        if (s.startsWith('@')) return s; // keep @handle as-is
+        if (s.includes('youtube.com')) return s; // keep full URL as-is
+        if (s.includes('youtu.be')) return s;
+        // Bare name → @handle
+        return '@' + s.replace(/^@/, '');
+      }).filter(c => c.length > 1)
+    )];
+    const header = `# Scout YouTube channels — updated ${new Date().toISOString().split('T')[0]}\n# ${clean.length} channels\n\n`;
+    fs.writeFileSync(YT_CHANNELS_FILE, header + clean.join('\n') + '\n');
+    res.json({ ok: true, count: clean.length, channels: clean });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
 // Scout — Trigger a new scout run
 // ──────────────────────────────────────────────
 
@@ -173,14 +223,22 @@ router.post('/scout/run', (req, res) => {
   if (scoutRunState.running) return res.status(409).json({ ok: false, error: 'A scout run is already in progress' });
 
   const mode = req.body.mode || 'full'; // "quick" or "full"
-  const postsPerAccount = mode === 'quick' ? 3 : (parseInt(req.body.posts) || 15);
+  const source = req.body.source || 'instagram'; // "instagram", "youtube", or "both"
+  const contentMode = req.body.contentMode || 'giveaway'; // "giveaway" or "all" (for IG)
+  const postsCount = parseInt(req.body.posts) || 10;
+  const postsPerAccount = mode === 'quick' ? 3 : postsCount;
   const batchSize = parseInt(req.body.batchSize) || 5;
   // Check user data dir first, then fall back to app bundle dir
   let scriptPath = path.join(shared.BASE_DIR, 'giveaway-scout-apify.cjs');
   if (!fs.existsSync(scriptPath)) scriptPath = path.join(shared.APP_DIR, 'giveaway-scout-apify.cjs');
 
   if (!fs.existsSync(scriptPath)) return res.status(404).json({ ok: false, error: 'Scout script not found' });
-  if (!fs.existsSync(ACCOUNTS_FILE)) return res.status(404).json({ ok: false, error: 'No accounts file. Add accounts first.' });
+  // Check that at least one accounts file exists for the requested source
+  const hasIG = fs.existsSync(ACCOUNTS_FILE);
+  const hasYT = fs.existsSync(YT_CHANNELS_FILE);
+  if (source === 'instagram' && !hasIG) return res.status(404).json({ ok: false, error: 'No IG accounts file. Add accounts first.' });
+  if (source === 'youtube' && !hasYT) return res.status(404).json({ ok: false, error: 'No YouTube channels file. Add channels first.' });
+  if (source === 'both' && !hasIG && !hasYT) return res.status(404).json({ ok: false, error: 'No accounts or channels files. Add some first.' });
 
   // For quick mode, find the latest -posts.json to merge with
   let mergeWithPath = null;
@@ -205,6 +263,8 @@ router.post('/scout/run', (req, res) => {
     '--accounts-file', ACCOUNTS_FILE,
     '--posts', String(postsPerAccount),
     '--batch-size', String(batchSize),
+    '--source', source,
+    '--content-mode', contentMode,
   ];
   if (mergeWithPath) args.push('--merge-with', mergeWithPath);
 

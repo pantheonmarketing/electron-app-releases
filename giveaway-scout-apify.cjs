@@ -20,6 +20,7 @@ const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN;
 // Actor IDs
 const FOLLOWING_ACTOR = 'louisdeconinck~instagram-following-scraper';
 const POSTS_ACTOR     = 'shu8hvrXbJbY3Eb9W'; // Apify Instagram Scraper (same as instagram-tracker)
+const YT_ACTOR = 'h7sDV53CddomktSi5'; // Apify YouTube Scraper
 
 // Instagram cookies file (needed for following scraper)
 const COOKIES_FILE = path.join(__dirname, 'ig-cookies.json');
@@ -44,6 +45,8 @@ function parseArgs() {
     maxAccounts: 0,       // 0 = all
     batchSize: 5,         // how many accounts to scrape per Apify run
     mergeWith: null,      // path to previous -posts.json to merge with (Quick Scan)
+    source: 'instagram', // 'instagram', 'youtube', or 'both'
+    contentMode: 'giveaway', // 'giveaway' or 'all'
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -58,6 +61,8 @@ function parseArgs() {
       case '--max-accounts': opts.maxAccounts = parseInt(args[++i]) || 0; break;
       case '--batch-size': opts.batchSize = parseInt(args[++i]) || 5; break;
       case '--merge-with': opts.mergeWith = args[++i]; break;
+      case '--source': opts.source = args[++i] || 'instagram'; break;
+      case '--content-mode': opts.contentMode = args[++i] || 'giveaway'; break;
     }
   }
 
@@ -292,6 +297,106 @@ async function getPostsFromAccounts(accounts, postsPerAccount, batchSize) {
   return allPosts;
 }
 
+// ── Phase 1b-YT: Get Videos From YouTube Channels ──────────────────────────
+
+async function getYouTubeVideos(channels, maxResults, batchSize) {
+  console.log(`\n[Phase 1b-YT] Scraping latest ${maxResults} videos from ${channels.length} YouTube channels...`);
+
+  const allVideos = [];
+  const batches = [];
+
+  for (let i = 0; i < channels.length; i += batchSize) {
+    batches.push(channels.slice(i, i + batchSize));
+  }
+
+  console.log(`  Processing in ${batches.length} batch(es) of up to ${batchSize} channels each\n`);
+
+  for (let bIdx = 0; bIdx < batches.length; bIdx++) {
+    const batch = batches[bIdx];
+    const batchNames = batch.map(c => c.name || c.url).join(', ');
+    console.log(`  Batch ${bIdx + 1}/${batches.length}: ${batchNames}`);
+
+    const startUrls = batch.map(c => ({ url: c.url }));
+
+    try {
+      const runId = await startApifyRun(YT_ACTOR, {
+        startUrls,
+        maxResults,
+        maxResultsShorts: 0,
+        maxResultStreams: 0,
+        subtitlesLanguage: 'en',
+        subtitlesFormat: 'srt',
+      });
+
+      const datasetId = await pollApifyRun(runId, `YT Batch ${bIdx + 1}:`);
+      const items = await fetchDataset(datasetId);
+
+      console.log(`  Got ${items.length} videos from batch ${bIdx + 1}`);
+
+      for (const item of items) {
+        // Parse duration string "HH:MM:SS" or seconds
+        let durationSec = 0;
+        if (item.duration) {
+          if (typeof item.duration === 'string' && item.duration.includes(':')) {
+            const parts = item.duration.split(':').map(Number);
+            if (parts.length === 3) durationSec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+            else if (parts.length === 2) durationSec = parts[0] * 60 + parts[1];
+          } else {
+            durationSec = parseInt(item.duration) || 0;
+          }
+        }
+
+        allVideos.push({
+          // Source
+          source: 'youtube',
+
+          // Channel info
+          ownerUsername: item.channelName || item.channelTitle || '',
+          ownerFullName: item.channelName || item.channelTitle || '',
+          channelUrl: item.channelUrl || '',
+          subscriberCount: item.subscriberCount || item.numberOfSubscribers || 0,
+
+          // Video info
+          postId: item.id || '',
+          shortCode: item.id || '',
+          url: item.url || '',
+          type: 'Video',
+          timestamp: item.date || item.uploadDate || '',
+
+          // Content
+          caption: (item.title || '').trim(),
+          description: (item.text || item.description || '').replace(/\r?\n/g, ' ').trim(),
+          hashtags: '',
+          mentions: '',
+
+          // Engagement
+          likesCount: item.likes != null ? item.likes : (item.numberOfLikes || 0),
+          commentsCount: item.commentsCount != null ? item.commentsCount : (item.numberOfComments || 0),
+          videoViewCount: item.viewCount != null ? item.viewCount : (item.numberOfViews || 0),
+          videoDuration: durationSec,
+
+          // Media
+          displayUrl: item.thumbnailUrl || '',
+          videoUrl: '',
+
+          // YouTube-specific
+          subtitles: item.subtitles || '',
+          isShort: item.isShort || false,
+        });
+      }
+    } catch (err) {
+      console.error(`  Error in YT batch ${bIdx + 1}: ${err.message}`);
+    }
+
+    if (bIdx < batches.length - 1) {
+      console.log('  Waiting 5s before next batch...\n');
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+
+  return allVideos;
+}
+
 // ── CSV Export ─────────────────────────────────────────────────────────────────
 
 function escapeCSV(val) {
@@ -415,8 +520,11 @@ function extractGiveawayDetails(post) {
 
 // ── Summary Stats ─────────────────────────────────────────────────────────────
 
-function generateSummary(posts, following) {
-  const giveawayPosts = posts.filter(p => isLikelyGiveaway(p.caption));
+function generateSummary(posts, following, contentMode) {
+  // contentMode 'all': include everything. 'giveaway': filter IG to giveaway posts only. YouTube always included.
+  const topPosts = contentMode === 'all'
+    ? posts.slice()
+    : posts.filter(p => p.source === 'youtube' || isLikelyGiveaway(p.caption));
   const accountStats = {};
 
   for (const p of posts) {
@@ -428,35 +536,46 @@ function generateSummary(posts, following) {
         giveawayPosts: 0,
         totalLikes: 0,
         totalComments: 0,
+        totalViews: 0,
         topPost: null,
       };
     }
 
     const s = accountStats[p.ownerUsername];
     s.totalPosts++;
-    if (isLikelyGiveaway(p.caption)) s.giveawayPosts++;
+    if (p.source === 'youtube' || isLikelyGiveaway(p.caption)) s.giveawayPosts++;
     if (p.likesCount > 0) s.totalLikes += p.likesCount;
     s.totalComments += p.commentsCount || 0;
+    s.totalViews += p.videoViewCount || 0;
 
-    if (!s.topPost || (p.commentsCount || 0) > (s.topPost.commentsCount || 0)) {
+    // For YouTube, rank by views. For IG, rank by comments.
+    const metric = p.source === 'youtube' ? (p.videoViewCount || 0) : (p.commentsCount || 0);
+    const topMetric = s.topPost
+      ? (s.topPost.source === 'youtube' ? (s.topPost.videoViewCount || 0) : (s.topPost.commentsCount || 0))
+      : 0;
+    if (!s.topPost || metric > topMetric) {
       s.topPost = p;
     }
   }
 
-  // Sort giveaway posts by engagement (comments are the best signal)
-  giveawayPosts.sort((a, b) => (b.commentsCount || 0) - (a.commentsCount || 0));
+  // Sort: YouTube by views, IG by comments
+  topPosts.sort((a, b) => {
+    const aMetric = a.source === 'youtube' ? (a.videoViewCount || 0) : (a.commentsCount || 0);
+    const bMetric = b.source === 'youtube' ? (b.videoViewCount || 0) : (b.commentsCount || 0);
+    return bMetric - aMetric;
+  });
 
-  // Top giveaway accounts (most giveaway posts + highest engagement)
-  const giveawayAccounts = Object.values(accountStats)
+  // Top accounts
+  const topAccounts = Object.values(accountStats)
     .filter(a => a.giveawayPosts > 0)
     .sort((a, b) => b.giveawayPosts - a.giveawayPosts || b.totalComments - a.totalComments);
 
   return {
     totalAccounts: following.length,
     totalPosts: posts.length,
-    totalGiveaways: giveawayPosts.length,
-    giveawayPosts: giveawayPosts.slice(0, 50), // Top 50
-    giveawayAccounts: giveawayAccounts.slice(0, 20),
+    totalGiveaways: topPosts.length,
+    giveawayPosts: topPosts.slice(0, 100), // Top 100 (increased from 50 for YT)
+    giveawayAccounts: topAccounts.slice(0, 20),
     accountStats,
   };
 }
@@ -599,6 +718,7 @@ async function main() {
   console.log('  GIVEAWAY SCOUT — Apify Pipeline');
   console.log('═══════════════════════════════════════════');
   console.log(`  Source: ${opts.account ? '@' + opts.account : opts.accountsList ? 'manual list' : opts.accountsFile || opts.followingFile}`);
+  console.log(`  Platform: ${opts.source}`);
   console.log(`  Posts per account: ${opts.postsPerAccount}`);
   console.log(`  Max accounts: ${opts.maxAccounts || 'all'}`);
   console.log(`  Batch size: ${opts.batchSize}`);
@@ -609,17 +729,26 @@ async function main() {
 
   if (opts.accountsList) {
     // Direct comma-separated list: --accounts-list "user1,user2,user3"
-    following = opts.accountsList.split(',').map(u => u.trim()).filter(Boolean).map(u => ({
-      username: u.replace(/^@/, ''),
-      fullName: '',
-      isPrivate: false,
-      isVerified: false,
-      profileUrl: `https://www.instagram.com/${u.replace(/^@/, '')}/`,
-    }));
+    following = opts.accountsList.split(',').map(u => u.trim()).filter(Boolean).map(u => {
+      const isYT = u.includes('youtube.com') || u.includes('youtu.be');
+      if (isYT) {
+        const name = u.replace(/^https?:\/\/(www\.)?youtube\.com\//i, '').replace(/^@/, '').replace(/\/.*$/, '');
+        return { username: name, fullName: '', name, url: u, _isYouTube: true };
+      }
+      return {
+        username: u.replace(/^@/, ''),
+        fullName: '',
+        isPrivate: false,
+        isVerified: false,
+        profileUrl: `https://www.instagram.com/${u.replace(/^@/, '')}/`,
+        _isYouTube: false,
+      };
+    });
     console.log(`\n[Phase 1a] Using manual list: ${following.length} accounts`);
 
   } else if (opts.accountsFile) {
     // Text file with one username per line: --accounts-file accounts.txt
+    // Also load YouTube channels file if it exists
     const raw = fs.readFileSync(opts.accountsFile, 'utf8');
     following = raw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(u => ({
       username: u.replace(/^@/, ''),
@@ -627,8 +756,38 @@ async function main() {
       isPrivate: false,
       isVerified: false,
       profileUrl: `https://www.instagram.com/${u.replace(/^@/, '')}/`,
+      _isYouTube: false,
     }));
-    console.log(`\n[Phase 1a] Loaded ${following.length} accounts from ${opts.accountsFile}`);
+    console.log(`\n[Phase 1a] Loaded ${following.length} IG accounts from ${opts.accountsFile}`);
+
+    // Load YouTube channels if source includes youtube
+    if (opts.source === 'youtube' || opts.source === 'both') {
+      const ytFile = opts.accountsFile.replace('scout-accounts', 'scout-yt-channels');
+      if (fs.existsSync(ytFile)) {
+        const ytRaw = fs.readFileSync(ytFile, 'utf8');
+        const ytChannels = ytRaw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(u => {
+          // Support: channel URL, handle (@name), or channel ID
+          let url = u;
+          if (u.startsWith('@')) {
+            url = `https://www.youtube.com/${u}`;
+          } else if (!u.startsWith('http')) {
+            url = `https://www.youtube.com/@${u}`;
+          }
+          const name = u.replace(/^https?:\/\/(www\.)?youtube\.com\//i, '').replace(/^@/, '').replace(/\/.*$/, '');
+          return {
+            username: name,
+            fullName: '',
+            name: name,
+            url: url,
+            _isYouTube: true,
+          };
+        });
+        following.push(...ytChannels);
+        console.log(`  Loaded ${ytChannels.length} YouTube channels from ${ytFile}`);
+      } else if (opts.source === 'youtube') {
+        console.log(`  WARNING: No YouTube channels file found at ${ytFile}`);
+      }
+    }
 
   } else if (opts.followingFile) {
     // Saved JSON from a previous run: --following-file results/scout-*-following.json
@@ -655,8 +814,26 @@ async function main() {
     return;
   }
 
-  // ── Phase 1b: Get posts from each account ──
-  const scrapedPosts = await getPostsFromAccounts(following, opts.postsPerAccount, opts.batchSize);
+  // ── Phase 1b: Get posts/videos ──
+  let scrapedPosts = [];
+
+  if (opts.source === 'instagram' || opts.source === 'both') {
+    // Add source field to IG accounts
+    const igAccounts = following.filter(a => !a._isYouTube);
+    if (igAccounts.length > 0) {
+      const igPosts = await getPostsFromAccounts(igAccounts, opts.postsPerAccount, opts.batchSize);
+      igPosts.forEach(p => { p.source = 'instagram'; });
+      scrapedPosts.push(...igPosts);
+    }
+  }
+
+  if (opts.source === 'youtube' || opts.source === 'both') {
+    const ytChannels = following.filter(a => a._isYouTube);
+    if (ytChannels.length > 0) {
+      const ytVideos = await getYouTubeVideos(ytChannels, opts.postsPerAccount, opts.batchSize);
+      scrapedPosts.push(...ytVideos);
+    }
+  }
 
   console.log(`\n[Phase 1 Complete] Total posts collected: ${scrapedPosts.length}`);
 
@@ -664,7 +841,7 @@ async function main() {
   const posts = opts.mergeWith ? mergePosts(scrapedPosts, opts.mergeWith) : scrapedPosts;
 
   // ── Analysis ──
-  const summary = generateSummary(posts, following);
+  const summary = generateSummary(posts, following, opts.contentMode);
 
   console.log(`\n[Analysis]`);
   console.log(`  Total accounts scraped: ${summary.totalAccounts}`);

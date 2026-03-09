@@ -882,8 +882,15 @@
       <!-- Header -->
       <div class="sc-header">
         <div class="sc-header-left">
-          <div class="sc-title">Giveaway Scout</div>
-          <div class="sc-subtitle">Discover top-performing giveaway ideas from AI influencers</div>
+          <div class="sc-title">Scout</div>
+          <div class="sc-platform-icons">
+            <button class="sc-platform-icon active" data-platform="instagram" onclick="scSetPlatform('instagram')" title="Instagram">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5"/></svg>
+            </button>
+            <button class="sc-platform-icon" data-platform="youtube" onclick="scSetPlatform('youtube')" title="YouTube">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.43z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+            </button>
+          </div>
         </div>
         <div class="sc-header-right">
           <div class="sc-run-picker">
@@ -893,7 +900,7 @@
           </div>
           <button class="sc-header-btn" onclick="scToggleAccountPanel()" title="Manage accounts to scout">Accounts <span class="sc-acct-count" id="scHeaderAcctCount"></span></button>
           <div class="sc-btn-group">
-            <button class="sc-header-btn primary" id="scStartBtn" onclick="scStartScout('full')" title="Full scan: 15 posts per account">Start Scout</button>
+            <button class="sc-header-btn primary" id="scStartBtn" onclick="scOpenScoutDialog()">Start Scout</button>
             <button class="sc-header-btn sc-quick-btn" id="scQuickBtn" onclick="scStartScout('quick')" title="Only fetches new posts (~3 per account) and merges with latest run">Quick Scan</button>
           </div>
         </div>
@@ -920,11 +927,11 @@
         </div>
         <div class="sc-stat-card">
           <div class="sc-stat-value" id="scStatGiveaways">—</div>
-          <div class="sc-stat-label">Giveaways</div>
+          <div class="sc-stat-label" id="scStatGiveawaysLabel">Giveaways</div>
         </div>
         <div class="sc-stat-card">
           <div class="sc-stat-value" id="scStatRate">—</div>
-          <div class="sc-stat-label">Hit Rate</div>
+          <div class="sc-stat-label" id="scStatRateLabel">Hit Rate</div>
         </div>
       </div>
 
@@ -951,7 +958,7 @@
           <label>Type</label>
           <select id="scTypeFilter" onchange="scApplyFilters()">
             <option value="all">All Types</option>
-            <option value="Video">Reels</option>
+            <option value="Video">Reels/Videos</option>
             <option value="Sidecar">Carousel</option>
             <option value="Image">Image</option>
           </select>
@@ -965,8 +972,8 @@
         <div class="sc-filter-group">
           <label>Min Comments</label>
           <select id="scMinComments" onchange="scApplyFilters()">
-            <option value="0">Any</option>
-            <option value="1000" selected>1K+</option>
+            <option value="0" selected>Any</option>
+            <option value="1000">1K+</option>
             <option value="5000">5K+</option>
             <option value="10000">10K+</option>
             <option value="25000">25K+</option>
@@ -1017,11 +1024,68 @@
           </div>
           <button class="sc-acct-close" onclick="scToggleAccountPanel()">&times;</button>
         </div>
-        <div class="sc-account-panel-add">
-          <textarea id="scAccountInput" class="sc-acct-input" rows="3" placeholder="Paste usernames, URLs, or @handles..."></textarea>
-          <button class="sc-header-btn primary" id="scAddAccountsBtn" onclick="scAddAccountsFromInput()" style="width:100%;">+ Add Accounts</button>
+        <div class="sc-acct-tabs">
+          <button class="sc-acct-tab active" data-tab="ig" onclick="scSwitchAcctTab('ig')">Instagram</button>
+          <button class="sc-acct-tab" data-tab="yt" onclick="scSwitchAcctTab('yt')">YouTube</button>
+        </div>
+        <div class="sc-account-panel-add" id="scAcctAddIG">
+          <textarea id="scAccountInput" class="sc-acct-input" rows="3" placeholder="Paste IG usernames, URLs, or @handles..."></textarea>
+          <button class="sc-header-btn primary" id="scAddAccountsBtn" onclick="scAddAccountsFromInput()" style="width:100%;">+ Add IG Accounts</button>
+        </div>
+        <div class="sc-account-panel-add" id="scAcctAddYT" style="display:none;">
+          <textarea id="scYTChannelInput" class="sc-acct-input" rows="3" placeholder="Paste YouTube channel URLs or @handles..."></textarea>
+          <button class="sc-header-btn primary" id="scAddYTBtn" onclick="scAddYTChannelsFromInput()" style="width:100%;">+ Add YouTube Channels</button>
         </div>
         <div class="sc-account-panel-list" id="scAccountPanelList"></div>
+        <div class="sc-account-panel-list" id="scYTChannelList" style="display:none;"></div>
+      </div>
+      <!-- Scout Start Dialog -->
+      <div class="sc-dialog-backdrop" id="scDialogBackdrop" onclick="scCloseScoutDialog()"></div>
+      <div class="sc-dialog" id="scDialog">
+        <div class="sc-dialog-title">Start Scout</div>
+        <div class="sc-dialog-body">
+          <div class="sc-dialog-field">
+            <label>Platform</label>
+            <div class="sc-dialog-options" id="scDialogPlatform">
+              <button class="sc-dialog-opt active" data-val="instagram" onclick="scDialogSetPlatform('instagram')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5"/></svg>
+                Instagram
+              </button>
+              <button class="sc-dialog-opt" data-val="youtube" onclick="scDialogSetPlatform('youtube')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.43z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>
+                YouTube
+              </button>
+              <button class="sc-dialog-opt" data-val="both" onclick="scDialogSetPlatform('both')">Both</button>
+            </div>
+          </div>
+          <div class="sc-dialog-field" id="scDialogIGMode">
+            <label>Instagram Mode</label>
+            <div class="sc-dialog-options">
+              <button class="sc-dialog-opt active" data-val="giveaway" onclick="scDialogSetOpt(this)">Giveaway Posts</button>
+              <button class="sc-dialog-opt" data-val="all" onclick="scDialogSetOpt(this)">All Posts</button>
+            </div>
+          </div>
+          <div class="sc-dialog-field" id="scDialogYTMode" style="display:none;">
+            <label>YouTube Mode</label>
+            <div class="sc-dialog-options">
+              <button class="sc-dialog-opt active" data-val="latest" onclick="scDialogSetOpt(this)">Latest Videos</button>
+              <button class="sc-dialog-opt" data-val="outlier" onclick="scDialogSetOpt(this)">Find Outliers</button>
+            </div>
+          </div>
+          <div class="sc-dialog-field">
+            <label>Posts per account</label>
+            <select class="sc-filter-select" id="scDialogPosts">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="15">15</option>
+              <option value="25">25</option>
+            </select>
+          </div>
+        </div>
+        <div class="sc-dialog-footer">
+          <button class="sc-header-btn" onclick="scCloseScoutDialog()">Cancel</button>
+          <button class="sc-header-btn primary" onclick="scStartFromDialog()">Start Scout</button>
+        </div>
       </div>
     </div>
   </div><!-- /view-scout -->

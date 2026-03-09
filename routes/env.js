@@ -54,11 +54,27 @@ router.put('/env', (req, res) => {
 router.delete('/env/:key', (req, res) => {
   const envKey = req.params.key.trim().toUpperCase();
   try {
+    // Remove from user-env.json
     const USER_ENV_FILE = getUserEnvFile();
     const vars = fs.existsSync(USER_ENV_FILE) ? JSON.parse(fs.readFileSync(USER_ENV_FILE, 'utf-8')) : {};
     delete vars[envKey];
-    delete process.env[envKey];
     fs.writeFileSync(USER_ENV_FILE, JSON.stringify(vars, null, 2));
+
+    // Also remove from .env file if present
+    const dotenvPath = path.join(shared.BASE_DIR, '.env');
+    if (fs.existsSync(dotenvPath)) {
+      const lines = fs.readFileSync(dotenvPath, 'utf-8').split('\n');
+      const filtered = lines.filter(line => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) return true;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx <= 0) return true;
+        return trimmed.slice(0, eqIdx).trim() !== envKey;
+      });
+      fs.writeFileSync(dotenvPath, filtered.join('\n'));
+    }
+
+    delete process.env[envKey];
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
