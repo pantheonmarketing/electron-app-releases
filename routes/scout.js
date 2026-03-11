@@ -260,7 +260,7 @@ router.post('/scout/run', (req, res) => {
 
   const mode = req.body.mode || 'full'; // "quick" or "full"
   const source = req.body.source || 'instagram'; // "instagram", "youtube", or "both"
-  const contentMode = req.body.contentMode || 'giveaway'; // "giveaway" or "all" (for IG)
+  const contentMode = req.body.contentMode || 'all'; // "giveaway" or "all" (for IG)
   const postsCount = parseInt(req.body.posts) || 10;
   const postsPerAccount = mode === 'quick' ? 3 : postsCount;
   const batchSize = parseInt(req.body.batchSize) || 5;

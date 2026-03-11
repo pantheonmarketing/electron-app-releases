@@ -925,7 +925,7 @@ let scPollingInterval = null;
 async function scStartScout(mode, source, contentMode, postsCount) {
   mode = mode || 'full';
   source = source || scPlatform;
-  contentMode = contentMode || 'giveaway';
+  contentMode = contentMode || 'all';
   postsCount = postsCount || (mode === 'quick' ? 3 : 10);
 
   const btn = document.getElementById('scStartBtn');
