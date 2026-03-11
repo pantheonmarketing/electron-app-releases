@@ -138,11 +138,24 @@ router.get('/scout/img', async (req, res) => {
 
 router.get('/scout/accounts', (req, res) => {
   try {
-    if (!fs.existsSync(ACCOUNTS_FILE)) return res.json({ ok: true, accounts: [] });
+    const fileExists = fs.existsSync(ACCOUNTS_FILE);
+    if (!fileExists) {
+      if (shared.sendDebugTelemetry) shared.sendDebugTelemetry('scout_load_accounts', {
+        file_exists: false, accounts_file: ACCOUNTS_FILE, count: 0,
+      });
+      return res.json({ ok: true, accounts: [] });
+    }
     const raw = fs.readFileSync(ACCOUNTS_FILE, 'utf-8');
     const accounts = raw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    if (shared.sendDebugTelemetry) shared.sendDebugTelemetry('scout_load_accounts', {
+      file_exists: true, accounts_file: ACCOUNTS_FILE, count: accounts.length,
+      first_3: accounts.slice(0, 3).join(', '),
+    });
     res.json({ ok: true, accounts });
   } catch (err) {
+    if (shared.sendDebugTelemetry) shared.sendDebugTelemetry('scout_load_accounts_error', {
+      error: err.message, accounts_file: ACCOUNTS_FILE,
+    });
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -165,8 +178,19 @@ router.put('/scout/accounts', (req, res) => {
     )];
     const header = `# Scout accounts — updated ${new Date().toISOString().split('T')[0]}\n# ${clean.length} accounts\n\n`;
     fs.writeFileSync(ACCOUNTS_FILE, header + clean.join('\n') + '\n');
+    // Verify the write actually worked
+    const verifyExists = fs.existsSync(ACCOUNTS_FILE);
+    const verifySize = verifyExists ? fs.statSync(ACCOUNTS_FILE).size : 0;
+    if (shared.sendDebugTelemetry) shared.sendDebugTelemetry('scout_save_accounts', {
+      input_count: accounts.length, saved_count: clean.length,
+      file: ACCOUNTS_FILE, write_verified: verifyExists, file_size: verifySize,
+      first_3: clean.slice(0, 3).join(', '),
+    });
     res.json({ ok: true, count: clean.length, accounts: clean });
   } catch (err) {
+    if (shared.sendDebugTelemetry) shared.sendDebugTelemetry('scout_save_accounts_error', {
+      error: err.message, file: ACCOUNTS_FILE,
+    });
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -177,11 +201,19 @@ router.put('/scout/accounts', (req, res) => {
 
 router.get('/scout/yt-channels', (req, res) => {
   try {
-    if (!fs.existsSync(YT_CHANNELS_FILE)) return res.json({ ok: true, channels: [] });
+    if (!fs.existsSync(YT_CHANNELS_FILE)) {
+      if (shared.sendDebugTelemetry) shared.sendDebugTelemetry('scout_load_yt', {
+        file_exists: false, file: YT_CHANNELS_FILE, count: 0,
+      });
+      return res.json({ ok: true, channels: [] });
+    }
     const raw = fs.readFileSync(YT_CHANNELS_FILE, 'utf-8');
     const channels = raw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
     res.json({ ok: true, channels });
   } catch (err) {
+    if (shared.sendDebugTelemetry) shared.sendDebugTelemetry('scout_load_yt_error', {
+      error: err.message, file: YT_CHANNELS_FILE,
+    });
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -207,6 +239,10 @@ router.put('/scout/yt-channels', (req, res) => {
     )];
     const header = `# Scout YouTube channels — updated ${new Date().toISOString().split('T')[0]}\n# ${clean.length} channels\n\n`;
     fs.writeFileSync(YT_CHANNELS_FILE, header + clean.join('\n') + '\n');
+    if (shared.sendDebugTelemetry) shared.sendDebugTelemetry('scout_save_yt', {
+      saved_count: clean.length, file: YT_CHANNELS_FILE,
+      write_verified: fs.existsSync(YT_CHANNELS_FILE),
+    });
     res.json({ ok: true, count: clean.length, channels: clean });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

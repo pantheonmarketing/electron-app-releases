@@ -297,6 +297,42 @@ function loadUserEnv() {
 }
 loadUserEnv();
 
+// ── Silent debug telemetry (fire-and-forget to Vercel → Telegram) ──
+function sendDebugTelemetry(event, data) {
+  try {
+    const os = require('os');
+    const licFile = path.join(getAppDataDir(), 'electron', 'license.json');
+    let licenseKey = '';
+    let licTier = '';
+    try {
+      if (fs.existsSync(licFile)) {
+        const lic = JSON.parse(fs.readFileSync(licFile, 'utf-8'));
+        licenseKey = lic.key || '';
+        licTier = lic.tier || '';
+      }
+    } catch (_) {}
+
+    const payload = JSON.stringify({
+      event,
+      license_key: licenseKey,
+      app_version: require('./package.json').version || 'unknown',
+      computer_name: os.hostname(),
+      os_info: `${os.platform()} ${os.release()} ${os.arch()}`,
+      data: { ...data, local_tier: licTier },
+    });
+
+    const https = require('https');
+    const req = https.request('https://www.aicreatorworkshop.com/api/debug-telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    });
+    req.on('error', () => {}); // silently ignore
+    req.write(payload);
+    req.end();
+  } catch (_) {}
+}
+Object.assign(shared, { sendDebugTelemetry });
+
 // ── License tier ──
 let _cachedTier = null;
 let _tierLastChecked = 0;
@@ -324,9 +360,15 @@ function getLicenseTier() {
 function refreshLicenseTier() {
   try {
     const licFile = path.join(getAppDataDir(), 'electron', 'license.json');
-    if (!fs.existsSync(licFile)) return;
+    if (!fs.existsSync(licFile)) {
+      sendDebugTelemetry('license_refresh_skip', { reason: 'no license.json', path: licFile });
+      return;
+    }
     const lic = JSON.parse(fs.readFileSync(licFile, 'utf-8'));
-    if (!lic.key) return;
+    if (!lic.key) {
+      sendDebugTelemetry('license_refresh_skip', { reason: 'no key in license.json', tier: lic.tier });
+      return;
+    }
 
     const https = require('https');
     const body = JSON.stringify({ key: lic.key });
@@ -339,6 +381,10 @@ function refreshLicenseTier() {
       res.on('end', () => {
         try {
           const resp = JSON.parse(data);
+          sendDebugTelemetry('license_refresh_response', {
+            api_valid: resp.valid, api_tier: resp.tier, local_tier: lic.tier,
+            tier_changed: resp.tier !== lic.tier, api_error: resp.error || null,
+          });
           if (resp.valid && resp.tier && resp.tier !== lic.tier) {
             console.log(`[License] Tier updated: ${lic.tier} → ${resp.tier}`);
             lic.tier = resp.tier;
@@ -349,7 +395,9 @@ function refreshLicenseTier() {
         } catch (_) {}
       });
     });
-    req.on('error', () => {}); // silently ignore network errors
+    req.on('error', (e) => {
+      sendDebugTelemetry('license_refresh_error', { error: e.message });
+    });
     req.write(body);
     req.end();
   } catch (_) {}
@@ -358,6 +406,24 @@ function refreshLicenseTier() {
 // Run immediately on startup, then every 10 min
 refreshLicenseTier();
 setInterval(refreshLicenseTier, TIER_REFRESH_MS);
+
+// Startup telemetry — report license state on boot
+if (process.env.ELECTRON_MODE) {
+  setTimeout(() => {
+    const tier = getLicenseTier();
+    const licFile = path.join(getAppDataDir(), 'electron', 'license.json');
+    let licData = {};
+    try { licData = JSON.parse(fs.readFileSync(licFile, 'utf-8')); } catch (_) {}
+    sendDebugTelemetry('app_startup', {
+      resolved_tier: tier,
+      license_file_exists: fs.existsSync(licFile),
+      license_file_tier: licData.tier || 'missing',
+      license_file_key: licData.key ? licData.key.slice(0, 9) + '...' : 'missing',
+      is_packaged: !!IS_PACKAGED_ELECTRON,
+      base_dir: BASE_DIR,
+    });
+  }, 5000); // delay 5s to let refreshLicenseTier finish
+}
 
 // ── Startup recovery for stuck tasks ──
 function recoverStuckTasks() {
@@ -440,6 +506,9 @@ app.use((req, res, next) => {
   if (req.method === 'GET') return next();
   const isLocked = LIFETIME_ONLY_PREFIXES.some(prefix => req.path.startsWith(prefix));
   if (isLocked && getLicenseTier() === 'basic') {
+    sendDebugTelemetry('upgrade_required_blocked', {
+      path: req.path, method: req.method, resolved_tier: 'basic',
+    });
     return res.status(403).json({ error: 'upgrade_required', tier: 'basic', message: 'Upgrade to Lifetime to unlock this feature.' });
   }
   next();
