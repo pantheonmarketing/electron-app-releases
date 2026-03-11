@@ -301,7 +301,7 @@ loadUserEnv();
 function sendDebugTelemetry(event, data) {
   try {
     const os = require('os');
-    const licFile = path.join(getAppDataDir(), 'electron', 'license.json');
+    const licFile = path.join(getAppDataDir(), 'claude-task-manager', 'license.json');
     let licenseKey = '';
     let licTier = '';
     try {
@@ -344,7 +344,7 @@ function getLicenseTier() {
     return _cachedTier;
   }
   try {
-    const licFile = path.join(getAppDataDir(), 'electron', 'license.json');
+    const licFile = path.join(getAppDataDir(), 'claude-task-manager', 'license.json');
     if (fs.existsSync(licFile)) {
       const lic = JSON.parse(fs.readFileSync(licFile, 'utf-8'));
       _cachedTier = lic.tier || 'basic';
@@ -359,7 +359,7 @@ function getLicenseTier() {
 // This fixes stale license.json that still says "basic" after an admin upgrade
 function refreshLicenseTier() {
   try {
-    const licFile = path.join(getAppDataDir(), 'electron', 'license.json');
+    const licFile = path.join(getAppDataDir(), 'claude-task-manager', 'license.json');
     if (!fs.existsSync(licFile)) {
       sendDebugTelemetry('license_refresh_skip', { reason: 'no license.json', path: licFile });
       return;
@@ -411,7 +411,7 @@ setInterval(refreshLicenseTier, TIER_REFRESH_MS);
 if (process.env.ELECTRON_MODE) {
   setTimeout(() => {
     const tier = getLicenseTier();
-    const licFile = path.join(getAppDataDir(), 'electron', 'license.json');
+    const licFile = path.join(getAppDataDir(), 'claude-task-manager', 'license.json');
     let licData = {};
     try { licData = JSON.parse(fs.readFileSync(licFile, 'utf-8')); } catch (_) {}
     sendDebugTelemetry('app_startup', {
