@@ -876,7 +876,9 @@ async function scSaveYTChannels() {
 
 // ═══ SCOUT DIALOG ═══
 
-function scOpenScoutDialog() {
+let _scDialogMode = 'full';
+function scOpenScoutDialog(mode) {
+  _scDialogMode = mode || 'full';
   // Reset dialog to match current platform view
   scDialogSetPlatform(scPlatform);
   document.getElementById('scDialogBackdrop').classList.add('active');
@@ -915,7 +917,7 @@ function scStartFromDialog() {
   else contentMode = igMode === 'all' ? 'all' : 'giveaway'; // both: use IG mode setting
 
   scCloseScoutDialog();
-  scStartScout('full', platform, contentMode, postsCount);
+  scStartScout(_scDialogMode, platform, contentMode, postsCount);
 }
 
 // ═══ START SCOUT + PROGRESS ═══

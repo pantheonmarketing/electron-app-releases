@@ -900,8 +900,8 @@
           </div>
           <button class="sc-header-btn" onclick="scToggleAccountPanel()" title="Manage accounts to scout">Accounts <span class="sc-acct-count" id="scHeaderAcctCount"></span></button>
           <div class="sc-btn-group">
-            <button class="sc-header-btn primary" id="scStartBtn" onclick="scOpenScoutDialog()">Start Scout</button>
-            <button class="sc-header-btn sc-quick-btn" id="scQuickBtn" onclick="scStartScout('quick')" title="Only fetches new posts (~3 per account) and merges with latest run">Quick Scan</button>
+            <button class="sc-header-btn primary" id="scStartBtn" onclick="scOpenScoutDialog('full')">Start Scout</button>
+            <button class="sc-header-btn sc-quick-btn" id="scQuickBtn" onclick="scOpenScoutDialog('quick')" title="Only fetches new posts (~3 per account) and merges with latest run">Quick Scan</button>
           </div>
         </div>
       </div>
@@ -1061,8 +1061,8 @@
           <div class="sc-dialog-field" id="scDialogIGMode">
             <label>Instagram Mode</label>
             <div class="sc-dialog-options">
-              <button class="sc-dialog-opt active" data-val="giveaway" onclick="scDialogSetOpt(this)">Giveaway Posts</button>
-              <button class="sc-dialog-opt" data-val="all" onclick="scDialogSetOpt(this)">All Posts</button>
+              <button class="sc-dialog-opt" data-val="giveaway" onclick="scDialogSetOpt(this)">Giveaway Posts</button>
+              <button class="sc-dialog-opt active" data-val="all" onclick="scDialogSetOpt(this)">All Posts</button>
             </div>
           </div>
           <div class="sc-dialog-field" id="scDialogYTMode" style="display:none;">
