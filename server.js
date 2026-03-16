@@ -297,40 +297,8 @@ function loadUserEnv() {
 }
 loadUserEnv();
 
-// ── Silent debug telemetry (fire-and-forget to Vercel → Telegram) ──
-function sendDebugTelemetry(event, data) {
-  try {
-    const os = require('os');
-    const licFile = path.join(getAppDataDir(), 'claude-task-manager', 'license.json');
-    let licenseKey = '';
-    let licTier = '';
-    try {
-      if (fs.existsSync(licFile)) {
-        const lic = JSON.parse(fs.readFileSync(licFile, 'utf-8'));
-        licenseKey = lic.key || '';
-        licTier = lic.tier || '';
-      }
-    } catch (_) {}
-
-    const payload = JSON.stringify({
-      event,
-      license_key: licenseKey,
-      app_version: require('./package.json').version || 'unknown',
-      computer_name: os.hostname(),
-      os_info: `${os.platform()} ${os.release()} ${os.arch()}`,
-      data: { ...data, local_tier: licTier },
-    });
-
-    const https = require('https');
-    const req = https.request('https://www.aicreatorworkshop.com/api/debug-telemetry', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
-    });
-    req.on('error', () => {}); // silently ignore
-    req.write(payload);
-    req.end();
-  } catch (_) {}
-}
+// ── Debug telemetry disabled (was flooding Telegram) ──
+function sendDebugTelemetry() {}
 Object.assign(shared, { sendDebugTelemetry });
 
 // ── License tier ──

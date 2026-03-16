@@ -663,5 +663,15 @@
     "file": "C:/Users/yoniw/.claude/projects/c--Users-yoniw-Downloads-wepreneurs-com---Component-v13--Copy--v11--Copy--1770320651847/memory/giveaway-funnel-skill.md",
     "description": "Built-in tool in AI CEO Studio that lets AICO students create and deploy lead ma...",
     "context": []
+  },
+  "descript-clipper": {
+    "file": "C:/Users/yoniw/Downloads/wepreneurs.com - Component v13 (Copy) v11 (Copy)-1770320651847/.claude-portable/memory/descript-clipper-skill.md",
+    "description": "Capture sentences + timings from Descript web editor via Chrome extension, creat...",
+    "context": []
+  },
+  "questionnaire": {
+    "file": "C:/Users/yoniw/.claude/projects/c--Users-yoniw-Downloads-wepreneurs-com---Component-v13--Copy--v11--Copy--1770320651847/memory/questionnaire-skill.md",
+    "description": "name: questionnaire-skill",
+    "context": []
   }
 }

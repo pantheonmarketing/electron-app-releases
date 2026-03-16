@@ -1,6 +1,6 @@
 {
   "name": "claude-task-manager",
-  "version": "1.9.12",
+  "version": "1.9.13",
   "description": "Trello-style AI task manager powered by Claude CLI",
   "main": "electron-main.js",
   "scripts": {
@@ -23,6 +23,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@google/genai": "^1.43.0",
     "dotenv": "^17.3.1",
     "electron-updater": "^6.8.3",

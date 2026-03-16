@@ -9,6 +9,7 @@ let icInitialized = false;
 let icSelectedMethod = 'recreate';
 let icSelectedRefs = [];      // selected reference IDs for generation
 let icSelectedGenId = null;   // currently focused generation
+let icSavedPrompt = '';       // persists prompt text across re-renders
 let icGenerating = false;
 let icShowSettings = false;
 let icRightTab = 'generations'; // 'generations' or 'gallery'
@@ -140,17 +141,21 @@ const IC_METHOD_PROMPTS = {
   swap: '',
 };
 
-// ── Gemini API Key (user's own key, stored in localStorage) ──
-// Also checks server env (profile settings) as fallback
+// ── API Keys (user's own keys, stored in localStorage) ──
+// Provider: 'gemini' or 'wavespeed'
+function icGetProvider() { return localStorage.getItem('ic_provider') || 'gemini'; }
+function icSetProvider(p) { localStorage.setItem('ic_provider', p); }
 function icGetApiKey() { return localStorage.getItem('ic_gemini_api_key') || ''; }
 function icSetApiKey(key) { localStorage.setItem('ic_gemini_api_key', key.trim()); }
-let icServerGeminiStatus = null; // { configured, masked }
+function icGetWavespeedKey() { return localStorage.getItem('ic_wavespeed_api_key') || ''; }
+function icSetWavespeedKey(key) { localStorage.setItem('ic_wavespeed_api_key', key.trim()); }
+let icServerGeminiStatus = null; // { configured, masked, wavespeed: { configured, masked } }
 async function icCheckServerGemini() {
   if (icServerGeminiStatus !== null) return icServerGeminiStatus;
   try {
     const r = await safeFetch('/api/influencer/gemini-status');
     icServerGeminiStatus = await r.json();
-  } catch (_) { icServerGeminiStatus = { configured: false, masked: '' }; }
+  } catch (_) { icServerGeminiStatus = { configured: false, masked: '', wavespeed: { configured: false, masked: '' } }; }
   return icServerGeminiStatus;
 }
 
@@ -164,8 +169,14 @@ const icApi = {
   async uploadRefs(id, formData) { return (await safeFetch(`/api/influencer/projects/${id}/upload`, { method: 'POST', body: formData })).json(); },
   async deleteRef(id, refId) { return (await safeFetch(`/api/influencer/projects/${id}/references/${refId}`, { method: 'DELETE' })).json(); },
   async generate(id, body) {
-    const key = icGetApiKey();
-    if (key) body.geminiApiKey = key;
+    body.provider = icGetProvider();
+    if (body.provider === 'wavespeed') {
+      const wsKey = icGetWavespeedKey();
+      if (wsKey) body.wavespeedApiKey = wsKey;
+    } else {
+      const key = icGetApiKey();
+      if (key) body.geminiApiKey = key;
+    }
     return (await safeFetch(`/api/influencer/projects/${id}/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
   },
   async useAsRef(id, genId) { return (await safeFetch(`/api/influencer/projects/${id}/generations/${genId}/use-as-ref`, { method: 'POST' })).json(); },
@@ -203,6 +214,10 @@ async function icInit() {
 
 // ── API Key Gate — blocks entire view until key is entered ──
 function icHasApiKey() {
+  const provider = icGetProvider();
+  if (provider === 'wavespeed') {
+    return !!(icGetWavespeedKey() || (icServerGeminiStatus?.wavespeed?.configured));
+  }
   return !!(icGetApiKey() || (icServerGeminiStatus && icServerGeminiStatus.configured));
 }
 
@@ -217,27 +232,50 @@ function icCheckApiKeyGate() {
   if (gate) return; // already showing
   gate = document.createElement('div');
   gate.id = 'icApiKeyGate';
+  const curProvider = icGetProvider();
   gate.innerHTML = `
     <div class="ic-gate-card">
       <div class="ic-gate-icon">🔑</div>
       <h2 class="ic-gate-title">API Key Required</h2>
-      <p class="ic-gate-desc">The Influencer Creator needs a free Google AI API key to generate images. Watch the short tutorial below, then paste your key.</p>
-      <div class="ic-gate-video">
-        <iframe src="https://www.tella.tv/video/vid_cmmd1ue47024e04l46js3f0i8/embed?b=1&title=1&a=1&loop=0&t=0&muted=0&wt=1&o=1" allowfullscreen allowtransparency></iframe>
+      <p class="ic-gate-desc">Choose your image generation provider and enter your API key.</p>
+      <div class="ic-gate-provider-toggle" style="display:flex;gap:8px;justify-content:center;margin-bottom:16px;">
+        <button class="btn ${curProvider === 'gemini' ? 'btn-primary' : 'btn-ghost'}" onclick="icGateSwitchProvider('gemini')" style="min-width:120px;">Gemini (Free)</button>
+        <button class="btn ${curProvider === 'wavespeed' ? 'btn-primary' : 'btn-ghost'}" onclick="icGateSwitchProvider('wavespeed')" style="min-width:120px;">WaveSpeed</button>
       </div>
-      <div class="ic-gate-steps">
-        <div class="ic-gate-step"><span class="ic-gate-step-num">1</span> Watch the tutorial above</div>
-        <div class="ic-gate-step"><span class="ic-gate-step-num">2</span> Go to <a href="https://aistudio.google.com/api-keys" target="_blank" style="color:#C084FC;font-weight:600;">Google AI Studio</a> and create a free API key</div>
-        <div class="ic-gate-step"><span class="ic-gate-step-num">3</span> Paste your key below and click Activate</div>
+      <div id="icGateGeminiSection" style="display:${curProvider === 'gemini' ? 'block' : 'none'};">
+        <div class="ic-gate-video">
+          <iframe src="https://www.tella.tv/video/vid_cmmd1ue47024e04l46js3f0i8/embed?b=1&title=1&a=1&loop=0&t=0&muted=0&wt=1&o=1" allowfullscreen allowtransparency></iframe>
+        </div>
+        <div class="ic-gate-steps">
+          <div class="ic-gate-step"><span class="ic-gate-step-num">1</span> Watch the tutorial above</div>
+          <div class="ic-gate-step"><span class="ic-gate-step-num">2</span> Go to <a href="https://aistudio.google.com/api-keys" target="_blank" style="color:#C084FC;font-weight:600;">Google AI Studio</a> and create a free API key</div>
+          <div class="ic-gate-step"><span class="ic-gate-step-num">3</span> Paste your key below and click Activate</div>
+        </div>
+        <div class="ic-gate-input-row">
+          <input type="text" id="icGateKeyInput" class="ic-gate-input" placeholder="Paste your API key here (starts with AIza...)" autocomplete="off" spellcheck="false">
+          <button class="btn btn-primary" onclick="icGateSubmitKey()">Activate</button>
+        </div>
       </div>
-      <div class="ic-gate-input-row">
-        <input type="text" id="icGateKeyInput" class="ic-gate-input" placeholder="Paste your API key here (starts with AIza...)" autocomplete="off" spellcheck="false">
-        <button class="btn btn-primary" onclick="icGateSubmitKey()">Activate</button>
+      <div id="icGateWavespeedSection" style="display:${curProvider === 'wavespeed' ? 'block' : 'none'};">
+        <div class="ic-gate-steps">
+          <div class="ic-gate-step"><span class="ic-gate-step-num">1</span> Get your API key from <a href="https://wavespeed.ai" target="_blank" style="color:#C084FC;font-weight:600;">wavespeed.ai</a></div>
+          <div class="ic-gate-step"><span class="ic-gate-step-num">2</span> Paste your key below and click Activate</div>
+        </div>
+        <div class="ic-gate-input-row">
+          <input type="text" id="icGateWsKeyInput" class="ic-gate-input" placeholder="Paste your WaveSpeed API key here" autocomplete="off" spellcheck="false">
+          <button class="btn btn-primary" onclick="icGateSubmitWsKey()">Activate</button>
+        </div>
       </div>
       <p class="ic-gate-note">Your key is stored locally on your computer and never shared.</p>
     </div>
   `;
   view.prepend(gate);
+}
+
+function icGateSwitchProvider(p) {
+  icSetProvider(p);
+  const gate = document.getElementById('icApiKeyGate');
+  if (gate) { gate.remove(); icCheckApiKeyGate(); }
 }
 
 function icGateSubmitKey() {
@@ -247,7 +285,18 @@ function icGateSubmitKey() {
   if (!key) { showToast('Please enter your API key', 'error'); return; }
   if (!key.startsWith('AIza')) { showToast('Invalid key — it should start with "AIza"', 'error'); return; }
   icSetApiKey(key);
-  showToast('API key activated!', 'success');
+  showToast('Gemini API key activated!', 'success');
+  const gate = document.getElementById('icApiKeyGate');
+  if (gate) gate.remove();
+}
+
+function icGateSubmitWsKey() {
+  const input = document.getElementById('icGateWsKeyInput');
+  if (!input) return;
+  const key = input.value.trim();
+  if (!key) { showToast('Please enter your WaveSpeed API key', 'error'); return; }
+  icSetWavespeedKey(key);
+  showToast('WaveSpeed API key activated!', 'success');
   const gate = document.getElementById('icApiKeyGate');
   if (gate) gate.remove();
 }
@@ -329,6 +378,7 @@ async function icNewProject() {
     icSelectedRefs = [];
     icSelectedGenId = null;
     icSelectedMethod = 'recreate';
+    icSavedPrompt = '';
     icActiveGalleryId = null;
     icShowNewGallery = false;
     icRenderStudio();
@@ -343,6 +393,7 @@ async function icOpenProject(id) {
     icSelectedRefs = [];
     icSelectedGenId = null;
     icSelectedMethod = 'recreate';
+    icSavedPrompt = '';
     icActiveGalleryId = null;
     icShowNewGallery = false;
     // Load galleries
@@ -445,7 +496,7 @@ function icRenderLeftPanel() {
     <!-- Prompt -->
     <div class="ic-prompt-area">
       <div class="ic-section-title">✍️ Prompt</div>
-      <textarea class="ic-prompt-textarea" id="icPromptText" placeholder="${icGetPlaceholder()}">${icSelectedMethod !== 'edit' && icSelectedMethod !== 'swap' ? IC_METHOD_PROMPTS[icSelectedMethod] : ''}</textarea>
+      <textarea class="ic-prompt-textarea" id="icPromptText" placeholder="${icGetPlaceholder()}" oninput="icSavedPrompt=this.value">${icSavedPrompt || (icSelectedMethod !== 'edit' && icSelectedMethod !== 'swap' ? IC_METHOD_PROMPTS[icSelectedMethod] : '')}</textarea>
       ${icSelectedMethod === 'swap'
         ? (icSelectedRefs.length > 0
           ? `<div class="ic-prompt-hint">${icSelectedRefs.length} scene photo${icSelectedRefs.length > 1 ? 's' : ''} selected</div>`
@@ -473,9 +524,12 @@ function icRenderLeftPanel() {
     </div>
 
     <!-- Generate -->
-    <button class="ic-generate-btn" id="icGenerateBtn" onclick="icGenerate()" ${icSelectedRefs.length === 0 ? 'disabled' : ''}>
-      ${icSelectedMethod === 'swap' ? '🔄 Swap Face' : '🎨 Generate Face'}
-    </button>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button class="ic-generate-btn" id="icGenerateBtn" onclick="icGenerate()" ${icSelectedRefs.length === 0 ? 'disabled' : ''} style="flex:1;">
+        ${icSelectedMethod === 'swap' ? '🔄 Swap Face' : '🎨 Generate Face'}
+      </button>
+      <span style="font-size:9px;color:#888;white-space:nowrap;" title="Active provider">${icGetProvider() === 'wavespeed' ? 'WS' : 'Gemini'}</span>
+    </div>
   `;
 }
 
@@ -555,25 +609,45 @@ function icRenderRightPanel() {
   const galleries = p.galleries || [];
   const totalGalItems = galleries.reduce((sum, g) => sum + (g.items?.length || 0), 0);
 
-  // Settings panel — check both local key and server env key
+  // Settings panel — provider toggle + key inputs
   const localKey = icGetApiKey();
-  const serverGemini = icServerGeminiStatus || { configured: false, masked: '' };
-  let keyStatusHtml;
-  if (localKey) {
-    keyStatusHtml = '<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key saved — stored locally in your browser</div>';
-  } else if (serverGemini.configured) {
-    keyStatusHtml = `<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key configured in Profile settings (${esc(serverGemini.masked)}) — you\'re all set</div>`;
-  } else {
-    keyStatusHtml = '<div style="font-size:10px;color:#F59E0B;margin-top:6px;">No key set — add it here or in your Profile settings (click your name in the sidebar)</div>';
-  }
+  const localWsKey = icGetWavespeedKey();
+  const curProvider = icGetProvider();
+  const serverGemini = icServerGeminiStatus || { configured: false, masked: '', wavespeed: { configured: false, masked: '' } };
+  const serverWs = serverGemini.wavespeed || { configured: false, masked: '' };
+
+  let geminiStatusHtml;
+  if (localKey) geminiStatusHtml = '<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key saved locally</div>';
+  else if (serverGemini.configured) geminiStatusHtml = `<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key in Profile settings (${esc(serverGemini.masked)})</div>`;
+  else geminiStatusHtml = '<div style="font-size:10px;color:#F59E0B;margin-top:6px;">No key set</div>';
+
+  let wsStatusHtml;
+  if (localWsKey) wsStatusHtml = '<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key saved locally</div>';
+  else if (serverWs.configured) wsStatusHtml = `<div style="font-size:10px;color:#34D399;margin-top:6px;">✓ Key in Profile settings (${esc(serverWs.masked)})</div>`;
+  else wsStatusHtml = '<div style="font-size:10px;color:#F59E0B;margin-top:6px;">No key set</div>';
+
   const settingsHtml = icShowSettings ? `<div class="ic-settings-panel">
-    <div class="ic-section-title">⚙ Gemini API Key</div>
-    <div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;">Enter your Google AI Studio API key to generate images.<br><a href="https://aistudio.google.com/api-keys" target="_blank" style="color:#C084FC;font-weight:600;text-decoration:underline;">Click here to get your free API key</a></div>
-    <div style="display:flex;gap:8px;">
-      <input type="password" class="ic-prompt-textarea" id="icApiKeyInput" value="${esc(localKey)}" placeholder="AIzaSy..." style="min-height:auto;padding:8px 10px;flex:1;font-size:11px;">
-      <button class="btn btn-primary btn-sm" onclick="icSaveApiKey()" style="white-space:nowrap;">Save Key</button>
+    <div class="ic-section-title">⚙ Image Provider</div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button class="btn ${curProvider === 'gemini' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="icSwitchProvider('gemini')">Gemini (Free)</button>
+      <button class="btn ${curProvider === 'wavespeed' ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="icSwitchProvider('wavespeed')">WaveSpeed</button>
     </div>
-    ${keyStatusHtml}
+    <div id="icSettingsGemini" style="display:${curProvider === 'gemini' ? 'block' : 'none'};">
+      <div style="font-size:11px;color:#888;margin-bottom:8px;line-height:1.5;">Google AI Studio API key. <a href="https://aistudio.google.com/api-keys" target="_blank" style="color:#C084FC;font-weight:600;">Get free key</a></div>
+      <div style="display:flex;gap:8px;">
+        <input type="password" class="ic-prompt-textarea" id="icApiKeyInput" value="${esc(localKey)}" placeholder="AIzaSy..." style="min-height:auto;padding:8px 10px;flex:1;font-size:11px;">
+        <button class="btn btn-primary btn-sm" onclick="icSaveApiKey()" style="white-space:nowrap;">Save</button>
+      </div>
+      ${geminiStatusHtml}
+    </div>
+    <div id="icSettingsWavespeed" style="display:${curProvider === 'wavespeed' ? 'block' : 'none'};">
+      <div style="font-size:11px;color:#888;margin-bottom:8px;line-height:1.5;">WaveSpeed API key (NanoBanana 2). <a href="https://wavespeed.ai" target="_blank" style="color:#C084FC;font-weight:600;">Get key</a></div>
+      <div style="display:flex;gap:8px;">
+        <input type="password" class="ic-prompt-textarea" id="icWsKeyInput" value="${esc(localWsKey)}" placeholder="Your WaveSpeed API key..." style="min-height:auto;padding:8px 10px;flex:1;font-size:11px;">
+        <button class="btn btn-primary btn-sm" onclick="icSaveWsKey()" style="white-space:nowrap;">Save</button>
+      </div>
+      ${wsStatusHtml}
+    </div>
   </div>` : '';
 
   // Find active gallery
@@ -702,6 +776,7 @@ function icRenderRightPanel() {
 
 function icSetMethod(method) {
   icSelectedMethod = method;
+  icSavedPrompt = '';  // reset prompt for new method
   const leftEl = document.getElementById('icLeftPanel');
   if (leftEl) leftEl.innerHTML = icRenderLeftPanel();
   // Rebind drag & drop
@@ -756,6 +831,7 @@ function icApplyPrompt(text) {
     }
   }
   textarea.scrollTop = textarea.scrollHeight;
+  icSavedPrompt = textarea.value;
   showToast('Prompt added', 'info');
 }
 
@@ -971,57 +1047,169 @@ async function icUseAsRef(genId) {
   }
 }
 
+// Animated progress toast for portrait analysis
+function icShowAnalyzingToast() {
+  // Remove any existing analyzing toast
+  const old = document.getElementById('ic-analyzing-toast');
+  if (old) old.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'ic-analyzing-toast';
+  toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:99999;background:#1a1a2e;border:1px solid #7B2FF2;border-radius:12px;padding:16px 24px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 24px rgba(123,47,242,0.3);min-width:320px;font-family:Inter,sans-serif;';
+
+  const spinner = document.createElement('div');
+  spinner.style.cssText = 'width:32px;height:32px;border:3px solid rgba(123,47,242,0.2);border-top:3px solid #C084FC;border-radius:50%;flex-shrink:0;';
+  spinner.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], { duration: 800, iterations: Infinity });
+
+  const textWrap = document.createElement('div');
+  textWrap.style.cssText = 'flex:1;';
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:13px;font-weight:600;color:#fff;margin-bottom:4px;';
+  title.textContent = 'Analyzing face features via Claude...';
+
+  const sub = document.createElement('div');
+  sub.id = 'ic-analyze-status';
+  sub.style.cssText = 'font-size:11px;color:#999;';
+  sub.textContent = 'Reading image...';
+
+  const bar = document.createElement('div');
+  bar.style.cssText = 'width:100%;height:4px;background:rgba(123,47,242,0.15);border-radius:2px;margin-top:8px;overflow:hidden;';
+  const fill = document.createElement('div');
+  fill.id = 'ic-analyze-bar';
+  fill.style.cssText = 'width:0%;height:100%;background:linear-gradient(90deg,#7B2FF2,#C084FC);border-radius:2px;transition:width 0.5s ease;';
+  bar.appendChild(fill);
+
+  textWrap.appendChild(title);
+  textWrap.appendChild(sub);
+  textWrap.appendChild(bar);
+  toast.appendChild(spinner);
+  toast.appendChild(textWrap);
+  document.body.appendChild(toast);
+
+  // Simulate progress stages
+  const stages = [
+    { pct: 15, text: 'Sending to Claude...', delay: 800 },
+    { pct: 30, text: 'Claude is reading the image...', delay: 2500 },
+    { pct: 50, text: 'Analyzing facial features...', delay: 4500 },
+    { pct: 65, text: 'Mapping bone structure & skin...', delay: 6500 },
+    { pct: 78, text: 'Detailing eyes, hair, lips...', delay: 8500 },
+    { pct: 88, text: 'Almost done...', delay: 10500 },
+    { pct: 93, text: 'Finalizing description...', delay: 13000 },
+  ];
+  const timers = stages.map(s => setTimeout(() => {
+    const barEl = document.getElementById('ic-analyze-bar');
+    const statusEl = document.getElementById('ic-analyze-status');
+    if (barEl) barEl.style.width = s.pct + '%';
+    if (statusEl) statusEl.textContent = s.text;
+  }, s.delay));
+
+  return { timers, close: (success, msg) => {
+    timers.forEach(clearTimeout);
+    const barEl = document.getElementById('ic-analyze-bar');
+    const statusEl = document.getElementById('ic-analyze-status');
+    const titleEl = title;
+    if (barEl) barEl.style.width = '100%';
+    if (success) {
+      toast.style.borderColor = '#22c55e';
+      if (titleEl) titleEl.textContent = 'Face features analyzed!';
+      if (statusEl) { statusEl.textContent = msg || 'Done'; statusEl.style.color = '#22c55e'; }
+      spinner.style.display = 'none';
+      const check = document.createElement('div');
+      check.style.cssText = 'width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#22c55e;border-radius:50%;color:#fff;font-size:18px;font-weight:bold;flex-shrink:0;';
+      check.textContent = '✓';
+      toast.insertBefore(check, textWrap);
+    } else {
+      toast.style.borderColor = '#ef4444';
+      if (titleEl) titleEl.textContent = 'Analysis failed';
+      if (statusEl) { statusEl.textContent = msg || 'Unknown error'; statusEl.style.color = '#ef4444'; }
+      spinner.style.display = 'none';
+      const x = document.createElement('div');
+      x.style.cssText = 'width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#ef4444;border-radius:50%;color:#fff;font-size:18px;font-weight:bold;flex-shrink:0;';
+      x.textContent = '✗';
+      toast.insertBefore(x, textWrap);
+    }
+    setTimeout(() => { toast.style.transition = 'opacity 0.5s'; toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 4000);
+  }};
+}
+
 async function icSetPortrait(genId) {
   if (!icCurrentProject) return;
-  showToast('Setting portrait & analyzing features...', 'info');
-  const data = await icApi.setPortrait(icCurrentProject.id, genId);
-  if (data.ok) {
-    icCurrentProject.generations.forEach(g => { g.isPortrait = g.id === genId; });
-    icCurrentProject.portraitId = genId;
-    if (data.portraitDescription) {
-      icCurrentProject.portraitDescription = data.portraitDescription;
-      showToast('Portrait set + features analyzed!', 'success');
-    } else {
-      showToast('Portrait set!', 'success');
-    }
-    const rightEl = document.getElementById('icRightPanel');
-    if (rightEl) rightEl.innerHTML = icRenderRightPanel();
-    // Also refresh left panel in case swap mode is active
-    const leftEl = document.getElementById('icLeftPanel');
-    if (leftEl && icSelectedMethod === 'swap') {
-      leftEl.innerHTML = icRenderLeftPanel();
-      const zone = document.getElementById('icUploadZone');
-      if (zone) {
-        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
-        zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-        zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); icHandleDrop(e); });
+  const progress = icShowAnalyzingToast();
+  try {
+    const data = await icApi.setPortrait(icCurrentProject.id, genId);
+    if (data.ok) {
+      icCurrentProject.generations.forEach(g => { g.isPortrait = g.id === genId; });
+      icCurrentProject.portraitId = genId;
+      if (data.portraitDescription) {
+        icCurrentProject.portraitDescription = data.portraitDescription;
+        progress.close(true, 'Features mapped successfully');
+      } else if (data.analyzeError) {
+        progress.close(false, data.analyzeError);
+      } else {
+        progress.close(true, 'Portrait set (no analysis needed)');
       }
+      const rightEl = document.getElementById('icRightPanel');
+      if (rightEl) rightEl.innerHTML = icRenderRightPanel();
+      const leftEl = document.getElementById('icLeftPanel');
+      if (leftEl && icSelectedMethod === 'swap') {
+        leftEl.innerHTML = icRenderLeftPanel();
+        const zone = document.getElementById('icUploadZone');
+        if (zone) {
+          zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+          zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+          zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); icHandleDrop(e); });
+        }
+      }
+    } else {
+      progress.close(false, data.error || 'Request failed');
     }
+  } catch (e) {
+    progress.close(false, 'Network error: ' + (e.message || 'Unknown'));
   }
 }
 
 async function icSetRefPortrait(refId) {
   if (!icCurrentProject) return;
-  showToast('Setting portrait & analyzing features...', 'info');
-  const data = await icApi.setRefPortrait(icCurrentProject.id, refId);
-  if (data.ok) {
-    icCurrentProject.generations.forEach(g => { g.isPortrait = false; });
-    icCurrentProject.portraitId = 'ref:' + refId;
-    if (data.portraitDescription) {
-      icCurrentProject.portraitDescription = data.portraitDescription;
-      showToast('Portrait set + features analyzed!', 'success');
+  const progress = icShowAnalyzingToast();
+  try {
+    const data = await icApi.setRefPortrait(icCurrentProject.id, refId);
+    if (data.ok) {
+      icCurrentProject.generations.forEach(g => { g.isPortrait = false; });
+      icCurrentProject.portraitId = 'ref:' + refId;
+      if (data.portraitDescription) {
+        icCurrentProject.portraitDescription = data.portraitDescription;
+        progress.close(true, 'Features mapped successfully');
+      } else if (data.analyzeError) {
+        progress.close(false, data.analyzeError);
+      } else {
+        progress.close(true, 'Portrait set (no analysis needed)');
+      }
+      icRenderStudio();
     } else {
-      showToast('Portrait set!', 'success');
+      progress.close(false, data.error || 'Request failed');
     }
-    icRenderStudio();
+  } catch (e) {
+    progress.close(false, 'Network error: ' + (e.message || 'Unknown'));
   }
 }
 
 function icDownload(filePath) {
-  const link = document.createElement('a');
-  link.href = `/${filePath}`;
-  link.download = filePath.split('/').pop();
-  link.click();
+  const filename = filePath.split('/').pop();
+  // Use fetch + blob to force proper download with correct filename
+  fetch(`/${filePath}`)
+    .then(r => r.blob())
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    })
+    .catch(err => showToast('Download failed: ' + err.message, 'error'));
 }
 
 async function icDeleteGen(genId) {
@@ -1064,7 +1252,22 @@ function icSaveApiKey() {
   const input = document.getElementById('icApiKeyInput');
   if (!input) return;
   icSetApiKey(input.value);
-  showToast(input.value.trim() ? 'API key saved' : 'API key cleared', 'success');
+  showToast(input.value.trim() ? 'Gemini key saved' : 'Gemini key cleared', 'success');
+  const rightEl = document.getElementById('icRightPanel');
+  if (rightEl) rightEl.innerHTML = icRenderRightPanel();
+}
+
+function icSaveWsKey() {
+  const input = document.getElementById('icWsKeyInput');
+  if (!input) return;
+  icSetWavespeedKey(input.value);
+  showToast(input.value.trim() ? 'WaveSpeed key saved' : 'WaveSpeed key cleared', 'success');
+  const rightEl = document.getElementById('icRightPanel');
+  if (rightEl) rightEl.innerHTML = icRenderRightPanel();
+}
+
+function icSwitchProvider(p) {
+  icSetProvider(p);
   const rightEl = document.getElementById('icRightPanel');
   if (rightEl) rightEl.innerHTML = icRenderRightPanel();
 }

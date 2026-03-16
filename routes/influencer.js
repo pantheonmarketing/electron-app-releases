@@ -161,10 +161,18 @@ router.delete('/influencer/projects/:id/references/:refId', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Check if Gemini key is configured on server (profile/env) ──
+// ── Check if API keys are configured on server (profile/env) ──
 router.get('/influencer/gemini-status', (req, res) => {
-  const key = process.env.GEMINI_API_KEY || '';
-  res.json({ configured: !!key, masked: key ? key.slice(0, 4) + '...' + key.slice(-4) : '' });
+  const geminiKey = process.env.GEMINI_API_KEY || '';
+  const wavespeedKey = process.env.WAVESPEED_API_KEY || '';
+  res.json({
+    configured: !!geminiKey,
+    masked: geminiKey ? geminiKey.slice(0, 4) + '...' + geminiKey.slice(-4) : '',
+    wavespeed: {
+      configured: !!wavespeedKey,
+      masked: wavespeedKey ? wavespeedKey.slice(0, 8) + '...' + wavespeedKey.slice(-4) : '',
+    }
+  });
 });
 
 // ══════════════════════════════════════
@@ -172,7 +180,47 @@ router.get('/influencer/gemini-status', (req, res) => {
 // ══════════════════════════════════════
 
 const GEMINI_MODEL = 'gemini-3.1-flash-image-preview'; // NanoBanana Pro 2 — image generation
-const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';           // Cheap text model — for analysis only
+const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';           // Cheap text model — for analysis only (fallback)
+
+// ── Portrait Analysis via Claude CLI ──
+// Uses the already-authenticated claude CLI (no API key needed)
+const { execSync } = require('child_process');
+
+async function analyzePortraitWithClaude(imagePath) {
+  const prompt = `Read the image file at ${imagePath.replace(/\\/g, '/')} and analyze this person's face. Describe their distinctive physical features in a concise, factual list. Include:
+- Hair: color, length, texture, style
+- Eyes: color, shape, size, any unique features
+- Eyebrows: shape, thickness, color
+- Nose: shape, size, bridge
+- Lips: fullness, shape
+- Face shape: oval, heart, round, square, diamond, etc.
+- Skin: tone, texture, freckles, moles, beauty marks
+- Bone structure: cheekbones, jawline, chin
+- Any other distinctive features
+
+Be very specific about colors and shapes. Output ONLY the feature list, no introduction or commentary.`;
+
+  try {
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.CLAUDECODE;
+
+    const escaped = prompt.replace(/"/g, '\\"');
+    const cmd = `claude -p "${escaped}" --dangerously-skip-permissions --output-format text --model haiku --max-turns 2 --tools Read`;
+
+    const result = execSync(cmd, {
+      timeout: 45000,
+      encoding: 'utf-8',
+      env: cleanEnv,
+      shell: true,
+      cwd: shared.BASE_DIR,
+    });
+    return result.trim() || null;
+  } catch (err) {
+    const errMsg = err.stderr?.slice(0, 150) || err.message?.slice(0, 150) || 'Unknown error';
+    console.warn('[Influencer] Claude portrait analysis failed:', errMsg);
+    return { error: errMsg };
+  }
+}
 
 function buildPrompt(method, userPrompt, imageCount, portraitDescription) {
   const basePrompts = {
@@ -222,136 +270,234 @@ Critical requirements:
   return base;
 }
 
+// ── Swap Debug Logger ──
+const SWAP_LOG_FILE = path.join(shared.BASE_DIR, 'swap-debug.log');
+function swapLog(projectName, entry) {
+  const ts = new Date().toISOString();
+  const line = `[${ts}] [${projectName}] ${typeof entry === 'string' ? entry : JSON.stringify(entry, null, 2)}\n`;
+  fs.appendFileSync(SWAP_LOG_FILE, line);
+  console.log('[SwapDebug]', line.trim());
+}
+
 router.post('/influencer/projects/:id/generate', async (req, res) => {
   const project = readProject(req.params.id);
   if (!project) return res.status(404).json({ ok: false, error: 'Not found' });
 
-  const { method, prompt, referenceIds, portraitId: reqPortraitId, sceneIds, geminiApiKey } = req.body;
+  const { method, prompt, referenceIds, portraitId: reqPortraitId, sceneIds, geminiApiKey, provider, wavespeedApiKey } = req.body;
   if (!method) return res.status(400).json({ ok: false, error: 'No method specified' });
 
-  const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.json({ ok: false, error: 'No Gemini API key. Enter your key in the ⚙ Settings panel above.' });
+  const isSwap = method === 'swap';
+  if (isSwap) swapLog(project.name, `=== NEW SWAP REQUEST ===\nProvider: ${provider || 'gemini'}\nPrompt: ${(prompt || '(none)').slice(0, 200)}\nSceneIds: ${JSON.stringify(sceneIds || referenceIds || [])}\nPortraitId requested: ${reqPortraitId || '(from project)'}\nProject portraitId: ${project.portraitId}\nHas portraitDescription: ${!!project.portraitDescription}\nPortrait desc preview: ${(project.portraitDescription || '').slice(0, 100)}`);
+
+  const useWavespeed = provider === 'wavespeed';
+
+  if (useWavespeed) {
+    const wsKey = wavespeedApiKey || process.env.WAVESPEED_API_KEY;
+    if (!wsKey) {
+      return res.json({ ok: false, error: 'No WaveSpeed API key. Enter your key in the ⚙ Settings panel above.' });
+    }
+  } else {
+    const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.json({ ok: false, error: 'No Gemini API key. Enter your key in the ⚙ Settings panel above.' });
+    }
   }
 
-  try {
-    const { GoogleGenAI } = await import('@google/genai');
-    const ai = new GoogleGenAI({ apiKey });
+  // Find an item by id across references and generations
+  function findItem(id) {
+    const cleanId = id?.startsWith('ref:') ? id.slice(4) : id;
+    return project.references.find(r => r.id === cleanId)
+      || project.generations.find(g => g.id === id);
+  }
 
-    // Build contents array: images + text prompt
-    const contents = [];
-
-    // Helper to add an image to contents with optional label
-    function addImage(item, label) {
-      if (!item) return false;
+  // Collect image files for generation
+  function collectImages() {
+    const images = [];
+    function addImg(item) {
+      if (!item) return;
       const filePath = path.join(shared.BASE_DIR, item.path);
-      if (!fs.existsSync(filePath)) return false;
-      const data = fs.readFileSync(filePath).toString('base64');
-      // If labeled, add a text label before the image so Gemini knows which @img this is
-      if (label) contents.push({ text: label });
-      contents.push({
-        inlineData: {
-          mimeType: guessMime(item.filename),
-          data,
-        }
-      });
-      return true;
+      if (!fs.existsSync(filePath)) return;
+      images.push({ item, filePath, data: fs.readFileSync(filePath).toString('base64'), mime: guessMime(item.filename) });
     }
 
-    // Find an item by id across references and generations
-    function findItem(id) {
-      // Handle "ref:refId" prefix used for reference-based portraits
-      const cleanId = id?.startsWith('ref:') ? id.slice(4) : id;
-      return project.references.find(r => r.id === cleanId)
-        || project.generations.find(g => g.id === id);
-    }
-
-    // Build a tag→ref lookup for @img parsing
     const tagMap = {};
-    (project.references || []).forEach(r => {
-      if (r.tag) tagMap[r.tag] = r;
-    });
+    (project.references || []).forEach(r => { if (r.tag) tagMap[r.tag] = r; });
 
-    // Parse @img tags from prompt to find additional tagged images to include
-    let userPrompt = prompt || '';
-    const taggedRefs = []; // refs referenced by @img tags in the prompt
+    const taggedRefs = [];
     const tagPattern = /@img(\d+)/gi;
-    let match;
-    while ((match = tagPattern.exec(userPrompt)) !== null) {
-      const tagNum = parseInt(match[1]);
+    let m;
+    while ((m = tagPattern.exec(prompt || '')) !== null) {
+      const tagNum = parseInt(m[1]);
       const ref = tagMap[tagNum];
-      if (ref && !taggedRefs.find(t => t.tag === tagNum)) {
-        taggedRefs.push({ tag: tagNum, ref });
-      }
+      if (ref && !taggedRefs.find(t => t.tag === tagNum)) taggedRefs.push({ tag: tagNum, ref });
     }
 
     let refs;
     if (method === 'swap') {
-      // Swap mode: scene photo FIRST (base image to modify), then portrait (face to use)
       const sceneList = sceneIds || referenceIds || [];
       refs = sceneList.map(id => findItem(id)).filter(Boolean);
-      for (const scene of refs) addImage(scene);
-
-      // Add any @img tagged images that weren't in the scene list
-      for (const { tag, ref } of taggedRefs) {
-        if (!refs.find(r => r.id === ref.id)) {
-          addImage(ref, `[This is @img${tag}]`);
-        }
+      for (const scene of refs) addImg(scene);
+      for (const { ref } of taggedRefs) {
+        if (!refs.find(r => r.id === ref.id)) addImg(ref);
       }
-
-      // Portrait (face identity) comes LAST as the reference face
       const portraitItemId = reqPortraitId || project.portraitId;
       const portraitItem = findItem(portraitItemId);
-      if (!portraitItem) {
-        return res.json({ ok: false, error: 'No portrait set. Set a portrait first or select a face identity image.' });
-      }
-      addImage(portraitItem);
+      if (!portraitItem) return { error: 'No portrait set. Set a portrait first or select a face identity image.' };
+      addImg(portraitItem);
     } else {
-      // Standard modes: add selected reference images
       refs = (referenceIds || []).map(refId => findItem(refId)).filter(Boolean);
-
-      // If there are @img tags, send images in labeled order
-      if (taggedRefs.length > 0) {
-        // First add selected refs that aren't tagged (the base face references)
-        for (const ref of refs) {
-          const tagInfo = taggedRefs.find(t => t.ref.id === ref.id);
-          if (tagInfo) {
-            addImage(ref, `[This is @img${tagInfo.tag}]`);
-          } else {
-            addImage(ref);
-          }
-        }
-        // Then add any tagged refs not already selected
-        for (const { tag, ref } of taggedRefs) {
-          if (!refs.find(r => r.id === ref.id)) {
-            addImage(ref, `[This is @img${tag}]`);
-          }
-        }
-      } else {
-        for (const ref of refs) addImage(ref);
+      for (const ref of refs) addImg(ref);
+      for (const { ref } of taggedRefs) {
+        if (!refs.find(r => r.id === ref.id)) addImg(ref);
       }
     }
+    return { images, refs: refs || [] };
+  }
 
-    // Add text prompt
-    const fullPrompt = buildPrompt(method, userPrompt, refs.length, method === 'swap' ? project.portraitDescription : null);
-    contents.push({ text: fullPrompt });
+  const collected = collectImages();
+  if (collected.error) {
+    if (isSwap) swapLog(project.name, `FAILED at collectImages: ${collected.error}`);
+    return res.json({ ok: false, error: collected.error });
+  }
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents,
-      config: {
-        responseModalities: ['image', 'text'],
-      },
-    });
+  if (isSwap) swapLog(project.name, `Images collected: ${collected.images.length}\n${collected.images.map((img, i) => `  [${i}] ${img.item.filename} (${img.mime}, ${Math.round(img.data.length/1024)}KB base64)`).join('\n')}`);
 
-    // Extract image from response
-    const parts = response?.candidates?.[0]?.content?.parts || [];
-    const imagePart = parts.find(p => p.inlineData && p.inlineData.mimeType?.startsWith('image/'));
+  const userPrompt = prompt || '';
+  const fullPrompt = buildPrompt(method, userPrompt, collected.refs.length, method === 'swap' ? project.portraitDescription : null);
 
-    if (!imagePart) {
-      const textPart = parts.find(p => p.text);
-      const errorMsg = textPart?.text || 'No image generated. Try a different prompt or reference image.';
-      return res.json({ ok: false, error: errorMsg });
+  if (isSwap) swapLog(project.name, `Full prompt (first 500 chars): ${fullPrompt.slice(0, 500)}...`);
+
+  try {
+    let imageBuffer;
+
+    if (useWavespeed) {
+      // ── WaveSpeed NanoBanana 2 Fast Edit ──
+      const wsKey = wavespeedApiKey || process.env.WAVESPEED_API_KEY;
+      const imageDataUris = collected.images.map(img => `data:${img.mime};base64,${img.data}`);
+
+      const wsResponse = await fetch('https://api.wavespeed.ai/api/v3/google/nano-banana-2/edit-fast', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${wsKey}`,
+        },
+        body: JSON.stringify({
+          images: imageDataUris,
+          prompt: fullPrompt,
+          enable_sync_mode: true,
+        }),
+      });
+
+      if (!wsResponse.ok) {
+        const errText = await wsResponse.text();
+        console.error('[WaveSpeed] API error:', wsResponse.status, errText.slice(0, 300));
+        if (isSwap) swapLog(project.name, `WAVESPEED API ERROR ${wsResponse.status}: ${errText.slice(0, 500)}`);
+        return res.json({ ok: false, error: `WaveSpeed error (${wsResponse.status}): ${errText.slice(0, 200)}` });
+      }
+
+      const wsData = await wsResponse.json();
+      if (isSwap) swapLog(project.name, `WaveSpeed response keys: ${Object.keys(wsData).join(', ')}\ndata keys: ${wsData.data ? Object.keys(wsData.data).join(', ') : 'none'}\nstatus: ${wsData.status || wsData.data?.status || 'unknown'}`);
+      const outputUrl = wsData?.data?.outputs?.[0] || wsData?.outputs?.[0];
+      if (!outputUrl) {
+        if (isSwap) swapLog(project.name, `WAVESPEED NO OUTPUT: ${JSON.stringify(wsData).slice(0, 500)}`);
+        return res.json({ ok: false, error: 'WaveSpeed returned no image. Response: ' + JSON.stringify(wsData).slice(0, 200) });
+      }
+
+      // Download the output image
+      const imgResponse = await fetch(outputUrl);
+      if (!imgResponse.ok) {
+        return res.json({ ok: false, error: 'Failed to download WaveSpeed output image' });
+      }
+      imageBuffer = Buffer.from(await imgResponse.arrayBuffer());
+
+    } else {
+      // ── Gemini (default) ──
+      const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+
+      const contents = [];
+      // Build Gemini contents with labeled images
+      const tagMap = {};
+      (project.references || []).forEach(r => { if (r.tag) tagMap[r.tag] = r; });
+      const taggedRefs = [];
+      const tagPattern2 = /@img(\d+)/gi;
+      let m2;
+      while ((m2 = tagPattern2.exec(userPrompt)) !== null) {
+        const tagNum = parseInt(m2[1]);
+        const ref = tagMap[tagNum];
+        if (ref && !taggedRefs.find(t => t.tag === tagNum)) taggedRefs.push({ tag: tagNum, ref });
+      }
+
+      if (method === 'swap') {
+        const sceneList = sceneIds || referenceIds || [];
+        const sceneItems = sceneList.map(id => findItem(id)).filter(Boolean);
+        for (const scene of sceneItems) {
+          const fp = path.join(shared.BASE_DIR, scene.path);
+          if (fs.existsSync(fp)) contents.push({ inlineData: { mimeType: guessMime(scene.filename), data: fs.readFileSync(fp).toString('base64') } });
+        }
+        for (const { tag, ref } of taggedRefs) {
+          if (!sceneItems.find(r => r.id === ref.id)) {
+            const fp = path.join(shared.BASE_DIR, ref.path);
+            if (fs.existsSync(fp)) {
+              contents.push({ text: `[This is @img${tag}]` });
+              contents.push({ inlineData: { mimeType: guessMime(ref.filename), data: fs.readFileSync(fp).toString('base64') } });
+            }
+          }
+        }
+        const portraitItemId = reqPortraitId || project.portraitId;
+        const portraitItem = findItem(portraitItemId);
+        if (portraitItem) {
+          const fp = path.join(shared.BASE_DIR, portraitItem.path);
+          if (fs.existsSync(fp)) contents.push({ inlineData: { mimeType: guessMime(portraitItem.filename), data: fs.readFileSync(fp).toString('base64') } });
+        }
+      } else {
+        const refItems = (referenceIds || []).map(refId => findItem(refId)).filter(Boolean);
+        if (taggedRefs.length > 0) {
+          for (const ref of refItems) {
+            const fp = path.join(shared.BASE_DIR, ref.path);
+            if (!fs.existsSync(fp)) continue;
+            const tagInfo = taggedRefs.find(t => t.ref.id === ref.id);
+            if (tagInfo) contents.push({ text: `[This is @img${tagInfo.tag}]` });
+            contents.push({ inlineData: { mimeType: guessMime(ref.filename), data: fs.readFileSync(fp).toString('base64') } });
+          }
+          for (const { tag, ref } of taggedRefs) {
+            if (!refItems.find(r => r.id === ref.id)) {
+              const fp = path.join(shared.BASE_DIR, ref.path);
+              if (fs.existsSync(fp)) {
+                contents.push({ text: `[This is @img${tag}]` });
+                contents.push({ inlineData: { mimeType: guessMime(ref.filename), data: fs.readFileSync(fp).toString('base64') } });
+              }
+            }
+          }
+        } else {
+          for (const ref of refItems) {
+            const fp = path.join(shared.BASE_DIR, ref.path);
+            if (fs.existsSync(fp)) contents.push({ inlineData: { mimeType: guessMime(ref.filename), data: fs.readFileSync(fp).toString('base64') } });
+          }
+        }
+      }
+
+      contents.push({ text: fullPrompt });
+
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents,
+        config: { responseModalities: ['image', 'text'] },
+      });
+
+      const parts = response?.candidates?.[0]?.content?.parts || [];
+      if (isSwap) swapLog(project.name, `Gemini response parts: ${parts.length}\n${parts.map((p, i) => `  [${i}] ${p.inlineData ? 'IMAGE (' + p.inlineData.mimeType + ', ' + Math.round((p.inlineData.data||'').length/1024) + 'KB)' : 'TEXT: ' + (p.text||'').slice(0, 100)}`).join('\n')}`);
+      const imagePart = parts.find(p => p.inlineData && p.inlineData.mimeType?.startsWith('image/'));
+
+      if (!imagePart) {
+        const textPart = parts.find(p => p.text);
+        const errorMsg = textPart?.text || 'No image generated. Try a different prompt or reference image.';
+        if (isSwap) swapLog(project.name, `GEMINI NO IMAGE: ${errorMsg.slice(0, 300)}`);
+        return res.json({ ok: false, error: errorMsg });
+      }
+
+      imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
     }
 
     // Save to disk
@@ -359,7 +505,7 @@ router.post('/influencer/projects/:id/generate', async (req, res) => {
     fs.mkdirSync(uploadsDir, { recursive: true });
     const filename = `gen_${Date.now()}.png`;
     const outputPath = path.join(uploadsDir, filename);
-    fs.writeFileSync(outputPath, Buffer.from(imagePart.inlineData.data, 'base64'));
+    fs.writeFileSync(outputPath, imageBuffer);
 
     // Add to generations
     const generation = {
@@ -375,11 +521,28 @@ router.post('/influencer/projects/:id/generate', async (req, res) => {
     project.generations.push(generation);
     writeProject(project);
 
+    if (isSwap) swapLog(project.name, `SUCCESS! Saved as ${filename} (${Math.round(imageBuffer.length/1024)}KB)`);
     res.json({ ok: true, generation });
   } catch (err) {
-    console.error('[Influencer Generate] Error:', err.message?.slice(0, 300));
-    res.json({ ok: false, error: err.message?.slice(0, 300) || 'Generation failed' });
+    const errMsg = err.message?.slice(0, 500) || 'Generation failed';
+    if (isSwap) swapLog(project.name, `EXCEPTION: ${errMsg}\nStack: ${(err.stack || '').slice(0, 300)}`);
+    console.error('[Influencer Generate] Error:', errMsg);
+    res.json({ ok: false, error: errMsg.slice(0, 300) });
   }
+});
+
+// ── Swap Debug Log Viewer ──
+router.get('/influencer/swap-debug', (req, res) => {
+  if (!fs.existsSync(SWAP_LOG_FILE)) return res.type('text').send('No swap debug log yet. Run a swap to generate logs.');
+  const log = fs.readFileSync(SWAP_LOG_FILE, 'utf-8');
+  // Return last 50KB
+  const tail = log.length > 50000 ? log.slice(-50000) : log;
+  res.type('text').send(tail);
+});
+
+router.delete('/influencer/swap-debug', (req, res) => {
+  if (fs.existsSync(SWAP_LOG_FILE)) fs.unlinkSync(SWAP_LOG_FILE);
+  res.json({ ok: true, message: 'Swap debug log cleared' });
 });
 
 // ══════════════════════════════════════
@@ -463,52 +626,27 @@ router.post('/influencer/projects/:id/generations/:genId/set-portrait', async (r
   project.portraitId = gen.id;
 
   // Auto-analyze face features for swap mode (only if portrait changed or no description yet)
+  let analyzeError = null;
   const needsAnalysis = !project.portraitDescription || project._analyzedPortraitId !== gen.id;
-  const apiKey = (req.body && req.body.geminiApiKey) || process.env.GEMINI_API_KEY;
-  if (apiKey && needsAnalysis) {
-    try {
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
-
-      const filePath = path.join(shared.BASE_DIR, gen.path);
-      if (fs.existsSync(filePath)) {
-        const imgData = fs.readFileSync(filePath).toString('base64');
-        const analyzeResponse = await ai.models.generateContent({
-          model: GEMINI_TEXT_MODEL,
-          contents: [
-            { inlineData: { mimeType: guessMime(gen.filename), data: imgData } },
-            { text: `Analyze this person's face and describe their distinctive physical features in a concise, factual list. Include:
-- Hair: color, length, texture, style
-- Eyes: color, shape, size, any unique features (heterochromia, etc.)
-- Eyebrows: shape, thickness, color
-- Nose: shape, size, bridge
-- Lips: fullness, shape
-- Face shape: oval, heart, round, square, diamond, etc.
-- Skin: tone, texture, freckles, moles, beauty marks
-- Bone structure: cheekbones, jawline, chin
-- Any other distinctive features
-
-Be very specific about colors and shapes. Output ONLY the feature list, no introduction or commentary.` }
-          ],
-          // text model doesn't need responseModalities config
-        });
-
-        const parts = analyzeResponse?.candidates?.[0]?.content?.parts || [];
-        const textPart = parts.find(p => p.text);
-        if (textPart?.text) {
-          project.portraitDescription = textPart.text.trim();
-          project._analyzedPortraitId = gen.id;
-          console.log('[Influencer] Portrait analyzed:', project.portraitDescription.slice(0, 100) + '...');
-        }
+  if (needsAnalysis) {
+    const filePath = path.join(shared.BASE_DIR, gen.path);
+    if (fs.existsSync(filePath)) {
+      const result = await analyzePortraitWithClaude(filePath);
+      if (result && typeof result === 'string') {
+        project.portraitDescription = result;
+        project._analyzedPortraitId = gen.id;
+        console.log('[Influencer] Portrait analyzed via Claude:', project.portraitDescription.slice(0, 100) + '...');
+      } else if (result && result.error) {
+        analyzeError = result.error;
+        console.warn('[Influencer] Portrait analysis error:', analyzeError);
       }
-    } catch (err) {
-      console.warn('[Influencer] Portrait analysis failed (non-critical):', err.message?.slice(0, 100));
-      // Non-critical — swap still works without description
+    } else {
+      analyzeError = 'Image file not found: ' + gen.path;
     }
   }
 
   writeProject(project);
-  res.json({ ok: true, portraitDescription: project.portraitDescription || null });
+  res.json({ ok: true, portraitDescription: project.portraitDescription || null, analyzeError });
 });
 
 // Set a reference image as portrait
@@ -525,48 +663,28 @@ router.post('/influencer/projects/:id/references/:refId/set-portrait', async (re
   project.portraitId = 'ref:' + ref.id;
   project.portraitPath = ref.path;
 
-  // Auto-analyze face features
-  const apiKey = (req.body && req.body.geminiApiKey) || process.env.GEMINI_API_KEY;
+  // Auto-analyze face features via Claude CLI
+  let analyzeError = null;
   const needsAnalysis = !project.portraitDescription || project._analyzedPortraitId !== project.portraitId;
-  if (apiKey && needsAnalysis) {
-    try {
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
-      const filePath = path.join(shared.BASE_DIR, ref.path);
-      if (fs.existsSync(filePath)) {
-        const imgData = fs.readFileSync(filePath).toString('base64');
-        const analyzeResponse = await ai.models.generateContent({
-          model: GEMINI_TEXT_MODEL,
-          contents: [
-            { inlineData: { mimeType: guessMime(ref.filename), data: imgData } },
-            { text: `Analyze this person's face and describe their distinctive physical features in a concise, factual list. Include:
-- Hair: color, length, texture, style
-- Eyes: color, shape, size, any unique features
-- Eyebrows: shape, thickness, color
-- Nose: shape, size, bridge
-- Lips: fullness, shape
-- Face shape: oval, heart, round, square, diamond, etc.
-- Skin: tone, texture, freckles, moles, beauty marks
-- Bone structure: cheekbones, jawline, chin
-- Any other distinctive features
-
-Be very specific about colors and shapes. Output ONLY the feature list, no introduction or commentary.` }
-          ],
-        });
-        const parts = analyzeResponse?.candidates?.[0]?.content?.parts || [];
-        const textPart = parts.find(p => p.text);
-        if (textPart?.text) {
-          project.portraitDescription = textPart.text.trim();
-          project._analyzedPortraitId = project.portraitId;
-        }
+  if (needsAnalysis) {
+    const filePath = path.join(shared.BASE_DIR, ref.path);
+    if (fs.existsSync(filePath)) {
+      const result = await analyzePortraitWithClaude(filePath);
+      if (result && typeof result === 'string') {
+        project.portraitDescription = result;
+        project._analyzedPortraitId = project.portraitId;
+        console.log('[Influencer] Ref portrait analyzed via Claude:', project.portraitDescription.slice(0, 100) + '...');
+      } else if (result && result.error) {
+        analyzeError = result.error;
+        console.warn('[Influencer] Ref portrait analysis error:', analyzeError);
       }
-    } catch (err) {
-      console.warn('[Influencer] Ref portrait analysis failed:', err.message?.slice(0, 100));
+    } else {
+      analyzeError = 'Image file not found: ' + ref.path;
     }
   }
 
   writeProject(project);
-  res.json({ ok: true, portraitId: project.portraitId, portraitDescription: project.portraitDescription || null });
+  res.json({ ok: true, portraitId: project.portraitId, portraitDescription: project.portraitDescription || null, analyzeError });
 });
 
 // Delete generation
