@@ -298,12 +298,13 @@ router.post('/story/projects/:id/export', async (req, res) => {
     const context = await browser.newContext({ viewport: { width: 1080, height: 1920 } });
     const page = await context.newPage();
 
-    for (let i = 0; i < slides.length; i++) {
-      const htmlPath = path.join(exportDir, `slide-${i + 1}.html`);
-      const pngPath = path.join(exportDir, `slide-${i + 1}.png`);
+    // Use server URL so /uploads/ paths and Google Fonts resolve correctly
+    const serverBase = `http://localhost:3456`;
 
-      await page.goto(`file://${htmlPath.replace(/\\/g, '/')}`);
-      await page.waitForTimeout(2000); // Wait for Google Fonts to load
+    for (let i = 0; i < slides.length; i++) {
+      const pngPath = path.join(exportDir, `slide-${i + 1}.png`);
+      await page.goto(`${serverBase}/api/story/projects/${req.params.id}/preview/${i}?t=${Date.now()}`);
+      await page.waitForTimeout(2000); // Wait for Google Fonts + images
       await page.screenshot({ path: pngPath, type: 'png' });
       pngFiles.push(`uploads/${req.params.id}/export/slide-${i + 1}.png`);
     }
@@ -390,6 +391,8 @@ function buildSlideHTML(slide, index, total, style, project) {
       break;
   }
 
+  const photoHTML = buildPhotoHTML(slide, { pri, sec, txt });
+
   return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(hFont)}:wght@400;600;700;800;900&family=${encodeURIComponent(bFont)}:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -398,6 +401,7 @@ function buildSlideHTML(slide, index, total, style, project) {
 <div style="width:1080px;height:1920px;position:relative;overflow:hidden;background:${bg};color:${txt};font-family:'${bFont}',sans-serif;">
   ${topLine}${indicator}${glow}${circles}
   ${content}
+  ${photoHTML}
 </div>
 </body></html>`;
 }
@@ -431,18 +435,11 @@ function buildShiftSlide(s, t, project) {
       <div style="width:28px;height:28px;border-radius:50%;background:${t.pri};flex-shrink:0;margin-top:6px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;">✓</div>
       <div style="font-size:36px;font-weight:500;color:${t.txt}dd;line-height:1.4;">${esc(a)}</div>
     </div>`).join('');
-  const photoPath = s.photo || '';
-  const photoHTML = photoPath ? `
-    <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:100%;height:700px;overflow:hidden;">
-      ${t.pri ? `<div style="position:absolute;bottom:100px;left:50%;transform:translateX(-50%);width:500px;height:500px;border-radius:50%;background:${t.pri}30;filter:blur(80px);"></div>` : ''}
-      <img src="/${photoPath}" style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);height:650px;object-fit:contain;mask-image:linear-gradient(to top,black 60%,transparent);-webkit-mask-image:linear-gradient(to top,black 60%,transparent);">
-    </div>` : '';
   return `
-    <div style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;padding:80px;padding-bottom:${photoPath ? '720px' : '80px'};justify-content:center;">
+    <div style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;padding:80px;justify-content:center;">
       <div style="font-family:'${t.hFont}',serif;font-size:72px;font-weight:800;margin-bottom:50px;">${esc(s.headline || "Here's What Changed")}</div>
       ${actions}
-    </div>
-    ${photoHTML}`;
+    </div>`;
 }
 
 function buildProofSlide(s, t) {
@@ -471,9 +468,223 @@ function buildCtaSlide(s, t) {
     </div>`;
 }
 
+function buildPhotoHTML(slide, c) {
+  if (!slide.photo) return '';
+  const pos = slide.photo_pos || 'bottom-center';
+  const size = slide.photo_size || 50;
+  const effect = slide.photo_effect || 'shadow';
+  const pri = c.pri || '#7B2FF2';
+
+  const posMap = {
+    'top-left':     'top:160px;left:80px;',
+    'top-center':   'top:160px;left:50%;transform:translateX(-50%);',
+    'top-right':    'top:160px;right:80px;',
+    'center-left':  'top:50%;left:80px;transform:translateY(-50%);',
+    'center':       'top:50%;left:50%;transform:translate(-50%,-50%);',
+    'center-right': 'top:50%;right:80px;transform:translateY(-50%);',
+    'bottom-left':  'bottom:80px;left:80px;',
+    'bottom-center':'bottom:0;left:50%;transform:translateX(-50%);',
+    'bottom-right': 'bottom:80px;right:80px;',
+  };
+  const posStyle = posMap[pos] || posMap['bottom-center'];
+  const widthPx = Math.round(1080 * size / 100);
+  let baseStyle = `width:${widthPx}px;`;
+  let shadow = '', borderRadius = '12px', extra = '';
+
+  switch (effect) {
+    case 'shadow':
+      shadow = 'box-shadow:0 40px 100px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.05);';
+      break;
+    case 'glow':
+      shadow = `box-shadow:0 0 100px ${pri}70,0 40px 100px rgba(0,0,0,0.6),0 0 0 2px ${pri}30;`;
+      break;
+    case 'circle':
+      borderRadius = '50%';
+      baseStyle += `height:${widthPx}px;object-fit:cover;`;
+      shadow = 'box-shadow:0 20px 60px rgba(0,0,0,0.6);';
+      break;
+    case 'rounded':
+      borderRadius = '40px';
+      shadow = 'box-shadow:0 30px 80px rgba(0,0,0,0.7);';
+      break;
+    case 'fade':
+      shadow = 'box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+      extra = 'mask-image:linear-gradient(to top,black 50%,transparent 95%);-webkit-mask-image:linear-gradient(to top,black 50%,transparent 95%);';
+      break;
+    default:
+      borderRadius = '8px';
+  }
+
+  const src = slide.photo.startsWith('http') ? slide.photo : '/' + slide.photo;
+  return `<img src="${src}" style="position:absolute;${posStyle}${baseStyle}border-radius:${borderRadius};object-fit:contain;${shadow}${extra}">`;
+}
+
 function esc(str) {
   if (!str) return '';
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// ──────────────────────────────────────────────
+// AI Content Generation
+// ──────────────────────────────────────────────
+
+const TYPE_SEQUENCES = {
+  3: ['hook', 'shift', 'cta'],
+  4: ['hook', 'pain', 'shift', 'cta'],
+  5: ['hook', 'pain', 'shift', 'proof', 'cta'],
+  6: ['hook', 'pain', 'pain', 'shift', 'proof', 'cta'],
+  7: ['hook', 'pain', 'pain', 'shift', 'proof', 'proof', 'cta'],
+};
+
+router.post('/story/generate-content', (req, res) => {
+  const { text, slide_count = 5, style } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Text required' });
+
+  const count = Math.min(Math.max(parseInt(slide_count) || 5, 3), 7);
+  const sequence = TYPE_SEQUENCES[count] || TYPE_SEQUENCES[5];
+
+  const prompt = `You are generating content for ${count} Facebook/Instagram Story slides.
+
+SLIDE SEQUENCE: ${sequence.join(' → ')}
+
+SLIDE TYPES (use only fields listed for each type):
+- hook: { type:"hook", eyebrow:"SHORT ALL CAPS LABEL", headline:"Bold hook statement", subtext:"Supporting line", emphasis:"" }
+- pain: { type:"pain", headline:"Relatable pain headline", pains:["pain 1","pain 2","pain 3"] }
+- shift: { type:"shift", headline:"Transformation headline", actions:["bullet 1","bullet 2","bullet 3"] }
+- proof: { type:"proof", big_number:"2,847", label:"New Followers", context:"In 30 days" }
+- cta: { type:"cta", nos:["No X","No Y","No Z"], price:"$9/mo", button_text:"JOIN NOW", url:"" }
+
+SOURCE TEXT TO BASE THE SLIDES ON:
+${text.slice(0, 3000)}
+
+Rules:
+- Keep text SHORT and punchy — Story slides, not paragraphs
+- Make it feel real and relatable, not corporate
+- Use casual language (contractions ok)
+- The sequence is FIXED — generate exactly ${count} slides in this order: ${sequence.join(', ')}
+- Respond ONLY with valid JSON, no markdown fences, no explanation
+
+JSON format:
+{"slides":[...]}`;
+
+  const { execSync } = require('child_process');
+  const { shellEscape } = require('../lib/helpers');
+  const promptFile = path.join(shared.LOGS_DIR, `story-gen-${Date.now()}.txt`);
+
+  try {
+    fs.writeFileSync(promptFile, prompt);
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.CLAUDECODE;
+    const catCmd = process.platform === 'win32' ? 'type' : 'cat';
+    const cmd = `${catCmd} ${shellEscape(promptFile)} | claude -p --dangerously-skip-permissions --output-format text --model sonnet --max-turns 1`;
+
+    const output = execSync(cmd, {
+      env: cleanEnv, cwd: shared.BASE_DIR, shell: true,
+      encoding: 'utf-8', timeout: 60000,
+      stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true
+    });
+
+    let jsonStr = output.trim();
+    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fence) jsonStr = fence[1].trim();
+    const s = jsonStr.indexOf('{'), e = jsonStr.lastIndexOf('}');
+    if (s !== -1 && e !== -1) jsonStr = jsonStr.slice(s, e + 1);
+
+    const parsed = JSON.parse(jsonStr);
+    const slides = parsed.slides || [];
+    if (!slides.length) return res.status(500).json({ error: 'Claude returned no slides' });
+
+    // Create a project to store these slides
+    const id = 'story-' + Date.now();
+    const project = {
+      id, name: 'Story ' + new Date().toLocaleDateString(),
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      slides, style: style || defaultStoryStyle()
+    };
+    writeStoryProject(project);
+
+    res.json({ ok: true, slides, project_id: id });
+  } catch (err) {
+    console.error('[StoryGen]', err.message);
+    res.status(500).json({ ok: false, error: 'Generation failed: ' + err.message.slice(0, 200) });
+  } finally {
+    try { fs.unlinkSync(promptFile); } catch (_) {}
+  }
+});
+
+// Regenerate a single slide
+router.post('/story/regenerate-slide', (req, res) => {
+  const { text, slide_type, context_slides } = req.body;
+  if (!text || !slide_type) return res.status(400).json({ error: 'text and slide_type required' });
+
+  const typeSchemas = {
+    hook: '{ type:"hook", eyebrow:"SHORT ALL CAPS LABEL", headline:"Bold hook", subtext:"Supporting line", emphasis:"" }',
+    pain: '{ type:"pain", headline:"Pain headline", pains:["pain 1","pain 2","pain 3"] }',
+    shift: '{ type:"shift", headline:"Solution headline", actions:["bullet 1","bullet 2","bullet 3"] }',
+    proof: '{ type:"proof", big_number:"2,847", label:"New Followers", context:"In 30 days" }',
+    cta: '{ type:"cta", nos:["No X","No Y"], price:"$9/mo", button_text:"JOIN NOW", url:"" }',
+  };
+
+  const prompt = `Rewrite this Story slide (type: ${slide_type}) based on the source text.
+Source: ${text.slice(0, 1000)}
+Schema: ${typeSchemas[slide_type] || typeSchemas.hook}
+Return ONLY valid JSON for one slide object, no markdown.`;
+
+  const { execSync } = require('child_process');
+  const { shellEscape } = require('../lib/helpers');
+  const promptFile = path.join(shared.LOGS_DIR, `story-regen-${Date.now()}.txt`);
+
+  try {
+    fs.writeFileSync(promptFile, prompt);
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.CLAUDECODE;
+    const catCmd = process.platform === 'win32' ? 'type' : 'cat';
+    const cmd = `${catCmd} ${shellEscape(promptFile)} | claude -p --dangerously-skip-permissions --output-format text --model sonnet --max-turns 1`;
+    const output = execSync(cmd, {
+      env: cleanEnv, cwd: shared.BASE_DIR, shell: true,
+      encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true
+    });
+    let jsonStr = output.trim();
+    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fence) jsonStr = fence[1].trim();
+    const s = jsonStr.indexOf('{'), e = jsonStr.lastIndexOf('}');
+    if (s !== -1 && e !== -1) jsonStr = jsonStr.slice(s, e + 1);
+    const slide = JSON.parse(jsonStr);
+    res.json({ ok: true, slide });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message.slice(0, 200) });
+  } finally {
+    try { fs.unlinkSync(promptFile); } catch (_) {}
+  }
+});
+
+// Open export folder in system file explorer
+router.post('/story/open-folder', (req, res) => {
+  const { folder_path } = req.body;
+  if (!folder_path) return res.status(400).json({ error: 'folder_path required' });
+
+  const uploadsDir = path.resolve(shared.UPLOADS_DIR);
+  const resolved = path.resolve(folder_path);
+  if (!resolved.startsWith(uploadsDir)) return res.status(403).json({ error: 'Invalid path' });
+
+  const { exec } = require('child_process');
+  const cmd = process.platform === 'win32'
+    ? `explorer "${resolved}"`
+    : process.platform === 'darwin' ? `open "${resolved}"` : `xdg-open "${resolved}"`;
+  exec(cmd);
+  res.json({ ok: true });
+});
+
+// Preview single slide as HTML (for iframe preview)
+router.get('/story/projects/:id/preview/:index', (req, res) => {
+  const project = readStoryProject(req.params.id);
+  if (!project) return res.status(404).send('Not found');
+  const idx = parseInt(req.params.index) || 0;
+  const slide = project.slides[idx];
+  if (!slide) return res.status(404).send('Slide not found');
+  const html = buildSlideHTML(slide, idx, project.slides.length, project.style || defaultStoryStyle(), project);
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
+});
 
 module.exports = router;

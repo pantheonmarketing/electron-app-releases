@@ -1,19 +1,19 @@
 // ════════════════════════════════════════════
-// Story Brand Designer
-// Design how your story slides look. The AI skill
-// uses this design when you create story tasks.
+// Story Slides — New Flow
+// 1. Paste text + pick options → Generate Preview
+// 2. Edit slides + live preview → Generate PNGs
+// 3. View results + Open Folder
 // ════════════════════════════════════════════
 
-let stDesigns = [];
-let stCurrentDesign = null;
-let stPresets = [];
-let stPreviewSlide = 0;
-let stInitialized = false;
-let stSaveTimer = null;
-let stAutoSlideTimer = null;
+let sSlides = [];
+let sStyle = null;
+let sSelectedSlide = 0;
+let sProjectId = null;
+let sSourceText = '';
+let sExportDir = null;
+let sPreviewDebounce = null;
 
-// ── Quick color presets (built-in) ──
-const ST_COLOR_PRESETS = [
+const S_COLOR_PRESETS = [
   { name: 'Purple',  bg: '#0a0a12', pri: '#7B2FF2', sec: '#C084FC', ter: '#E9D5FF' },
   { name: 'Teal',    bg: '#0a1214', pri: '#0D9488', sec: '#5EEAD4', ter: '#CCFBF1' },
   { name: 'Gold',    bg: '#12100a', pri: '#D97706', sec: '#FCD34D', ter: '#FEF3C7' },
@@ -22,545 +22,706 @@ const ST_COLOR_PRESETS = [
   { name: 'Pink',    bg: '#120a10', pri: '#DB2777', sec: '#F472B6', ter: '#FCE7F3' },
 ];
 
-const ST_FONTS = [
+const S_FONTS = [
   'Playfair Display', 'Georgia', 'Merriweather', 'Lora',
-  'Inter', 'Poppins', 'Montserrat', 'Raleway', 'Roboto', 'Oswald', 'Lato', 'Bebas Neue'
+  'Inter', 'Poppins', 'Montserrat', 'Raleway', 'Bebas Neue', 'Oswald',
 ];
 
-// Sample slides for preview — shows how the design looks
-const ST_SAMPLE_SLIDES = [
-  { type: 'hook', eyebrow: 'STOP SCROLLING', headline: 'I Made $4,200 Last Month', subtext: 'Using Only AI Tools', emphasis: '' },
-  { type: 'pain', headline: 'Sound Familiar?', pains: ['Spending hours creating content manually', 'Getting zero engagement on your posts', 'Watching competitors grow while you\'re stuck'] },
-  { type: 'shift', headline: "Here's What Changed", actions: ['Trained an AI to write in my voice', 'Automated my entire content pipeline', 'Went from 0 to 2K followers in 30 days'], photo: '' },
-  { type: 'proof', big_number: '2,847', label: 'New Followers', context: 'In Just 30 Days' },
-  { type: 'cta', nos: ['No filming yourself', 'No editing skills', 'No expensive tools'], price: '$9/mo', button_text: 'JOIN NOW', url: 'skool.com/ai-influencer' },
-];
+const S_SLIDE_LABELS = { hook: 'Hook', pain: 'Pain', shift: 'Shift', proof: 'Proof', cta: 'CTA' };
 
-const ST_SLIDE_NAMES = ['Hook', 'Pain', 'Shift', 'Proof', 'CTA'];
-
-// ── API ──
-const stApi = {
-  async listDesigns() { return (await safeFetch('/api/story/projects')).json(); },
-  async createDesign(d) { return (await safeFetch('/api/story/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d||{}) })).json(); },
-  async getDesign(id) { return (await safeFetch(`/api/story/projects/${id}`)).json(); },
-  async updateDesign(id, d) { return (await safeFetch(`/api/story/projects/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) })).json(); },
-  async deleteDesign(id) { return (await safeFetch(`/api/story/projects/${id}`, { method:'DELETE' })).json(); },
-  async exportDesign(id) { return (await safeFetch(`/api/story/projects/${id}/export`, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })).json(); },
-  async listPresets() { return (await safeFetch('/api/story/presets')).json(); },
-  async createPreset(d) { return (await safeFetch('/api/story/presets', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) })).json(); },
-  async deletePreset(id) { return (await safeFetch(`/api/story/presets/${id}`, { method:'DELETE' })).json(); },
-};
-
-// ════════════════════════════════════════════
-// Init & Design List
-// ════════════════════════════════════════════
-
-async function stInit() {
-  if (!stInitialized) stInitialized = true;
-  stLoadDesignList();
+function sDefaultStyle() {
+  return {
+    colors: { background: '#0a0a12', primary: '#7B2FF2', secondary: '#C084FC', tertiary: '#E9D5FF', text: '#ffffff' },
+    fonts: { headline: 'Playfair Display', body: 'Inter' },
+    decorations: { topLine: true, slideIndicator: true, cornerCircles: true, backgroundGlow: true }
+  };
 }
 
-async function stLoadDesignList() {
-  try { stDesigns = await stApi.listDesigns(); }
-  catch (_) { stDesigns = []; }
-  stRenderDesignList();
+// ════════════════════════════════════════════
+// Init
+// ════════════════════════════════════════════
+
+function sInit() {
+  // Load saved style from localStorage
+  try {
+    const saved = localStorage.getItem('story_style');
+    if (saved) sStyle = JSON.parse(saved);
+  } catch (_) {}
+  if (!sStyle) sStyle = sDefaultStyle();
+
+  sShowView('sInputView');
+  sRenderColorPresets();
+  sRestoreInput();
+  sLoadProjects();
 }
 
-function stRenderDesignList() {
-  const el = document.getElementById('stProjectList');
+// ════════════════════════════════════════════
+// Project List (save/load)
+// ════════════════════════════════════════════
+
+let sProjects = [];
+
+async function sLoadProjects() {
+  try {
+    const res = await safeFetch('/api/story/projects');
+    const data = await res.json();
+    sProjects = Array.isArray(data) ? data : [];
+    sRenderProjectList();
+  } catch (e) {
+    sProjects = [];
+  }
+}
+
+function sRenderProjectList() {
+  const el = document.getElementById('sProjectList');
   if (!el) return;
-  if (stDesigns.length === 0) {
-    el.innerHTML = `
-      <div class="st-empty">
-        <div class="st-empty-icon">🎨</div>
-        <div class="st-empty-text">No story designs yet</div>
-        <div class="st-empty-sub">Create a brand design for your story slides.<br>Then just tell AI "make story slides about X" and it uses your design.</div>
-        <button class="btn btn-primary" onclick="stNewDesign()" style="margin-top:16px;">+ New Design</button>
-      </div>`;
+  if (sProjects.length === 0) {
+    el.innerHTML = '<div class="s-proj-empty">No saved projects yet. Generate your first story above!</div>';
     return;
   }
-  el.innerHTML = stDesigns.map(p => {
-    const c = p.style?.colors || {};
-    const pri = c.primary || '#7B2FF2';
-    const sec = c.secondary || '#C084FC';
-    const bg = c.background || '#0a0a12';
-    const date = new Date(p.updated_at).toLocaleDateString();
-    const isActive = p.is_active;
+  el.innerHTML = sProjects.map(p => {
+    const date = new Date(p.updated_at || p.created_at || Date.now()).toLocaleDateString();
+    const slides = p.slide_count || 0;
     return `
-      <div class="st-project-card ${isActive ? 'st-card-active' : ''}" onclick="stOpenDesign('${p.id}')">
-        <div class="st-project-preview" style="background:${bg};">
-          <div class="st-project-preview-line" style="background:linear-gradient(90deg,${pri},${sec});"></div>
-          <div class="st-project-preview-text" style="color:${c.text || '#fff'};">
-            <div style="font-size:11px;color:${sec};font-weight:600;letter-spacing:1px;margin-bottom:4px;">STORY</div>
-            <div style="font-size:16px;font-weight:700;">Aa</div>
-          </div>
-          <div class="st-project-preview-dots">
-            <span style="background:${pri};"></span><span style="background:${sec};"></span><span style="background:${c.tertiary || '#E9D5FF'};"></span>
-          </div>
-        </div>
-        <div class="st-project-info">
-          <div class="st-project-name">${esc(p.name)} ${isActive ? '<span style="color:#4ade80;font-size:11px;margin-left:6px;">● Active</span>' : ''}</div>
-          <div class="st-project-meta">${date}</div>
-        </div>
-        <button class="st-project-delete" onclick="event.stopPropagation(); stDeleteDesign('${p.id}')" title="Delete">&times;</button>
+      <div class="s-proj-card" onclick="sLoadProject('${p.id}')">
+        <div class="s-proj-card-del" onclick="event.stopPropagation(); sDeleteProject('${p.id}')" title="Delete">×</div>
+        <div class="s-proj-card-name">${escHtml(p.name || 'Untitled')}</div>
+        <div class="s-proj-card-meta">${slides} slide${slides !== 1 ? 's' : ''} · ${date}</div>
       </div>`;
   }).join('');
 }
 
-async function stNewDesign() {
+async function sLoadProject(id) {
   try {
-    const res = await stApi.createDesign({ name: 'My Brand' });
-    if (res.ok) {
-      stCurrentDesign = res.project;
-      stShowDesigner();
-    }
+    const res = await safeFetch(`/api/story/projects/${id}`);
+    const data = await res.json();
+    if (!data || !data.slides) { showToast('Could not load project', 'error'); return; }
+    sSlides = data.slides;
+    sStyle = data.style || sDefaultStyle();
+    sProjectId = id;
+    sSelectedSlide = 0;
+    sExportDir = data.export_dir || null;
+    sSaveStyle();
+    sShowEditorView();
+    showToast('Project loaded', 'success');
   } catch (e) {
-    showToast('Failed to create design: ' + e.message, 'error');
+    showToast('Failed to load project: ' + e.message, 'error');
   }
 }
 
-async function stOpenDesign(id) {
+async function sDeleteProject(id) {
+  if (!confirm('Delete this story project?')) return;
   try {
-    stCurrentDesign = await stApi.getDesign(id);
-    stShowDesigner();
+    await safeFetch(`/api/story/projects/${id}`, { method: 'DELETE' });
+    sProjects = sProjects.filter(p => p.id !== id);
+    sRenderProjectList();
+    showToast('Project deleted', 'info');
   } catch (e) {
-    showToast('Failed to open design: ' + e.message, 'error');
+    showToast('Failed to delete: ' + e.message, 'error');
   }
 }
 
-async function stDeleteDesign(id) {
-  if (!confirm('Delete this story design?')) return;
-  try {
-    await stApi.deleteDesign(id);
-    stDesigns = stDesigns.filter(p => p.id !== id);
-    stRenderDesignList();
-    showToast('Design deleted', 'info');
-  } catch (_) {}
-}
-
-// ════════════════════════════════════════════
-// Designer View
-// ════════════════════════════════════════════
-
-function stShowDesigner() {
-  document.getElementById('stLanding').style.display = 'none';
-  document.getElementById('stStudio').style.display = 'flex';
-  document.getElementById('stProjectName').value = stCurrentDesign.name || '';
-
-  // Hide step indicators — single page now
-  const stepsEl = document.getElementById('stSteps');
-  if (stepsEl) stepsEl.style.display = 'none';
-  const progressEl = document.getElementById('stStepProgress');
-  if (progressEl) progressEl.textContent = 'Design your story brand';
-
-  stLoadPresets();
-  stRenderDesigner();
-  stStartAutoSlide();
-}
-
-function stBackToList() {
-  stSaveDesign();
-  stStopAutoSlide();
-  document.getElementById('stStudio').style.display = 'none';
-  document.getElementById('stLanding').style.display = '';
-  stCurrentDesign = null;
-  stLoadDesignList();
-}
-
-function stStartAutoSlide() {
-  stStopAutoSlide();
-  stAutoSlideTimer = setInterval(() => {
-    stPreviewSlide = (stPreviewSlide + 1) % 5;
-    stRenderLivePreview();
-  }, 3000);
-}
-
-function stStopAutoSlide() {
-  if (stAutoSlideTimer) { clearInterval(stAutoSlideTimer); stAutoSlideTimer = null; }
-}
-
-// ════════════════════════════════════════════
-// Save (debounced)
-// ════════════════════════════════════════════
-
-function stSaveDesign() {
-  if (!stCurrentDesign) return;
-  stCurrentDesign.name = document.getElementById('stProjectName')?.value || 'My Brand';
-  clearTimeout(stSaveTimer);
-  stSaveTimer = setTimeout(async () => {
-    try {
-      await stApi.updateDesign(stCurrentDesign.id, {
-        name: stCurrentDesign.name,
-        slides: ST_SAMPLE_SLIDES,
-        style: stCurrentDesign.style
-      });
-    } catch (_) {}
-  }, 400);
-}
-
-async function stSaveDesignNow() {
-  if (!stCurrentDesign) return;
-  stCurrentDesign.name = document.getElementById('stProjectName')?.value || 'My Brand';
-  await stApi.updateDesign(stCurrentDesign.id, {
-    name: stCurrentDesign.name,
-    slides: ST_SAMPLE_SLIDES,
-    style: stCurrentDesign.style
+function sShowView(id) {
+  ['sInputView', 'sEditorView', 'sResultView'].forEach(v => {
+    const el = document.getElementById(v);
+    if (el) el.style.display = v === id ? '' : 'none';
   });
 }
 
 // ════════════════════════════════════════════
-// Main Designer Renderer
+// Step 1: Input View
 // ════════════════════════════════════════════
 
-function stRenderDesigner() {
-  // Use the Brand panel for everything
-  const panel = document.getElementById('stPanelBrand');
-  if (!panel) return;
+function sRenderColorPresets() {
+  const el = document.getElementById('sColorPresets');
+  if (!el) return;
+  el.innerHTML = S_COLOR_PRESETS.map((p, i) => `
+    <div class="s-preset-chip ${sStyle.colors.primary === p.pri ? 'active' : ''}"
+         onclick="sApplyColorPreset(${i})" title="${p.name}">
+      <span class="s-swatch" style="background:linear-gradient(135deg,${p.pri},${p.sec})"></span>
+      <span>${p.name}</span>
+    </div>`).join('');
+}
 
-  // Hide other panels, show this one
-  document.querySelectorAll('.st-panel').forEach(p => p.classList.remove('st-panel-active'));
-  panel.classList.add('st-panel-active');
+function sApplyColorPreset(i) {
+  const p = S_COLOR_PRESETS[i];
+  sStyle.colors.background = p.bg;
+  sStyle.colors.primary = p.pri;
+  sStyle.colors.secondary = p.sec;
+  sStyle.colors.tertiary = p.ter;
+  sSaveStyle();
+  sRenderColorPresets();
+  if (sProjectId) sRefreshPreview();
+}
 
-  const style = stCurrentDesign.style || {};
-  const c = style.colors || {};
-  const f = style.fonts || {};
-  const d = style.decorations || {};
+function sSaveStyle() {
+  try { localStorage.setItem('story_style', JSON.stringify(sStyle)); } catch (_) {}
+}
 
-  panel.innerHTML = `
-    <div class="st-customize-with-preview">
-      <div class="st-controls">
-        <!-- Preset bar -->
-        <div class="st-section">
-          <h4 class="st-section-title">Color Presets</h4>
-          <div class="st-preset-picker">
-            ${ST_COLOR_PRESETS.map(p => `
-              <div class="st-preset-chip ${c.primary === p.pri ? 'active' : ''}" onclick="stApplyColorPreset('${p.bg}','${p.pri}','${p.sec}','${p.ter}')">
-                <span class="st-swatch" style="background:linear-gradient(135deg,${p.pri},${p.sec});"></span> ${p.name}
-              </div>`).join('')}
-          </div>
-          <div class="st-preset-saved" id="stSavedPresets"></div>
-        </div>
+function sRestoreInput() {
+  const saved = sessionStorage.getItem('story_last_text');
+  if (saved) {
+    const ta = document.getElementById('sTextInput');
+    if (ta) ta.value = saved;
+  }
+}
 
-        <!-- Colors -->
-        <div class="st-section">
-          <h4 class="st-section-title">Colors</h4>
-          ${stColorRow('Background', 'colors.background', c.background || '#0a0a12')}
-          ${stColorRow('Primary', 'colors.primary', c.primary || '#7B2FF2')}
-          ${stColorRow('Secondary', 'colors.secondary', c.secondary || '#C084FC')}
-          ${stColorRow('Accent', 'colors.tertiary', c.tertiary || '#E9D5FF')}
-          ${stColorRow('Text', 'colors.text', c.text || '#ffffff')}
-        </div>
+async function sGeneratePreview() {
+  const ta = document.getElementById('sTextInput');
+  const text = ta ? ta.value.trim() : '';
+  if (!text) { showToast('Paste some text first', 'warning'); return; }
 
-        <!-- Fonts -->
-        <div class="st-section">
-          <h4 class="st-section-title">Fonts</h4>
-          <div class="st-row">
-            <span class="st-row-label">Headlines</span>
-            <select class="st-select" onchange="stUpdateStyle('fonts.headline', this.value)">
-              ${ST_FONTS.map(fn => `<option value="${fn}" ${f.headline === fn ? 'selected' : ''}>${fn}</option>`).join('')}
-            </select>
-          </div>
-          <div class="st-row">
-            <span class="st-row-label">Body Text</span>
-            <select class="st-select" onchange="stUpdateStyle('fonts.body', this.value)">
-              ${ST_FONTS.map(fn => `<option value="${fn}" ${f.body === fn ? 'selected' : ''}>${fn}</option>`).join('')}
-            </select>
-          </div>
-        </div>
+  const countEl = document.querySelector('.s-count-btn.active');
+  const count = countEl ? parseInt(countEl.dataset.count) : 5;
 
-        <!-- Decorations -->
-        <div class="st-section">
-          <h4 class="st-section-title">Decorations</h4>
-          ${stToggleRow('Top gradient line', 'decorations.topLine', d.topLine !== false)}
-          ${stToggleRow('Slide indicator (1/5)', 'decorations.slideIndicator', d.slideIndicator !== false)}
-          ${stToggleRow('Corner circles', 'decorations.cornerCircles', d.cornerCircles !== false)}
-          ${stToggleRow('Background glow', 'decorations.backgroundGlow', d.backgroundGlow !== false)}
-        </div>
+  sessionStorage.setItem('story_last_text', text);
+  sSourceText = text;
 
-        <!-- Actions -->
-        <div class="st-section" style="display:flex;flex-direction:column;gap:8px;">
-          <button class="btn btn-primary btn-sm" onclick="stSetAsActive()" style="width:100%;">✨ Set as Active Design</button>
-          <button class="btn btn-ghost btn-sm" onclick="stSaveAsPreset()" style="width:100%;">💾 Save as Preset</button>
-          <button class="btn btn-ghost btn-sm" onclick="stTestExport()" style="width:100%;">📤 Test Export (Sample PNGs)</button>
-        </div>
-      </div>
+  const btn = document.getElementById('sGenerateBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating...';
 
-      <!-- Live preview -->
-      <div class="st-preview-side st-preview-side-large">
-        <div class="st-preview-slide-label" id="stSlideLabel">${ST_SLIDE_NAMES[stPreviewSlide]} — Slide ${stPreviewSlide + 1}/5</div>
-        <div class="st-live-phone st-live-phone-large" id="stLivePhone"></div>
-        <div class="st-preview-dots" id="stPreviewDots"></div>
-        <div class="st-preview-hint">Sample content — AI generates real content when you create a task</div>
-      </div>
-    </div>`;
+  try {
+    const res = await safeFetch('/api/story/generate-content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, slide_count: count, style: sStyle })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Generation failed');
 
-  stRenderSavedPresets();
-  stRenderLivePreview();
+    sSlides = data.slides;
+    sProjectId = data.project_id;
+    sSelectedSlide = 0;
+    sShowEditorView();
+  } catch (e) {
+    showToast('Failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Generate Preview';
+  }
+}
+
+function sSetSlideCount(count) {
+  document.querySelectorAll('.s-count-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.count) === count));
 }
 
 // ════════════════════════════════════════════
-// Controls
+// Step 2: Editor View
 // ════════════════════════════════════════════
 
-function stColorRow(label, path, value) {
-  return `
-    <div class="st-row">
-      <span class="st-row-label">${label}</span>
-      <div class="st-row-value">
-        <input type="color" class="st-color-swatch" value="${value}" oninput="stUpdateStyle('${path}', this.value); this.nextElementSibling.value = this.value">
-        <input type="text" class="st-color-input" value="${value}" onchange="stUpdateStyle('${path}', this.value); this.previousElementSibling.value = this.value">
+function sShowEditorView() {
+  sShowView('sEditorView');
+  sRenderSlideList();
+  sRenderSlideEditor(0);
+  sRenderStylePanel();
+  sRefreshPreview();
+}
+
+function sRenderSlideList() {
+  const el = document.getElementById('sSlideList');
+  if (!el) return;
+  el.innerHTML = sSlides.map((slide, i) => `
+    <div class="s-slide-tab ${i === sSelectedSlide ? 'active' : ''}" onclick="sSelectSlide(${i})">
+      <span class="s-slide-num">${i + 1}</span>
+      <span class="s-slide-type">${S_SLIDE_LABELS[slide.type] || slide.type}</span>
+      <span class="s-slide-preview-text">${sSlidePreviewText(slide)}</span>
+    </div>`).join('');
+}
+
+function sSlidePreviewText(slide) {
+  const text = slide.headline || slide.eyebrow || (slide.pains && slide.pains[0]) || (slide.actions && slide.actions[0]) || slide.big_number || '';
+  return escHtml(text.slice(0, 30)) + (text.length > 30 ? '…' : '');
+}
+
+function sSelectSlide(i) {
+  sSelectedSlide = i;
+  sRenderSlideList();
+  sRenderSlideEditor(i);
+  sRefreshPreview();
+}
+
+function sRenderSlideEditor(i) {
+  const el = document.getElementById('sSlideFields');
+  if (!el || !sSlides[i]) return;
+  const slide = sSlides[i];
+  let html = `<div class="s-editor-header">
+    <span class="s-editor-slide-label">Slide ${i + 1} — ${S_SLIDE_LABELS[slide.type] || slide.type}</span>
+    <button class="s-regen-btn" onclick="sRegenSlide(${i})" title="Rewrite with AI">🔄 Rewrite</button>
+  </div>`;
+
+  switch (slide.type) {
+    case 'hook':
+      html += sField('Eyebrow', `sSlides[${i}].eyebrow`, slide.eyebrow || '', 'short label (e.g. REAL TALK)');
+      html += sField('Headline', `sSlides[${i}].headline`, slide.headline || '', 'main bold statement');
+      html += sField('Subtext', `sSlides[${i}].subtext`, slide.subtext || '', 'supporting line');
+      html += sField('Emphasis', `sSlides[${i}].emphasis`, slide.emphasis || '', 'strong ending (optional)');
+      break;
+    case 'pain':
+      html += sField('Headline', `sSlides[${i}].headline`, slide.headline || '');
+      html += sList('Pain Points', i, 'pains', slide.pains || []);
+      break;
+    case 'shift':
+      html += sField('Headline', `sSlides[${i}].headline`, slide.headline || '');
+      html += sList('Bullet Points', i, 'actions', slide.actions || []);
+      break;
+    case 'proof':
+      html += sField('Big Number', `sSlides[${i}].big_number`, slide.big_number || '');
+      html += sField('Label', `sSlides[${i}].label`, slide.label || '');
+      html += sField('Context', `sSlides[${i}].context`, slide.context || '');
+      break;
+    case 'cta':
+      html += sList('"No X" Lines', i, 'nos', slide.nos || []);
+      html += sField('Price', `sSlides[${i}].price`, slide.price || '');
+      html += sField('Button Text', `sSlides[${i}].button_text`, slide.button_text || 'JOIN NOW');
+      html += sField('URL', `sSlides[${i}].url`, slide.url || '');
+      break;
+  }
+
+  // Image upload for any slide
+  const hasImg = !!slide.photo;
+  const photoPos = slide.photo_pos || 'bottom-center';
+  const photoSize = slide.photo_size || 50;
+  const photoEffect = slide.photo_effect || 'shadow';
+
+  const posGrid = [
+    ['top-left','top-center','top-right'],
+    ['center-left','center','center-right'],
+    ['bottom-left','bottom-center','bottom-right'],
+  ].map(row => row.map(p =>
+    `<div class="s-pos-cell ${photoPos === p ? 'active' : ''}" onclick="sSetPhotoPos(${i},'${p}')" title="${p}"></div>`
+  ).join('')).join('');
+
+  const effects = ['none','shadow','glow','circle','rounded','fade'];
+  const effectChips = effects.map(e =>
+    `<button type="button" class="s-effect-chip ${photoEffect === e ? 'active' : ''}" onclick="sSetPhotoEffect(${i},'${e}')">${e}</button>`
+  ).join('');
+
+  html += `<div class="s-image-section">
+    <div class="s-image-row">
+      <span class="s-field-label">Photo (optional)</span>
+      <div class="s-image-actions">
+        <input type="file" id="sPhotoInput-${i}" accept="image/*" style="display:none" onchange="sUploadPhoto(event,${i})">
+        <button type="button" class="s-img-upload-btn" onclick="document.getElementById('sPhotoInput-${i}').click()">
+          📷 ${hasImg ? 'Change' : 'Add Photo'}
+        </button>
+        ${hasImg ? `<button type="button" class="s-img-remove-btn" onclick="sRemovePhoto(${i})">✕ Remove</button>` : ''}
       </div>
-    </div>`;
+    </div>
+    ${hasImg ? `
+    <div class="s-photo-controls">
+      <div class="s-photo-ctrl-row">
+        <span class="s-photo-ctrl-label">Position</span>
+        <div class="s-pos-grid">${posGrid}</div>
+      </div>
+      <div class="s-photo-ctrl-row">
+        <span class="s-photo-ctrl-label">Size <span id="sPhotoSizeVal-${i}">${photoSize}%</span></span>
+        <input type="range" class="s-size-slider" min="20" max="90" value="${photoSize}"
+          oninput="sSetPhotoSize(${i},this.value)">
+      </div>
+      <div class="s-photo-ctrl-row">
+        <span class="s-photo-ctrl-label">Effect</span>
+        <div class="s-effect-chips">${effectChips}</div>
+      </div>
+    </div>` : ''}
+  </div>`;
+
+  el.innerHTML = html;
 }
 
-function stToggleRow(label, path, checked) {
-  return `
-    <div class="st-row">
-      <span class="st-row-label">${label}</span>
-      <label class="st-toggle">
-        <input type="checkbox" ${checked ? 'checked' : ''} onchange="stUpdateStyle('${path}', this.checked)">
-        <span class="st-toggle-slider"></span>
-      </label>
+function sField(label, path, value, placeholder = '') {
+  const isLong = value.length > 40 || label === 'Subtext' || label === 'Emphasis';
+  const id = 's_field_' + path.replace(/[^a-z0-9]/gi, '_');
+  if (isLong) {
+    return `<div class="s-field">
+      <label class="s-field-label">${label}</label>
+      <textarea class="s-field-textarea" id="${id}" placeholder="${placeholder}"
+        oninput="sSetField('${path}', this.value)">${escHtml(value)}</textarea>
     </div>`;
+  }
+  return `<div class="s-field">
+    <label class="s-field-label">${label}</label>
+    <input type="text" class="s-field-input" id="${id}" value="${escHtml(value)}" placeholder="${placeholder}"
+      oninput="sSetField('${path}', this.value)">
+  </div>`;
 }
 
-function stUpdateStyle(path, value) {
-  if (!stCurrentDesign) return;
-  if (!stCurrentDesign.style) stCurrentDesign.style = {};
+function sList(label, slideIdx, field, items) {
+  const rows = items.map((item, j) => `
+    <div class="s-list-row">
+      <input type="text" class="s-field-input" value="${escHtml(item)}"
+        oninput="sSetListItem(${slideIdx},'${field}',${j},this.value)">
+      <button class="s-list-remove" onclick="sRemoveListItem(${slideIdx},'${field}',${j})">✕</button>
+    </div>`).join('');
+  return `<div class="s-field">
+    <label class="s-field-label">${label}</label>
+    ${rows}
+    <button class="s-list-add" onclick="sAddListItem(${slideIdx},'${field}')">+ Add</button>
+  </div>`;
+}
+
+function sSetField(path, value) {
+  // path like "sSlides[0].headline"
+  const match = path.match(/sSlides\[(\d+)\]\.(.+)/);
+  if (!match) return;
+  const idx = parseInt(match[1]);
+  const key = match[2];
+  if (sSlides[idx]) sSlides[idx][key] = value;
+  sDebouncedPreview();
+}
+
+function sSetListItem(slideIdx, field, itemIdx, value) {
+  if (sSlides[slideIdx] && Array.isArray(sSlides[slideIdx][field])) {
+    sSlides[slideIdx][field][itemIdx] = value;
+    sDebouncedPreview();
+  }
+}
+
+function sAddListItem(slideIdx, field) {
+  if (sSlides[slideIdx]) {
+    if (!Array.isArray(sSlides[slideIdx][field])) sSlides[slideIdx][field] = [];
+    sSlides[slideIdx][field].push('');
+    sRenderSlideEditor(slideIdx);
+    sDebouncedPreview();
+  }
+}
+
+function sRemoveListItem(slideIdx, field, itemIdx) {
+  if (sSlides[slideIdx] && Array.isArray(sSlides[slideIdx][field])) {
+    sSlides[slideIdx][field].splice(itemIdx, 1);
+    sRenderSlideEditor(slideIdx);
+    sDebouncedPreview();
+  }
+}
+
+async function sUploadPhoto(event, slideIdx) {
+  const file = event.target.files[0];
+  if (!file || !sProjectId) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  try {
+    const res = await safeFetch(`/api/story/projects/${sProjectId}/upload-photo`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+      sSlides[slideIdx].photo = data.path;
+      // Set defaults if not already set
+      if (!sSlides[slideIdx].photo_pos) sSlides[slideIdx].photo_pos = 'bottom-center';
+      if (!sSlides[slideIdx].photo_size) sSlides[slideIdx].photo_size = 50;
+      if (!sSlides[slideIdx].photo_effect) sSlides[slideIdx].photo_effect = 'shadow';
+      sRenderSlideEditor(slideIdx);
+      sDebouncedPreview();
+    }
+  } catch (e) { showToast('Upload failed: ' + e.message, 'error'); }
+}
+
+function sRemovePhoto(slideIdx) {
+  sSlides[slideIdx].photo = '';
+  sRenderSlideEditor(slideIdx);
+  sDebouncedPreview();
+}
+
+function sSetPhotoPos(slideIdx, pos) {
+  sSlides[slideIdx].photo_pos = pos;
+  sRenderSlideEditor(slideIdx);
+  sDebouncedPreview();
+}
+
+function sSetPhotoSize(slideIdx, size) {
+  sSlides[slideIdx].photo_size = parseInt(size);
+  document.getElementById(`sPhotoSizeVal-${slideIdx}`).textContent = size + '%';
+  sDebouncedPreview();
+}
+
+function sSetPhotoEffect(slideIdx, effect) {
+  sSlides[slideIdx].photo_effect = effect;
+  sRenderSlideEditor(slideIdx);
+  sDebouncedPreview();
+}
+
+function sPrevSlide() {
+  if (sSelectedSlide > 0) sSelectSlide(sSelectedSlide - 1);
+}
+
+function sNextSlide() {
+  if (sSelectedSlide < sSlides.length - 1) sSelectSlide(sSelectedSlide + 1);
+}
+
+async function sRegenSlide(slideIdx) {
+  const slide = sSlides[slideIdx];
+  if (!slide) return;
+  const btn = document.querySelector('.s-regen-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Rewriting...'; }
+  try {
+    const res = await safeFetch('/api/story/regenerate-slide', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: sSourceText, slide_type: slide.type })
+    });
+    const data = await res.json();
+    if (data.ok && data.slide) {
+      sSlides[slideIdx] = data.slide;
+      sRenderSlideList();
+      sRenderSlideEditor(slideIdx);
+      sRefreshPreview();
+      showToast('Slide rewritten!', 'success');
+    }
+  } catch (e) { showToast('Rewrite failed: ' + e.message, 'error'); }
+  finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Rewrite'; }
+  }
+}
+
+// ════════════════════════════════════════════
+// Style Panel
+// ════════════════════════════════════════════
+
+function sRenderStylePanel() {
+  const el = document.getElementById('sStylePanel');
+  if (!el) return;
+  const c = sStyle.colors;
+  const f = sStyle.fonts;
+  const d = sStyle.decorations;
+
+  el.innerHTML = `
+    <div class="s-style-section">
+      <div class="s-style-label">Colors</div>
+      <div class="s-preset-row" id="sColorPresets"></div>
+      <div class="s-color-grid">
+        ${sColorRow('BG', 'background', c.background)}
+        ${sColorRow('Primary', 'primary', c.primary)}
+        ${sColorRow('Secondary', 'secondary', c.secondary)}
+        ${sColorRow('Text', 'text', c.text)}
+      </div>
+    </div>
+    <div class="s-style-section">
+      <div class="s-style-label">Fonts</div>
+      <select class="s-select" onchange="sSetStyleProp('fonts.headline',this.value)">
+        ${S_FONTS.map(fn => `<option ${f.headline===fn?'selected':''} value="${fn}">${fn}</option>`).join('')}
+      </select>
+    </div>
+    <div class="s-style-section">
+      <div class="s-style-label">Decorations</div>
+      ${sToggle('Top line', 'decorations.topLine', d.topLine !== false)}
+      ${sToggle('Slide indicator', 'decorations.slideIndicator', d.slideIndicator !== false)}
+      ${sToggle('Corner circles', 'decorations.cornerCircles', d.cornerCircles !== false)}
+      ${sToggle('Background glow', 'decorations.backgroundGlow', d.backgroundGlow !== false)}
+    </div>`;
+
+  sRenderColorPresets();
+}
+
+function sColorRow(label, key, value) {
+  return `<div class="s-color-row">
+    <span>${label}</span>
+    <input type="color" value="${value}" oninput="sSetStyleColor('${key}',this.value)">
+  </div>`;
+}
+
+function sToggle(label, path, checked) {
+  return `<div class="s-toggle-row">
+    <span>${label}</span>
+    <label class="st-toggle"><input type="checkbox" ${checked?'checked':''} onchange="sSetStyleProp('${path}',this.checked)"><span class="st-toggle-slider"></span></label>
+  </div>`;
+}
+
+function sSetStyleColor(key, value) {
+  sStyle.colors[key] = value;
+  sSaveStyle();
+  sDebouncedPreview();
+}
+
+function sSetStyleProp(path, value) {
   const parts = path.split('.');
-  let obj = stCurrentDesign.style;
+  let obj = sStyle;
   for (let i = 0; i < parts.length - 1; i++) {
     if (!obj[parts[i]]) obj[parts[i]] = {};
     obj = obj[parts[i]];
   }
   obj[parts[parts.length - 1]] = value;
-  stSaveDesign();
-  clearTimeout(stUpdateStyle._timer);
-  stUpdateStyle._timer = setTimeout(stRenderLivePreview, 100);
+  sSaveStyle();
+  sDebouncedPreview();
 }
 
 // ════════════════════════════════════════════
-// Presets
+// Live Preview (iframe)
 // ════════════════════════════════════════════
 
-async function stLoadPresets() {
-  try { stPresets = await stApi.listPresets(); }
-  catch (_) { stPresets = []; }
+function sDebouncedPreview() {
+  clearTimeout(sPreviewDebounce);
+  sPreviewDebounce = setTimeout(sRefreshPreview, 300);
 }
 
-function stRenderSavedPresets() {
-  const el = document.getElementById('stSavedPresets');
-  if (!el || stPresets.length === 0) return;
-  el.innerHTML = stPresets.map(p => {
-    const pri = p.style?.colors?.primary || '#7B2FF2';
-    const sec = p.style?.colors?.secondary || '#C084FC';
-    return `
-      <div class="st-preset-chip" onclick="stApplyPreset('${p.id}')">
-        <span class="st-swatch" style="background:linear-gradient(135deg,${pri},${sec});"></span> ${esc(p.name)}
-        ${p.id !== 'default-purple' ? `<span class="st-preset-delete" onclick="event.stopPropagation(); stDeletePreset('${p.id}')">&times;</span>` : ''}
-      </div>`;
-  }).join('');
-}
-
-function stApplyColorPreset(bg, pri, sec, ter) {
-  stUpdateStyle('colors.background', bg);
-  stUpdateStyle('colors.primary', pri);
-  stUpdateStyle('colors.secondary', sec);
-  stUpdateStyle('colors.tertiary', ter);
-  stRenderDesigner();
-}
-
-async function stApplyPreset(id) {
-  const preset = stPresets.find(p => p.id === id);
-  if (preset && preset.style) {
-    stCurrentDesign.style = JSON.parse(JSON.stringify(preset.style));
-    stSaveDesign();
-    stRenderDesigner();
-  }
-}
-
-async function stSaveAsPreset() {
-  const name = prompt('Preset name:');
-  if (!name) return;
+async function sRefreshPreview() {
+  if (!sProjectId) return;
   try {
-    const res = await stApi.createPreset({
-      name,
-      style: JSON.parse(JSON.stringify(stCurrentDesign.style))
+    await safeFetch(`/api/story/projects/${sProjectId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slides: sSlides, style: sStyle })
     });
-    if (res.ok) {
-      stPresets.push(res.preset);
-      stRenderSavedPresets();
-      showToast('Preset saved!', 'success');
-    }
   } catch (_) {}
-}
 
-async function stDeletePreset(id) {
-  try {
-    await stApi.deletePreset(id);
-    stPresets = stPresets.filter(p => p.id !== id);
-    stRenderSavedPresets();
-  } catch (_) {}
-}
+  const iframe = document.getElementById('sPreviewFrame');
+  if (!iframe) return;
+  // Scale 1080px content into 210px preview (scale = 210/1080 ≈ 0.194)
+  // Use position:absolute + transformOrigin '0 0' so it clips correctly inside .s-phone-wrap
+  const scale = 210 / 1080;
+  iframe.style.position = 'absolute';
+  iframe.style.top = '0';
+  iframe.style.left = '0';
+  iframe.style.width = '1080px';
+  iframe.style.height = '1920px';
+  iframe.style.transform = `scale(${scale})`;
+  iframe.style.transformOrigin = '0 0';
+  iframe.src = `/api/story/projects/${sProjectId}/preview/${sSelectedSlide}?t=${Date.now()}`;
 
-// ════════════════════════════════════════════
-// Set as Active Design
-// ════════════════════════════════════════════
-
-async function stSetAsActive() {
-  if (!stCurrentDesign) return;
-  try {
-    await stSaveDesignNow();
-    await safeFetch(`/api/story/projects/${stCurrentDesign.id}/set-active`, { method: 'POST' });
-    showToast('Design set as active! AI will use this design for new story tasks.', 'success');
-  } catch (e) {
-    showToast('Failed: ' + e.message, 'error');
-  }
-}
-
-// ════════════════════════════════════════════
-// Test Export (Sample PNGs)
-// ════════════════════════════════════════════
-
-async function stTestExport() {
-  if (!stCurrentDesign) return;
-  try {
-    showToast('Generating sample PNGs with your design...', 'info');
-    await stSaveDesignNow();
-    const res = await stApi.exportDesign(stCurrentDesign.id);
-    if (res.ok && res.pngs && res.pngs.length > 0) {
-      showToast(`${res.pngs.length} sample PNGs exported!`, 'success');
-      // Show thumbnails below the preview
-      const previewSide = document.querySelector('.st-preview-side-large');
-      let exportDiv = document.getElementById('stExportResults');
-      if (!exportDiv) {
-        exportDiv = document.createElement('div');
-        exportDiv.id = 'stExportResults';
-        exportDiv.className = 'st-export-results';
-        previewSide.appendChild(exportDiv);
-      }
-      exportDiv.innerHTML = `
-        <div style="font-size:11px;color:#4ade80;margin-bottom:6px;">Sample PNGs:</div>
-        <div class="st-export-preview">
-          ${res.pngs.map((f, i) => `<a href="/${f}" target="_blank"><img src="/${f}?t=${Date.now()}" style="height:80px;border-radius:4px;border:1px solid rgba(255,255,255,0.1);"></a>`).join('')}
-        </div>`;
-    } else {
-      showToast(res.note || 'HTML exported (no Chrome for PNGs)', 'warning');
-    }
-  } catch (e) {
-    showToast('Export failed: ' + e.message, 'error');
-  }
-}
-
-// ════════════════════════════════════════════
-// Live Preview Engine
-// ════════════════════════════════════════════
-
-function stRenderLivePreview() {
-  const phoneEl = document.getElementById('stLivePhone');
-  const dotsEl = document.getElementById('stPreviewDots');
-  const labelEl = document.getElementById('stSlideLabel');
-  if (!phoneEl || !stCurrentDesign) return;
-
-  const style = stCurrentDesign.style || {};
-  const slide = ST_SAMPLE_SLIDES[stPreviewSlide] || ST_SAMPLE_SLIDES[0];
-  const html = stBuildSlidePreview(slide, stPreviewSlide, 5, style);
-
-  phoneEl.innerHTML = `<div class="st-phone-inner">${html}</div>`;
-
-  if (labelEl) labelEl.textContent = `${ST_SLIDE_NAMES[stPreviewSlide]} — Slide ${stPreviewSlide + 1}/5`;
-
+  // Render preview dots
+  const dotsEl = document.getElementById('sPreviewDots');
   if (dotsEl) {
-    dotsEl.innerHTML = ST_SAMPLE_SLIDES.map((_, i) =>
-      `<span class="st-dot ${i === stPreviewSlide ? 'active' : ''}" onclick="stPreviewSlide=${i}; stStopAutoSlide(); stRenderLivePreview();"></span>`
+    dotsEl.innerHTML = sSlides.map((_, i) =>
+      `<div class="s-preview-dot ${i === sSelectedSlide ? 'active' : ''}" onclick="sPreviewSlide(${i})"></div>`
     ).join('');
   }
 }
 
-function stBuildSlidePreview(slide, index, total, style) {
-  const c = style.colors || {};
-  const f = style.fonts || {};
-  const d = style.decorations || {};
-  const bg = c.background || '#0a0a12';
-  const pri = c.primary || '#7B2FF2';
-  const sec = c.secondary || '#C084FC';
-  const ter = c.tertiary || '#E9D5FF';
-  const txt = c.text || '#ffffff';
-  const hFont = f.headline || 'Playfair Display';
-  const bFont = f.body || 'Inter';
+function sPreviewSlide(i) {
+  sSelectedSlide = i;
+  sRenderSlideList();
+  sRenderSlideEditor(i);
+  sRefreshPreview();
+  // Update dots
+  document.querySelectorAll('.s-preview-dot').forEach((d, idx) => d.classList.toggle('active', idx === i));
+}
 
-  const topLine = d.topLine !== false ? `<div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,${pri},${sec});"></div>` : '';
-  const indicator = d.slideIndicator !== false ? `<div style="position:absolute;top:12px;right:12px;font-family:'${bFont}',sans-serif;font-size:7px;font-weight:700;color:${pri};">${index + 1}/${total}</div>` : '';
-  const glow = d.backgroundGlow !== false ? `<div style="position:absolute;top:50%;left:50%;width:70%;height:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,${pri}15 0%,transparent 70%);pointer-events:none;"></div>` : '';
-  const circles = d.cornerCircles !== false ? `
-    <div style="position:absolute;bottom:25px;right:-8px;width:32px;height:32px;border-radius:50%;border:1px solid ${pri}20;pointer-events:none;"></div>` : '';
+// ════════════════════════════════════════════
+// Step 3: Generate PNGs
+// ════════════════════════════════════════════
 
-  let content = '';
-  switch (slide.type) {
-    case 'hook':
-      content = `
-        <div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:16px;">
-          ${slide.eyebrow ? `<div style="font-family:'${bFont}',sans-serif;font-size:6px;font-weight:600;letter-spacing:1.5px;color:${sec};margin-bottom:8px;text-transform:uppercase;">${esc(slide.eyebrow)}</div>` : ''}
-          <div style="font-family:'${hFont}',serif;font-size:18px;font-weight:800;line-height:1.1;letter-spacing:-0.5px;margin-bottom:6px;">${esc(slide.headline || '')}</div>
-          ${slide.subtext ? `<div style="font-size:8px;font-weight:500;color:${txt}cc;line-height:1.3;">${esc(slide.subtext)}</div>` : ''}
-          ${slide.emphasis ? `<div style="font-family:'${hFont}',serif;font-size:10px;font-weight:700;color:${sec};margin-top:6px;font-style:italic;">${esc(slide.emphasis)}</div>` : ''}
-        </div>`;
-      break;
-    case 'pain':
-      const pains = (slide.pains || []).slice(0, 3).map(p => `
-        <div style="padding:6px 8px 6px 10px;border-left:2px solid ${pri};margin-bottom:5px;position:relative;">
-          <div style="font-size:7px;font-weight:500;color:${txt}dd;line-height:1.3;">${esc(p)}</div>
-        </div>`).join('');
-      content = `
-        <div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:16px;">
-          <div style="font-family:'${hFont}',serif;font-size:14px;font-weight:800;margin-bottom:12px;">${esc(slide.headline || '')}</div>
-          ${pains}
-        </div>`;
-      break;
-    case 'shift':
-      const actions = (slide.actions || []).slice(0, 3).map(a => `
-        <div style="display:flex;align-items:flex-start;gap:4px;margin-bottom:4px;">
-          <div style="width:6px;height:6px;border-radius:50%;background:${pri};flex-shrink:0;margin-top:2px;"></div>
-          <div style="font-size:7px;font-weight:500;color:${txt}dd;line-height:1.3;">${esc(a)}</div>
-        </div>`).join('');
-      content = `
-        <div style="position:absolute;inset:0;display:flex;flex-direction:column;padding:16px;justify-content:center;">
-          <div style="font-family:'${hFont}',serif;font-size:14px;font-weight:800;margin-bottom:10px;">${esc(slide.headline || '')}</div>
-          ${actions}
-        </div>`;
-      break;
-    case 'proof':
-      content = `
-        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:16px;">
-          <div style="font-family:'${hFont}',serif;font-size:42px;font-weight:900;line-height:1;background:linear-gradient(135deg,${pri},${sec});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">${esc(slide.big_number || '0')}</div>
-          <div style="font-size:10px;font-weight:700;margin-top:4px;letter-spacing:0.5px;">${esc(slide.label || '')}</div>
-          <div style="font-size:7px;color:${txt}99;margin-top:3px;">${esc(slide.context || '')}</div>
-        </div>`;
-      break;
-    case 'cta':
-      const nos = (slide.nos || []).slice(0, 3).map(n => `
-        <div style="font-size:7px;font-weight:500;color:${txt}cc;margin-bottom:3px;">
-          <span style="color:${pri};margin-right:3px;">✕</span> ${esc(n)}
-        </div>`).join('');
-      content = `
-        <div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:16px;">
-          ${nos}
-          <div style="width:100%;height:1px;background:linear-gradient(90deg,transparent,${pri}40,transparent);margin:8px 0;"></div>
-          <div style="text-align:center;">
-            ${slide.price ? `<div style="font-family:'${hFont}',serif;font-size:22px;font-weight:900;background:linear-gradient(135deg,${pri},${sec});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px;">${esc(slide.price)}</div>` : ''}
-            <div style="display:inline-block;padding:5px 16px;background:linear-gradient(135deg,${pri},${sec});border-radius:12px;font-size:7px;font-weight:700;color:#fff;letter-spacing:0.5px;">${esc(slide.button_text || 'JOIN NOW')}</div>
-            ${slide.url ? `<div style="font-size:5px;color:${txt}66;margin-top:4px;">${esc(slide.url)}</div>` : ''}
-          </div>
-        </div>`;
-      break;
+async function sGeneratePNGs() {
+  if (!sProjectId || !sSlides.length) return;
+
+  // Save latest state first
+  try {
+    await safeFetch(`/api/story/projects/${sProjectId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slides: sSlides, style: sStyle })
+    });
+  } catch (_) {}
+
+  sShowView('sResultView');
+  sRenderResultView('generating');
+
+  try {
+    const res = await safeFetch(`/api/story/projects/${sProjectId}/export`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    const data = await res.json();
+
+    if (data.ok && data.pngs && data.pngs.length > 0) {
+      sExportDir = data.export_dir;
+      sRenderResultView('done', data.pngs);
+    } else {
+      sRenderResultView('error', [], data.note || 'Export failed');
+    }
+  } catch (e) {
+    sRenderResultView('error', [], e.message);
+  }
+}
+
+function sRenderResultView(state, pngs = [], message = '') {
+  const el = document.getElementById('sResultContent');
+  if (!el) return;
+
+  if (state === 'generating') {
+    el.innerHTML = `
+      <div class="s-generating">
+        <div class="s-gen-spinner"></div>
+        <div class="s-gen-title">Rendering your slides...</div>
+        <div class="s-gen-sub">Launching headless browser, rendering at 1080×1920px</div>
+        <div class="s-gen-dots">
+          ${sSlides.map((_, i) => `<div class="s-gen-dot" id="sGenDot${i}"></div>`).join('')}
+        </div>
+      </div>`;
+    // Animate dots while waiting
+    let dot = 0;
+    const dotInterval = setInterval(() => {
+      document.querySelectorAll('.s-gen-dot').forEach((d, i) => d.classList.toggle('active', i === dot));
+      dot = (dot + 1) % sSlides.length;
+    }, 400);
+    el._dotInterval = dotInterval;
+    return;
   }
 
-  return `
-    <div style="width:100%;height:100%;position:relative;overflow:hidden;background:${bg};color:${txt};font-family:'${bFont}',sans-serif;border-radius:8px;">
-      ${topLine}${indicator}${glow}${circles}
-      ${content}
+  if (el._dotInterval) clearInterval(el._dotInterval);
+
+  if (state === 'error') {
+    el.innerHTML = `
+      <div class="s-result-error">
+        <div class="s-result-error-title">⚠️ Export issue</div>
+        <div class="s-result-error-msg">${escHtml(message)}</div>
+        <div class="s-result-actions">
+          <button class="s-back-btn" onclick="sShowEditorView()">← Back to Editor</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Done — reveal slides one by one
+  const slideCards = pngs.map((p, i) => `
+    <div class="s-result-card" id="sResultCard${i}" style="opacity:0;transform:translateY(16px)">
+      <div class="s-result-num">${i + 1}</div>
+      <a href="/${p}" target="_blank">
+        <img src="/${p}?t=${Date.now()}" class="s-result-thumb" alt="Slide ${i+1}">
+      </a>
+      <div class="s-result-card-label">${S_SLIDE_LABELS[sSlides[i]?.type] || 'Slide'}</div>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="s-result-header">
+      <div class="s-result-title">✅ ${pngs.length} slides ready</div>
+      <div class="s-result-sub">1080×1920px • Ready for FB/IG Stories</div>
+    </div>
+    <div class="s-result-grid">${slideCards}</div>
+    <div class="s-result-actions">
+      <button class="s-open-folder-btn" onclick="sOpenFolder()">📁 Open Folder</button>
+      <button class="s-back-btn" onclick="sShowEditorView()">← Back to Editor</button>
+      <button class="s-restart-btn" onclick="sStartOver()">🔄 New Story</button>
     </div>`;
+
+  // Animate cards in one by one
+  pngs.forEach((_, i) => {
+    setTimeout(() => {
+      const card = document.getElementById(`sResultCard${i}`);
+      if (card) { card.style.transition = 'opacity 0.3s ease, transform 0.3s ease'; card.style.opacity = '1'; card.style.transform = 'translateY(0)'; }
+    }, i * 150);
+  });
+}
+
+async function sOpenFolder() {
+  if (!sExportDir) return;
+  try {
+    await safeFetch('/api/story/open-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder_path: sExportDir })
+    });
+  } catch (_) {}
+}
+
+function sStartOver() {
+  sSlides = [];
+  sProjectId = null;
+  sExportDir = null;
+  sSelectedSlide = 0;
+  sShowView('sInputView');
+  sLoadProjects();
 }
 
 // ── Helpers ──
-// Uses global esc() from board.js (escHtml)
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}

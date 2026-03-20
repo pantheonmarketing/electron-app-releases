@@ -761,31 +761,86 @@
 
   <!-- ═══ View: Story Editor ═══ -->
   <div class="view view-stories" id="storiesView">
-    <!-- Landing (design list) -->
-    <div class="st-landing" id="stLanding">
-      <div class="st-landing-header">
-        <span class="st-landing-title">Story Brand Designer</span>
-        <button class="btn btn-primary" onclick="stNewDesign()">+ New Design</button>
+
+    <!-- Step 1: Input -->
+    <div id="sInputView" class="s-view">
+      <div class="s-input-layout">
+        <div class="s-input-left">
+          <div class="s-input-header">
+            <div class="s-input-title">Story Slides</div>
+            <div class="s-input-sub">Paste your content, pick a style, and AI builds your slides instantly.</div>
+          </div>
+          <textarea id="sTextInput" class="s-textarea" placeholder="Paste your content here — a Facebook post, caption, notes, or just a topic idea. AI will turn it into a story carousel..."></textarea>
+          <div class="s-options-row">
+            <div class="s-option-group">
+              <div class="s-option-label">Slides</div>
+              <div class="s-count-pills">
+                <button class="s-count-btn" data-count="3" onclick="sSetSlideCount(3)">3</button>
+                <button class="s-count-btn" data-count="4" onclick="sSetSlideCount(4)">4</button>
+                <button class="s-count-btn active" data-count="5" onclick="sSetSlideCount(5)">5</button>
+                <button class="s-count-btn" data-count="6" onclick="sSetSlideCount(6)">6</button>
+                <button class="s-count-btn" data-count="7" onclick="sSetSlideCount(7)">7</button>
+              </div>
+            </div>
+            <div class="s-option-group">
+              <div class="s-option-label">Color</div>
+              <div id="sColorPresets" class="s-preset-row"></div>
+            </div>
+          </div>
+          <button id="sGenerateBtn" class="s-generate-btn" onclick="sGeneratePreview()">✨ Generate Preview</button>
+        </div>
+        <div class="s-input-right">
+          <div class="s-how-it-works">
+            <div class="s-hiw-title">How it works</div>
+            <div class="s-hiw-step"><span class="s-hiw-num">1</span><span>Paste any text or topic</span></div>
+            <div class="s-hiw-step"><span class="s-hiw-num">2</span><span>AI structures it into slides</span></div>
+            <div class="s-hiw-step"><span class="s-hiw-num">3</span><span>Edit text, add photos, tweak colors</span></div>
+            <div class="s-hiw-step"><span class="s-hiw-num">4</span><span>Generate 1080x1920 PNGs</span></div>
+            <div class="s-hiw-step"><span class="s-hiw-num">5</span><span>Open folder and post to Stories</span></div>
+          </div>
+          <div class="s-projects-panel">
+            <div class="s-projects-title">Recent Projects</div>
+            <div id="sProjectList" class="s-proj-list"><div class="s-proj-empty">Loading...</div></div>
+          </div>
+        </div>
       </div>
-      <div class="st-landing-subtitle">Design how your story slides look. Then tell AI "make story slides about X" and it uses your design.</div>
-      <div class="st-project-list" id="stProjectList"></div>
     </div>
 
-    <!-- Designer (active design) -->
-    <div class="st-studio" id="stStudio" style="display:none;">
-      <div class="st-studio-toolbar">
-        <button class="st-toolbar-back" onclick="stBackToList()" title="Back to designs">&larr;</button>
-        <input type="text" class="st-toolbar-name" id="stProjectName" placeholder="Design name..." onchange="stSaveDesign()">
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" onclick="stSaveDesign()">&#128190; Save</button>
+    <!-- Step 2: Editor + Preview -->
+    <div id="sEditorView" class="s-view" style="display:none">
+      <div class="s-editor-layout">
+        <div class="s-editor-left">
+          <div class="s-editor-topbar">
+            <button class="s-back-link" onclick="sShowView('sInputView')">&#8592; Back</button>
+            <span class="s-editor-header-title">Edit Slides</span>
+          </div>
+          <div id="sSlideList" class="s-slide-list"></div>
+          <div id="sSlideFields" class="s-slide-fields"></div>
+          <button class="s-export-btn" onclick="sGeneratePNGs()">&#128444; Generate PNGs</button>
+        </div>
+        <div class="s-preview-col">
+          <div class="s-preview-label">Live Preview</div>
+          <div class="s-preview-nav-row">
+            <button class="s-nav-arrow" onclick="sPrevSlide()" title="Previous slide">&#8249;</button>
+            <div class="s-phone-wrap">
+              <iframe id="sPreviewFrame" class="s-preview-iframe" src="about:blank" scrolling="no"></iframe>
+            </div>
+            <button class="s-nav-arrow" onclick="sNextSlide()" title="Next slide">&#8250;</button>
+          </div>
+          <div class="s-preview-dots" id="sPreviewDots"></div>
+        </div>
+        <div class="s-style-col">
+          <div class="s-style-title">Style</div>
+          <div id="sStylePanel"></div>
+        </div>
       </div>
-
-      <div class="st-step-progress" id="stStepProgress">Design your story brand</div>
-      <div class="st-steps" id="stSteps" style="display:none;"></div>
-
-      <!-- Single panel for the brand designer -->
-      <div class="st-panel st-panel-active" id="stPanelBrand"></div>
     </div>
+
+    <!-- Step 3: Results -->
+    <div id="sResultView" class="s-view" style="display:none">
+      <div id="sResultContent" class="s-result-wrap"></div>
+    </div>
+
   </div><!-- /view-stories -->
 
   <!-- ═══ View: Influencer Creator ═══ -->
