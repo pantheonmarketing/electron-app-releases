@@ -843,7 +843,7 @@ router.post('/reel/projects/:projectId/render', (req, res) => {
   const video = style.video || {};
   const sceneCount = (project.scenes || []).length;
   const sceneSummary = (project.scenes || []).map((s, i) =>
-    `  ${i+1}. "${s.text}" (${s.start?.toFixed(1)}s-${s.end?.toFixed(1)}s) [${s.display_mode || 'subtitles'}]${s.images?.length > 1 ? ` [${s.images.length} images - slideshow]` : s.images?.length ? ' [has image]' : ''}${s.images?.length && s.img_position && s.img_position !== 'top' ? ` [img_position: ${s.img_position}]` : ''}${s.images?.length && s.img_border && s.img_border !== 'none' ? ` [img_border: ${s.img_border}]` : ''}${s.broll?.length ? ` [has B-roll video${s.broll_span > 1 ? `, spans ${s.broll_span} scenes` : ''}${s.broll_muted === false ? ', audio ON' : ', muted'}]` : ''}${s.display_mode === 'mfx' && s.mfx_preset && s.mfx_preset !== 'none' ? ` [mfx: ${s.mfx_preset}]` : ''}${s.display_mode === 'mfx' && s.mfx_instructions ? ` [instructions: ${s.mfx_instructions}]` : ''}`
+    `  ${i+1}. "${s.text}" (${s.start?.toFixed(1)}s-${s.end?.toFixed(1)}s) [${s.display_mode || 'subtitles'}]${s.display_mode === 'mfx' && s.mfx_type && s.mfx_type !== 'words' ? ` [mfx_type: ${s.mfx_type}]` : ''}${s.display_mode === 'mfx' && s.mfx_has_bg ? ' [mfx_has_bg: true]' : ''}${s.images?.length > 1 ? ` [${s.images.length} images - slideshow]` : s.images?.length ? ' [has image]' : ''}${s.images?.length && s.img_position && s.img_position !== 'top' ? ` [img_position: ${s.img_position}]` : ''}${s.images?.length && s.img_border && s.img_border !== 'none' ? ` [img_border: ${s.img_border}]` : ''}${s.broll?.length ? ` [has B-roll video${s.broll_span > 1 ? `, spans ${s.broll_span} scenes` : ''}${s.broll_muted === false ? ', audio ON' : ', muted'}]` : ''}${s.display_mode === 'mfx' && s.mfx_preset && s.mfx_preset !== 'none' ? ` [mfx: ${s.mfx_preset}]` : ''}${s.display_mode === 'mfx' && s.mfx_instructions ? ` [instructions: ${s.mfx_instructions}]` : ''}`
   ).join('\n');
 
   // Presentation mode + MFX background
@@ -889,6 +889,12 @@ DISPLAY MODES:
 Each scene has a display_mode — 'subtitles', 'mfx', or 'none':
 - SUBTITLES: Show word-synced animated subtitles at the bottom of the screen (standard karaoke-style).
 - MFX (Motion Graphics): Animate the scene's text as the main visual element (typographic animation, kinetic text, motion graphics). The text IS the content — make it visually engaging with movement, scale, reveals, etc. If a specific preset is set (lines, corners, particles, etc.), use that style. If custom instructions are provided, follow them. If neither preset nor instructions are given, create a clean animated text presentation of the scene's words timed to the audio.
+  CRITICAL MFX LAYOUT RULE: Words MUST flow horizontally left-to-right and wrap naturally like a sentence. ALWAYS use `display:'flex', flexWrap:'wrap', justifyContent:'center', gap:'0 12px', rowGap:'10px'` on the word container. Each word span must be `display:'inline-block'`. NEVER use flexDirection:'column', NEVER put each word in its own block-level div — this causes ugly vertical stacking with one word per line.
+  MFX TYPE — each MFX scene may have a mfx_type field:
+  - "words" (default): Animated kinetic text only — words animate in over the video background.
+  - "words_fx": Animated text PLUS background animation effects (particles, geometric shapes, light trails, abstract motion) layered behind the text. Both must be visible and in sync.
+  - "fx_only": Background animation only — NO text rendered at all. Create visually stunning abstract motion graphics, particles, or geometric animations filling the screen.
+  MFX BACKGROUND — if a scene has mfx_has_bg: true, render a full-screen background layer that completely covers the video for that scene's duration. This layer sits ABOVE the video but BELOW the text/effects. Use a dark gradient (e.g. radial or linear from the primary color to near-black) or deep solid color that makes text pop. Stack order: video → bg overlay (AbsoluteFill, z-index behind text) → animated text/effects.
 - NONE (No Text): Do NOT render any text, subtitles, or motion graphics for this scene. Just show the video (and image if present). The audio still plays but no visual text appears.
 
 LAYOUT RULES (MODE: ${project.mode || 'full'}):

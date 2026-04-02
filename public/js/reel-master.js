@@ -557,6 +557,12 @@ function rmRenderTimeline() {
               <button class="rm-scene-mode-btn ${s.display_mode === 'none' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneDisplayMode(${i}, 'none')">No Text</button>
             </div>
             ${(s.display_mode === 'mfx') ? `
+            <div class="rm-scene-mfx-type-row">
+              <button class="rm-scene-mfx-type-btn ${(s.mfx_type || 'words') === 'words' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneMfxType(${i}, 'words')">Words</button>
+              <button class="rm-scene-mfx-type-btn ${(s.mfx_type || 'words') === 'words_fx' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneMfxType(${i}, 'words_fx')">Words + FX</button>
+              <button class="rm-scene-mfx-type-btn ${(s.mfx_type || 'words') === 'fx_only' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneMfxType(${i}, 'fx_only')">FX Only</button>
+              <button class="rm-scene-mfx-bg-btn ${s.mfx_has_bg ? 'active' : ''}" onclick="event.stopPropagation(); rmToggleSceneMfxBg(${i})" title="Add full-screen background layer over video">■ BG</button>
+            </div>
             <div class="rm-scene-mfx-chips">
               ${RM_MFX_PRESETS.filter(m => m.id !== 'none').map(m => `<div class="rm-scene-mfx-chip ${(s.mfx_preset || 'none') === m.id ? 'active' : ''}" title="${m.name}" onclick="event.stopPropagation(); rmUpdateSceneMfx(${i}, '${m.id}')">${m.icon}</div>`).join('')}
             </div>
@@ -639,6 +645,35 @@ function rmUpdateSceneMfx(idx, preset) {
 function rmUpdateSceneMfxInstructions(idx, value) {
   if (!rmCurrentProject || !rmCurrentProject.scenes[idx]) return;
   rmCurrentProject.scenes[idx].mfx_instructions = value;
+  rmSaveProject();
+}
+
+const RM_MFX_TYPE_PROMPTS = {
+  words_fx: 'Stunning kinetic typography with animated background effects — dynamic particles, glowing light trails, or geometric patterns that appear and move in sync with each word reveal. Make it visually captivating.',
+  fx_only: 'Full-screen motion graphics animation — no text. Dynamic particles, geometric shapes, abstract light motion, or pulsing energy patterns. Make it visually stunning and cinematic.',
+};
+
+function rmUpdateSceneMfxType(idx, type) {
+  if (!rmCurrentProject || !rmCurrentProject.scenes[idx]) return;
+  const scene = rmCurrentProject.scenes[idx];
+  scene.mfx_type = type;
+  // Auto-inject prompt when switching to an animation type
+  if (type === 'words_fx' || type === 'fx_only') {
+    const currentInstructions = scene.mfx_instructions || '';
+    const isDefault = !currentInstructions ||
+      currentInstructions === RM_MFX_TYPE_PROMPTS.words_fx ||
+      currentInstructions === RM_MFX_TYPE_PROMPTS.fx_only ||
+      currentInstructions === 'Animate this text as engaging motion graphics — kinetic typography with dynamic reveals';
+    if (isDefault) scene.mfx_instructions = RM_MFX_TYPE_PROMPTS[type];
+  }
+  rmRenderTimeline();
+  rmSaveProject();
+}
+
+function rmToggleSceneMfxBg(idx) {
+  if (!rmCurrentProject || !rmCurrentProject.scenes[idx]) return;
+  rmCurrentProject.scenes[idx].mfx_has_bg = !rmCurrentProject.scenes[idx].mfx_has_bg;
+  rmRenderTimeline();
   rmSaveProject();
 }
 
@@ -1683,7 +1718,15 @@ function rmRenderAnimationsTab() {
 
     ${RM_SUB_PRESETS.find(p => p.id === currentPreset)?.highlightBased ? `
     <div class="rm-customize-section">
-      <h4>Highlight Color</h4>
+      <h4>Word Highlight</h4>
+      <div class="rm-row" style="margin-bottom: 10px;">
+        <span class="rm-row-label">Highlight active word</span>
+        <div class="rm-row-value">
+          <button class="rm-toggle ${subAnim.highlightEnabled !== false ? 'on' : ''}"
+                  onclick="rmUpdateStyle('subtitleAnimation.highlightEnabled', ${subAnim.highlightEnabled !== false ? 'false' : 'true'}); rmRenderCustomizeTab('animations');"></button>
+        </div>
+      </div>
+      ${subAnim.highlightEnabled !== false ? `
       <div class="rm-sp-highlight-colors">
         ${RM_HIGHLIGHT_COLORS.map(c => `
           <div class="rm-sp-highlight-swatch ${highlightColor === c ? 'active' : ''}"
@@ -1693,7 +1736,7 @@ function rmRenderAnimationsTab() {
         `).join('')}
         <input type="color" value="${highlightColor}" style="width:24px;height:24px;border:none;background:none;cursor:pointer;padding:0;"
                onchange="rmUpdateStyle('subtitleAnimation.highlightColor', this.value); rmRenderCustomizeTab('animations');">
-      </div>
+      </div>` : ''}
     </div>` : ''}
 
     ${rmCurrentProject.presentationMode ? rmRenderMfxBackgroundUI() : ''}
@@ -1851,7 +1894,7 @@ function rmBuildSubtitleWordsHTML(words, presetId, sub, colors, scale) {
 
     // For highlight-based presets, use the highlight color for the active words
     const preset = RM_SUB_PRESETS.find(p => p.id === presetId);
-    if (preset?.highlightBased) {
+    if (preset?.highlightBased && subAnim.highlightEnabled !== false) {
       wordStyle = `color: ${textColor}; font-weight: 700; --rm-highlight: ${highlightColor}; ${shadowCSS}`;
     }
 
