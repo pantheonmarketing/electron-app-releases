@@ -843,7 +843,7 @@ router.post('/reel/projects/:projectId/render', (req, res) => {
   const video = style.video || {};
   const sceneCount = (project.scenes || []).length;
   const sceneSummary = (project.scenes || []).map((s, i) =>
-    `  ${i+1}. "${s.text}" (${s.start?.toFixed(1)}s-${s.end?.toFixed(1)}s) [${s.display_mode || 'subtitles'}]${s.display_mode === 'mfx' && s.mfx_type && s.mfx_type !== 'words' ? ` [mfx_type: ${s.mfx_type}]` : ''}${s.display_mode === 'mfx' && s.mfx_has_bg ? ' [mfx_has_bg: true]' : ''}${s.images?.length > 1 ? ` [${s.images.length} images - slideshow]` : s.images?.length ? ' [has image]' : ''}${s.images?.length && s.img_position && s.img_position !== 'top' ? ` [img_position: ${s.img_position}]` : ''}${s.images?.length && s.img_border && s.img_border !== 'none' ? ` [img_border: ${s.img_border}]` : ''}${s.broll?.length ? ` [has B-roll video${s.broll_span > 1 ? `, spans ${s.broll_span} scenes` : ''}${s.broll_muted === false ? ', audio ON' : ', muted'}]` : ''}${s.display_mode === 'mfx' && s.mfx_preset && s.mfx_preset !== 'none' ? ` [mfx: ${s.mfx_preset}]` : ''}${s.display_mode === 'mfx' && s.mfx_instructions ? ` [instructions: ${s.mfx_instructions}]` : ''}`
+    `  ${i+1}. "${s.text}" (${s.start?.toFixed(1)}s-${s.end?.toFixed(1)}s) [${s.display_mode || 'subtitles'}]${s.display_mode === 'mfx' && s.mfx_type && s.mfx_type !== 'words' ? ` [mfx_type: ${s.mfx_type}]` : ''}${s.display_mode === 'mfx' && s.mfx_has_bg ? ' [mfx_has_bg: true]' : ''}${s.zoom_effect && s.zoom_effect !== 'none' ? ` [zoom: ${s.zoom_effect}]` : ''}${s.images?.length > 1 ? ` [${s.images.length} images - slideshow]` : s.images?.length ? ' [has image]' : ''}${s.images?.length && (s.img_span || 1) > 1 ? ` [img_span: ${s.img_span} scenes]` : ''}${s.images?.length && s.img_position && s.img_position !== 'top' ? ` [img_position: ${s.img_position}]` : ''}${s.images?.length && s.img_border && s.img_border !== 'none' ? ` [img_border: ${s.img_border}]` : ''}${s.broll?.length ? ` [has B-roll video${s.broll_span > 1 ? `, spans ${s.broll_span} scenes` : ''}${s.broll_muted === false ? ', audio ON' : ', muted'}]` : ''}${s.display_mode === 'mfx' && s.mfx_preset && s.mfx_preset !== 'none' ? ` [mfx: ${s.mfx_preset}]` : ''}${s.display_mode === 'mfx' && s.mfx_instructions ? ` [instructions: ${s.mfx_instructions}]` : ''}`
   ).join('\n');
 
   // Presentation mode + MFX background
@@ -876,6 +876,8 @@ STYLE:
 - Colors: primary=${colors.primary}, secondary=${colors.secondary}, text=${colors.text}, bg=${colors.background}
 - Heading: ${style.font?.family || 'Playfair Display'} ${style.font?.size || 48}px weight ${style.font?.weight || 700}
 - Subtitle: ${sub.family || 'Inter'} ${sub.size || 32}px, position=${sub.position || 'bottom'}, shadow=${sub.shadow !== false}, maxWords=${sub.maxWords || 6}
+- Subtitle animation preset: ${style.subtitleAnimation?.preset || 'classic'}${style.subtitleAnimation?.preset === 'plain' ? ' — PLAIN STYLE: standard TV/movie subtitles. Group words into chunks (max ${sub.maxWords||6} words). The ENTIRE chunk appears together at once — no word-by-word timing at all. Show the chunk for its full duration (first word start → last word end), then swap to the next chunk instantly. Simple fade-in (opacity 0→1 over 3-4 frames) on the whole group. No per-word animation whatsoever.' : style.subtitleAnimation?.preset === 'snap' ? ' — SNAP STYLE: words must appear INSTANTLY with zero transition/fade. Each word goes from opacity 0 to opacity 1 in a single frame (use steps(1) or instant opacity toggle). No easing, no movement, no blur. Pure hard cut.' : ''}
+- Highlight word: ${style.subtitleAnimation?.highlightEnabled === false ? 'DISABLED — do NOT highlight the active/current word. All words must be identical in size, color, and style.' : `ENABLED — highlight the currently-speaking word in color ${style.subtitleAnimation?.highlightColor || colors.primary || '#7B2FF2'}. CRITICAL: the highlighted word must be EXACTLY the same font-size as all other words — do NOT scale it, do NOT make it larger or smaller. Only change the color (and optionally font-weight to bold). Never use fontSize, transform, or scale on the highlighted word span.`}
 - Animation: type=${anim.type || 'spring'}, damping=${anim.damping || 18}, stiffness=${anim.stiffness || 120}, mass=${anim.mass || 0.7}
 - Video: zoom=${video.zoom || 1}, offsetX=${video.offsetX || 0}%, offsetY=${video.offsetY || 0}%
 - Mode: ${project.mode || 'full'} (full = video fills 100%, images overlay on top; split = separate image zone on top, video at bottom)
@@ -888,13 +890,37 @@ OUTPUT: ${project.output.width}x${project.output.height} @ ${project.output.fps}
 DISPLAY MODES:
 Each scene has a display_mode — 'subtitles', 'mfx', or 'none':
 - SUBTITLES: Show word-synced animated subtitles at the bottom of the screen (standard karaoke-style).
-- MFX (Motion Graphics): Animate the scene's text as the main visual element (typographic animation, kinetic text, motion graphics). The text IS the content — make it visually engaging with movement, scale, reveals, etc. If a specific preset is set (lines, corners, particles, etc.), use that style. If custom instructions are provided, follow them. If neither preset nor instructions are given, create a clean animated text presentation of the scene's words timed to the audio.
-  CRITICAL MFX LAYOUT RULE: Words MUST flow horizontally left-to-right and wrap naturally like a sentence. ALWAYS use `display:'flex', flexWrap:'wrap', justifyContent:'center', gap:'0 12px', rowGap:'10px'` on the word container. Each word span must be `display:'inline-block'`. NEVER use flexDirection:'column', NEVER put each word in its own block-level div — this causes ugly vertical stacking with one word per line.
+- MFX (Motion Graphics): Create premium motion graphics for this scene. You have FULL creative freedom to build rich visual compositions — not just text. Think like a professional motion graphics designer.
+  PREMIUM VISUAL ELEMENTS you can and should create (especially when mfx_has_bg is true):
+  - Animated SVG icons or shapes inline in JSX (circles, hexagons, lines, arrows, custom paths) with glowing borders, pulsing rings, fill animations
+  - Icon badge rows: glowing circular containers with SVG icons inside, staggered fade/scale animations (like a feature list or step sequence)
+  - Stat cards: bold number + label in a glass-morphism card with subtle border glow
+  - Step indicators: numbered circles connected by animated lines
+  - Geometric accent elements: corner decorations, animated underlines, light streaks, scan lines
+  - Particle fields, floating orbs, grid overlays, radial light bursts as background texture
+  - Lower-third bars: colored pill/rectangle sliding in with text
+  - ALL elements must be built with pure React inline styles + SVG — no external icon libraries. Draw icons as SVG paths directly.
+  If custom instructions are provided, follow them precisely. If a preset is set, use that style. If neither, use the scene text as a guide to what kind of graphic would make sense (e.g. "6 steps" → animated icon row of 6 items, "results" → stat cards, "how it works" → numbered steps with connecting line).
+  CRITICAL MFX LAYOUT RULE: Words MUST flow horizontally left-to-right and wrap naturally like a sentence. ALWAYS use display:flex, flexWrap:wrap, justifyContent:center, gap:'0 12px', rowGap:'10px' on the word container. Each word span must be display:inline-block. NEVER use flexDirection:column, NEVER put each word in its own block-level div — this causes ugly vertical stacking with one word per line.
   MFX TYPE — each MFX scene may have a mfx_type field:
   - "words" (default): Animated kinetic text only — words animate in over the video background.
-  - "words_fx": Animated text PLUS background animation effects (particles, geometric shapes, light trails, abstract motion) layered behind the text. Both must be visible and in sync.
-  - "fx_only": Background animation only — NO text rendered at all. Create visually stunning abstract motion graphics, particles, or geometric animations filling the screen.
-  MFX BACKGROUND — if a scene has mfx_has_bg: true, render a full-screen background layer that completely covers the video for that scene's duration. This layer sits ABOVE the video but BELOW the text/effects. Use a dark gradient (e.g. radial or linear from the primary color to near-black) or deep solid color that makes text pop. Stack order: video → bg overlay (AbsoluteFill, z-index behind text) → animated text/effects.
+  - "words_fx": Animated text PLUS rich visual elements (icons, shapes, particles, geometric accents) layered with the text. Both text and visuals must be prominent and in sync.
+  - "fx_only": Full visual composition — NO spoken text rendered. Create a visually stunning scene using icons, shapes, particles, stats, step diagrams, or abstract motion. This is a pure visual moment.
+  MFX BACKGROUND — if a scene has mfx_has_bg: true:
+  - The background must be a SOLID OPAQUE layer that COMPLETELY COVERS the video. The viewer should see ZERO video behind it.
+  - NEVER use rgba() with alpha < 1. NEVER use opacity < 1 on the background. The background must be fully opaque solid color or gradient.
+  - WRONG: style={{background: 'rgba(6,14,20,0.8)'}} or style={{opacity: 0.85}}
+  - RIGHT: style={{background: 'radial-gradient(ellipse at center, #0d2535 0%, #060e14 100%)'}}
+  - CRITICAL ARCHITECTURE FOR SEAMLESS BACK-TO-BACK SCENES: Do NOT put the background inside each scene's individual Sequence. Instead, find groups of consecutive scenes that ALL have mfx_has_bg:true, and render ONE single background Sequence that spans the entire group (from the first scene's startFrame to the last scene's endFrame). Then render each scene's text/effects content in their own individual Sequences on top. This way the background is ONE continuous unbroken layer — it never stops and restarts between scenes, so there is zero flash of the video between consecutive MFX+BG scenes.
+  Example structure for 3 consecutive mfx_has_bg scenes (scenes 5,6,7):
+    {/* One background covering all three */}
+    <Sequence from={scene5start} durationInFrames={scene5dur + scene6dur + scene7dur}>
+      <AbsoluteFill style={{background: 'radial-gradient(ellipse at center, #0d2535 0%, #060e14 100%)'}} />
+    </Sequence>
+    {/* Each scene's content in its own Sequence on top */}
+    <Sequence from={scene5start} durationInFrames={scene5dur}><Scene5Content /></Sequence>
+    <Sequence from={scene6start} durationInFrames={scene6dur}><Scene6Content /></Sequence>
+    <Sequence from={scene7start} durationInFrames={scene7dur}><Scene7Content /></Sequence>
 - NONE (No Text): Do NOT render any text, subtitles, or motion graphics for this scene. Just show the video (and image if present). The audio still plays but no visual text appears.
 
 LAYOUT RULES (MODE: ${project.mode || 'full'}):
@@ -921,12 +947,18 @@ ${(project.mode === 'split') ? `- SPLIT SCREEN MODE: The frame has two zones: TO
   When margin is applied, adjust width/height to 92% to account for the inset.
 - SLIDESHOW: If a scene has multiple images (check scenes[i].images array length), cycle through them evenly within the scene duration. For example, 3 images in a 3s scene = 1s per image. Use opacity transitions (fade in/out) to switch between them. Stack them absolutely on top of each other and animate opacity.
 - B-ROLL: If a scene has a broll array (scenes[i].broll), use the B-roll video INSTEAD of the main video for that scene's duration. Use <OffthreadVideo> with the B-roll file from reel-data/. If broll_muted is true (default), mute the B-roll video. If broll_muted is false, include the B-roll audio.
+- ZOOM EFFECTS: If a scene has a zoom field, apply it to the video/background layer using a CSS transform on the video container:
+  - "snap-in": Scale snaps from 1.4 → 1.0 in the first 8 frames using spring({damping:12, stiffness:500, mass:0.5}). It's a hard punch-in that quickly settles. Apply as: transform: \`scale(\${1.4 - 0.4 * snapProgress})\`
+  - "snap-out": Scale snaps from 1.0 → 1.4 in the first 8 frames — punches away from the subject. spring({damping:12, stiffness:500, mass:0.5}) going from 0→1 mapped to scale 1.0→1.4
+  - "slow-in": Slow cinematic drift — scale goes from 1.0 to 1.08 linearly over the full scene duration using interpolate(frame-sceneStartFrame, [0, durationInFrames], [1, 1.08])
+  Apply the zoom transform to the outermost video wrapper div (not the subtitle layer). Use transformOrigin: 'center center' and overflow: 'hidden' on the parent.
 - B-ROLL SPANNING: If a scene has broll_span > 1, continue using this B-roll for the next N scenes (e.g. broll_span=3 means this scene + next 2). Seek the B-roll video to the accumulated time offset for each subsequent scene so it plays continuously across all spanned scenes.
+- IMAGE SPANNING: If a scene has img_span > 1, keep showing that scene's image(s) for the next N scenes (e.g. img_span=3 means this scene + next 2). Wrap the image in a single <Sequence> that covers the full spanned duration, not just the scene it belongs to. The spanned scenes do NOT need their own image — they inherit it.
 
 INSTRUCTIONS:
 1. Read public/reel-data/config.json for the full project data (scenes with word-level timestamps)
 2. Read public/reel-data/media-map.json to know which media files are available
-3. Create/update Remotion components: use <OffthreadVideo> for video
+3. ALWAYS write the Remotion component completely from scratch on every render — never patch or reuse any existing TSX/TSX file. Delete any existing src/MyVideo.tsx or src/Video.tsx before writing. The config.json is the single source of truth.
 4. For 'subtitles' scenes: word-synced subtitles from scenes[].words, positioned at bottom over video. Show max ${sub.maxWords || 6} words at a time (group words into chunks of ${sub.maxWords || 6}).
 5. For 'mfx' scenes: animated text presentation of the scene's words (follow any instructions/preset if provided)
 6. For 'none' scenes: NO text at all — just video and image (if any). Skip all subtitles and motion graphics for that scene.
@@ -1178,6 +1210,161 @@ export const MainComp: React.FC = () => {
   } catch (err) {
     console.error('[ReelMaster] Remotion setup failed:', err.message);
     res.status(500).json({ ok: false, error: 'Setup failed: ' + err.message });
+  }
+});
+
+// ── AI Chat Editor ──────────────────────────────────────────────────────────
+
+function callClaudeChat(promptText) {
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const proc = spawn('claude', ['-p', '--output-format', 'text', '--dangerously-skip-permissions'], {
+      shell: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env }
+    });
+    let out = '', err = '';
+    proc.stdout.on('data', d => out += d.toString());
+    proc.stderr.on('data', d => err += d.toString());
+    proc.on('close', () => out.trim() ? resolve(out.trim()) : reject(new Error(err || 'No output')));
+    proc.on('error', reject);
+    proc.stdin.write(promptText);
+    proc.stdin.end();
+    setTimeout(() => { try { proc.kill(); } catch(_) {} reject(new Error('timeout')); }, 90000);
+  });
+}
+
+router.post('/reel/projects/:projectId/chat', async (req, res) => {
+  const project = readReelProject(req.params.projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const { message, history = [], imageBase64, imageMime, imageFilename } = req.body;
+  if (!message && !imageBase64) return res.status(400).json({ error: 'message or image required' });
+
+  // Save attached image to uploads dir if provided
+  let savedImagePath = null;
+  if (imageBase64) {
+    try {
+      const ext = (imageMime || 'image/jpeg').split('/')[1]?.replace('jpeg','jpg') || 'jpg';
+      const uploadDir = path.join(shared.UPLOADS_DIR, req.params.projectId);
+      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+      const fname = `chat-${Date.now()}.${ext}`;
+      fs.writeFileSync(path.join(uploadDir, fname), Buffer.from(imageBase64, 'base64'));
+      savedImagePath = `uploads/${req.params.projectId}/${fname}`;
+    } catch (e) {
+      console.error('[ReelChat] image save error:', e.message);
+    }
+  }
+
+  const style = project.style || {};
+  const sceneSummary = (project.scenes || []).map((s, i) =>
+    `  Scene ${i+1} (idx ${i}): "${s.text?.substring(0,70)}${(s.text||'').length>70?'...':''}" [${s.display_mode||'subtitles'}]${s.mfx_type&&s.mfx_type!=='words'?` [mfx_type:${s.mfx_type}]`:''}${s.mfx_instructions?` [instructions:"${s.mfx_instructions.substring(0,40)}"]`:''}${s.mfx_has_bg?' [has_bg]':''}${s.images?.length?` [${s.images.length} image(s)${s.img_span>1?`, span:${s.img_span}`:''}]`:''}${s.broll?.length?' [broll]':''}${s.text_overlay?` [overlay:"${s.text_overlay}"]`:''}`
+  ).join('\n');
+
+  const historyText = history.slice(-8).map(h => `${h.role==='user'?'User':'Assistant'}: ${h.content}`).join('\n');
+
+  const imageContext = savedImagePath
+    ? `\nUSER ATTACHED IMAGE: ${savedImagePath} — You can add this image to any scene using the scene_add_image operation. Acknowledge the image was received.\n`
+    : '';
+
+  const prompt = `You are an AI video editor assistant for AI CEO Studio Reel Master. Users edit short-form video reels (TikTok/IG/YouTube style).
+
+CURRENT PROJECT: "${project.name || 'Untitled'}"
+Mode: ${project.mode||'full'} | Subtitle preset: ${style.subtitleAnimation?.preset||'classic'} | Primary color: ${style.colors?.primary||'#7B2FF2'} | Secondary: ${style.colors?.secondary||'#C084FC'}
+Music: ${project.music?project.music.filename+' @ vol '+project.music.volume:'none'} | Presentation mode: ${project.presentationMode||false}
+Scenes (${(project.scenes||[]).length} total):
+${sceneSummary||'  No scenes yet'}
+
+${imageContext}${historyText?`CONVERSATION HISTORY:\n${historyText}\n`:''}
+User: ${message || '(attached an image)'}
+
+Respond with ONLY valid JSON (no markdown, no code blocks):
+{
+  "reply": "Brief friendly message explaining what you changed or answering the question",
+  "operations": [
+    // Available operations (use idx=0 for scene 1, idx=1 for scene 2, etc.):
+    // { "op": "scene_add_image", "idx": N, "value": "uploads/..." }  — add image to scene (use path from USER ATTACHED IMAGE)
+    // { "op": "scene_mode", "idx": N, "value": "subtitles"|"mfx"|"none" }
+    // { "op": "scene_mfx_type", "idx": N, "value": "words"|"words_fx"|"fx_only" }
+    // { "op": "scene_mfx_instructions", "idx": N, "value": "string" }
+    // { "op": "scene_mfx_has_bg", "idx": N, "value": true|false }
+    // { "op": "scene_mfx_preset", "idx": N, "value": "none"|"geometric-lines"|"corners"|"lower-third"|"particles"|"spotlight"|"bokeh"|"progress" }
+    // { "op": "scene_text", "idx": N, "value": "string" }
+    // { "op": "scene_text_overlay", "idx": N, "value": "string" }
+    // { "op": "scene_img_position", "idx": N, "value": "top"|"center"|"bottom"|"full" }
+    // { "op": "scene_img_border", "idx": N, "value": "none"|"rounded"|"shadow"|"frame"|"glow" }
+    // { "op": "scene_img_span", "idx": N, "value": number }
+    // { "op": "subtitle_preset", "value": "snap"|"classic"|"karaoke"|"wordpop"|"typewriter"|"glowsweep"|"bouncein"|"scaleburst"|"fadeflow"|"slidein"|"neonpulse"|"wave"|"cinematic"|"riseglow" }
+    // { "op": "highlight_color", "value": "#hexcolor" }
+    // { "op": "highlight_enabled", "value": true|false }
+    // { "op": "primary_color", "value": "#hexcolor" }
+    // { "op": "secondary_color", "value": "#hexcolor" }
+    // { "op": "text_color", "value": "#hexcolor" }
+    // { "op": "music_volume", "value": 0.0-1.0 }
+    // { "op": "mode", "value": "full"|"split"|"youtube" }
+    // { "op": "presentation_mode", "value": true|false }
+    // If no changes needed, return empty array []
+  ]
+}`;
+
+  try {
+    const raw = await callClaudeChat(prompt);
+    const clean = raw.replace(/^```json?\n?/,'').replace(/\n?```$/,'').trim();
+    let parsed;
+    try { parsed = JSON.parse(clean); }
+    catch { parsed = { reply: raw, operations: [] }; }
+
+    const ops = parsed.operations || [];
+    for (const op of ops) {
+      const scene = project.scenes?.[op.idx];
+      switch (op.op) {
+        case 'scene_add_image':
+          if (scene) {
+            if (!scene.images) scene.images = [];
+            scene.images.push(op.value);
+          }
+          break;
+        case 'scene_mode':            if (scene) scene.display_mode = op.value; break;
+        case 'scene_mfx_type':        if (scene) scene.mfx_type = op.value; break;
+        case 'scene_mfx_instructions':if (scene) scene.mfx_instructions = op.value; break;
+        case 'scene_mfx_has_bg':      if (scene) scene.mfx_has_bg = op.value; break;
+        case 'scene_mfx_preset':      if (scene) scene.mfx_preset = op.value; break;
+        case 'scene_text':            if (scene) scene.text = op.value; break;
+        case 'scene_text_overlay':    if (scene) scene.text_overlay = op.value; break;
+        case 'scene_img_position':    if (scene) scene.img_position = op.value; break;
+        case 'scene_img_border':      if (scene) scene.img_border = op.value; break;
+        case 'scene_img_span':        if (scene) scene.img_span = op.value; break;
+        case 'subtitle_preset':
+          if (!style.subtitleAnimation) style.subtitleAnimation = {};
+          style.subtitleAnimation.preset = op.value;
+          project.style = style; break;
+        case 'highlight_color':
+          if (!style.subtitleAnimation) style.subtitleAnimation = {};
+          style.subtitleAnimation.highlightColor = op.value;
+          project.style = style; break;
+        case 'highlight_enabled':
+          if (!style.subtitleAnimation) style.subtitleAnimation = {};
+          style.subtitleAnimation.highlightEnabled = op.value;
+          project.style = style; break;
+        case 'primary_color':
+          if (!style.colors) style.colors = {};
+          style.colors.primary = op.value; project.style = style; break;
+        case 'secondary_color':
+          if (!style.colors) style.colors = {};
+          style.colors.secondary = op.value; project.style = style; break;
+        case 'text_color':
+          if (!style.colors) style.colors = {};
+          style.colors.text = op.value; project.style = style; break;
+        case 'music_volume':  if (project.music) project.music.volume = op.value; break;
+        case 'mode':          project.mode = op.value; break;
+        case 'presentation_mode': project.presentationMode = op.value; break;
+      }
+    }
+    if (ops.length) writeReelProject(project);
+
+    res.json({ ok: true, reply: parsed.reply || 'Done.', operations: ops, project });
+  } catch (e) {
+    console.error('[ReelChat]', e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 

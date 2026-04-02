@@ -318,8 +318,45 @@
           </button>
         </div>
         <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm rm-chat-toggle-btn" id="rmChatToggleBtn" onclick="rmToggleChat()">✦ AI Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="rmSaveProject()">💾 Save</button>
         <button class="btn btn-primary btn-sm" onclick="rmRender()">🎬 Render</button>
+      </div>
+
+      <!-- AI Chat Panel -->
+      <div class="rm-chat-panel" id="rmChatPanel">
+        <div class="rm-chat-header">
+          <span class="rm-chat-title">✦ AI Editor</span>
+          <span class="rm-chat-subtitle">Tell me what to change</span>
+          <button class="rm-chat-close" onclick="rmToggleChat()">×</button>
+        </div>
+        <div class="rm-chat-messages" id="rmChatMessages">
+          <div class="rm-chat-msg rm-chat-msg-ai">
+            <div class="rm-chat-bubble">Hey! I can edit your reel for you. Try things like:<br><br>
+            • "Make scenes 3-5 motion graphics with particles"<br>
+            • "Change subtitle style to snap"<br>
+            • "Set the highlight color to gold"<br>
+            • "Turn on presentation mode"<br>
+            • "Add a text overlay to scene 2 saying AI CEO Workshop"</div>
+          </div>
+        </div>
+        <div class="rm-chat-input-area" id="rmChatInputArea"
+             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="event.preventDefault(); this.classList.remove('drag-over'); rmChatHandleDrop(event)">
+          <div class="rm-chat-img-preview" id="rmChatImgPreview" style="display:none;">
+            <img id="rmChatImgThumb" src="" alt="attached">
+            <button class="rm-chat-img-remove" onclick="rmChatClearImage()">×</button>
+          </div>
+          <div class="rm-chat-input-row">
+            <button class="rm-chat-attach" onclick="document.getElementById('rmChatFileInput').click()" title="Attach image">📎</button>
+            <input type="file" id="rmChatFileInput" accept="image/*" style="display:none" onchange="rmChatHandleFile(this.files[0])">
+            <textarea class="rm-chat-input" id="rmChatInput" placeholder="Tell AI what to change… or drop an image" rows="2"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();rmSendChat();}"
+              onpaste="rmChatHandlePaste(event)"></textarea>
+            <button class="rm-chat-send" id="rmChatSend" onclick="rmSendChat()">↑</button>
+          </div>
+        </div>
       </div>
 
       <!-- Step indicators -->

@@ -156,7 +156,9 @@ async function rmDeleteProject(id) {
 }
 
 // ── Step Navigation ──
-function rmGoStep(step) {
+async function rmGoStep(step) {
+  // Always save current state before switching steps so edits are never lost
+  if (rmCurrentProject) await rmSaveProject();
   rmCurrentStep = step;
   document.querySelectorAll('#rmPanels .rm-panel').forEach(p => p.classList.remove('rm-panel-active'));
   const panel = document.getElementById('rmPanel' + step.charAt(0).toUpperCase() + step.slice(1));
@@ -485,6 +487,16 @@ function rmRenderTimeline() {
     const imagesHTML = hasSceneImages
       ? `<div class="rm-scene-images">${s.images.map((img, imgIdx) => `<div class="rm-scene-img-wrap"><img class="rm-scene-img-thumb" src="/${img}"><button class="rm-scene-img-remove" onclick="event.stopPropagation(); rmRemoveSceneImage(${i}, ${imgIdx})" title="Remove image">&times;</button></div>`).join('')}</div>`
       : '';
+    const maxSpan = scenes.length - i;
+    // Check if this scene is covered by a previous scene's image span
+    let coveredByImg = null;
+    for (let pi = 0; pi < i; pi++) {
+      const ps = scenes[pi];
+      if (ps.images?.length && (ps.img_span || 1) > 1 && pi + (ps.img_span || 1) > i) {
+        coveredByImg = pi;
+        break;
+      }
+    }
     const imgControlsHTML = hasSceneImages ? `<div class="rm-scene-img-controls">
       <div class="rm-img-pos-chips">
         <button class="rm-chip ${(s.img_position || 'top') === 'top' ? 'active' : ''}" onclick="event.stopPropagation(); rmSetImgPosition(${i}, 'top')">Top</button>
@@ -499,8 +511,12 @@ function rmRenderTimeline() {
         <button class="rm-chip ${s.img_border === 'frame' ? 'active' : ''}" onclick="event.stopPropagation(); rmSetImgBorder(${i}, 'frame')">Frame</button>
         <button class="rm-chip ${s.img_border === 'glow' ? 'active' : ''}" onclick="event.stopPropagation(); rmSetImgBorder(${i}, 'glow')">Glow</button>
       </div>
-    </div>` : '';
-    const maxSpan = scenes.length - i;
+      ${maxSpan > 1 ? `<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+        <span style="color:#888;font-size:11px;">Span:</span>
+        <input type="range" min="1" max="${maxSpan}" value="${s.img_span || 1}" oninput="this.nextElementSibling.textContent=this.value==1?'1 scene':this.value+' scenes'" onchange="event.stopPropagation(); rmUpdateImageSpan(${i}, parseInt(this.value))" style="width:80px;height:4px;accent-color:#7B2FF2;">
+        <span style="color:#ccc;font-size:11px;min-width:55px;">${(s.img_span||1)===1?'1 scene':(s.img_span||1)+' scenes'}</span>
+      </div>` : ''}
+    </div>` : (coveredByImg !== null ? `<div style="margin-top:4px;"><span style="background:rgba(123,47,242,0.15);color:#C084FC;font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid rgba(123,47,242,0.25);">🖼 Image from scene ${coveredByImg + 1}</span></div>` : '');
     // Check if this scene is covered by a previous scene's b-roll span
     let coveredByBroll = null;
     for (let pi = 0; pi < i; pi++) {
@@ -555,6 +571,12 @@ function rmRenderTimeline() {
               <button class="rm-scene-mode-btn ${(s.display_mode || 'subtitles') === 'subtitles' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneDisplayMode(${i}, 'subtitles')">Subtitles</button>
               <button class="rm-scene-mode-btn ${(s.display_mode || 'subtitles') === 'mfx' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneDisplayMode(${i}, 'mfx')">Motion GFX</button>
               <button class="rm-scene-mode-btn ${s.display_mode === 'none' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneDisplayMode(${i}, 'none')">No Text</button>
+            </div>
+            <div class="rm-scene-zoom-row">
+              <button class="rm-scene-zoom-btn ${!s.zoom_effect || s.zoom_effect === 'none' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneZoom(${i}, 'none')" title="No zoom">No Zoom</button>
+              <button class="rm-scene-zoom-btn ${s.zoom_effect === 'snap-in' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneZoom(${i}, 'snap-in')" title="Snap zoom in — camera snaps closer">⚡ Snap In</button>
+              <button class="rm-scene-zoom-btn ${s.zoom_effect === 'snap-out' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneZoom(${i}, 'snap-out')" title="Snap zoom out — camera snaps back">⚡ Snap Out</button>
+              <button class="rm-scene-zoom-btn ${s.zoom_effect === 'slow-in' ? 'active' : ''}" onclick="event.stopPropagation(); rmUpdateSceneZoom(${i}, 'slow-in')" title="Slow drift zoom in">🔍 Drift In</button>
             </div>
             ${(s.display_mode === 'mfx') ? `
             <div class="rm-scene-mfx-type-row">
@@ -628,6 +650,13 @@ function rmUpdateSceneDisplayMode(idx, mode) {
   if (mode === 'mfx' && !rmCurrentProject.scenes[idx].mfx_opacity) {
     rmCurrentProject.scenes[idx].mfx_opacity = 0.5;
   }
+  rmRenderTimeline();
+  rmSaveProject();
+}
+
+function rmUpdateSceneZoom(idx, effect) {
+  if (!rmCurrentProject || !rmCurrentProject.scenes[idx]) return;
+  rmCurrentProject.scenes[idx].zoom_effect = effect === 'none' ? undefined : effect;
   rmRenderTimeline();
   rmSaveProject();
 }
@@ -1096,6 +1125,13 @@ function rmAttachBroll(sceneIdx) {
 function rmUpdateBrollSpan(sceneIdx, span) {
   if (!rmCurrentProject || !rmCurrentProject.scenes[sceneIdx]) return;
   rmCurrentProject.scenes[sceneIdx].broll_span = span;
+  rmRenderTimeline();
+  rmSaveProject();
+}
+
+function rmUpdateImageSpan(sceneIdx, span) {
+  if (!rmCurrentProject || !rmCurrentProject.scenes[sceneIdx]) return;
+  rmCurrentProject.scenes[sceneIdx].img_span = span;
   rmRenderTimeline();
   rmSaveProject();
 }
@@ -1662,6 +1698,8 @@ function rmRenderVideoTab() {
 
 // ═══ Subtitle Animation Preset Library ═══
 const RM_SUB_PRESETS = [
+  { id: 'plain',       icon: '💬', name: 'Plain',        desc: 'Standard subtitles — whole line appears and disappears together. No word-by-word.', demoWords: ['The','whole','line','at','once'], highlightBased: false },
+  { id: 'snap',        icon: '⚡', name: 'Snap',         desc: 'Words instantly pop on — no animation. Pure TikTok style', demoWords: ['Words','just','snap','right','on'], highlightBased: false },
   { id: 'classic',     icon: '✦', name: 'Classic',      desc: 'Clean fade-in of the full subtitle text',                  demoWords: ['This','is','a','clean','fade'], highlightBased: false },
   { id: 'karaoke',     icon: '🎤', name: 'Karaoke',      desc: 'Words light up one-by-one as they\'re spoken',             demoWords: ['Words','light','up','when','spoken'], highlightBased: true },
   { id: 'wordpop',     icon: '💥', name: 'Word Pop',     desc: 'Each word springs in with bounce synced to speech',        demoWords: ['Pop','in','one','by','one'], highlightBased: false },
@@ -2658,16 +2696,33 @@ async function rmPollRenderStatus(taskId) {
         }
       }
       detail.textContent = outputPath ? 'Output: ' + outputPath : 'Render complete';
-      // Determine the folder to open (parent of file, or folder itself)
-      let openFolder = outputPath;
+      // Determine the folder and file paths to open
+      const workingDir = (document.getElementById('rmRenderDir')?.value || '').trim();
+      const sep = workingDir.includes('\\') ? '\\' : '/';
+      let openFile = '';
+      let openFolder = '';
       if (outputPath && /\.\w{2,4}$/.test(outputPath)) {
-        // It's a file path — get parent directory
-        openFolder = outputPath.replace(/[/\\][^/\\]+$/, '');
+        // It's a file path
+        if (outputPath.match(/^[A-Za-z]:[\\\/]/) || outputPath.startsWith(sep + sep)) {
+          // Absolute path
+          openFile = outputPath;
+          openFolder = outputPath.replace(/[/\\][^/\\]+$/, '');
+        } else {
+          // Relative path like /untitled-reel.mp4 — resolve against workingDir/out
+          const fname = outputPath.replace(/^[/\\]+/, '');
+          openFile = workingDir ? workingDir + sep + 'out' + sep + fname : '';
+          openFolder = workingDir ? workingDir + sep + 'out' : '';
+        }
+      } else {
+        openFolder = outputPath || (workingDir ? workingDir + sep + 'out' : '');
       }
-      const escapedFolder = openFolder.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      actions.innerHTML = openFolder
-        ? `<button class="btn btn-primary btn-sm" onclick="rmOpenRenderFolder('${escapedFolder}')">📂 Open Folder</button>`
-        : '';
+      // Final fallback: always show the out/ folder at minimum
+      if (!openFolder && workingDir) openFolder = workingDir + sep + 'out';
+      const esc1 = (p) => p.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      actions.innerHTML = [
+        openFile ? `<button class="btn btn-primary btn-sm" onclick="rmOpenRenderFolder('${esc1(openFile)}')">🎬 Open File</button>` : '',
+        openFolder ? `<button class="btn btn-ghost btn-sm" onclick="rmOpenRenderFolder('${esc1(openFolder)}')">📂 Open Folder</button>` : '',
+      ].filter(Boolean).join('');
       rmClearRenderIntervals();
       sessionStorage.removeItem('rm_render_task');
     } else if (task.status === 'failed') {
@@ -2752,3 +2807,158 @@ function rmResumeRenderIfActive() {
   }
 }
 
+
+// ── AI Chat Panel ──────────────────────────────────────────────────────────
+
+let rmChatHistory = [];
+let rmChatOpen = false;
+let rmChatPendingImage = null; // { dataUrl, mime, filename }
+
+function rmToggleChat() {
+  rmChatOpen = !rmChatOpen;
+  const panel = document.getElementById('rmChatPanel');
+  const btn = document.getElementById('rmChatToggleBtn');
+  if (panel) panel.classList.toggle('open', rmChatOpen);
+  if (btn) btn.classList.toggle('active', rmChatOpen);
+}
+
+// ── Image handling ──
+
+function rmChatSetImage(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    rmChatPendingImage = { dataUrl: e.target.result, mime: file.type, filename: file.name };
+    const preview = document.getElementById('rmChatImgPreview');
+    const thumb = document.getElementById('rmChatImgThumb');
+    if (preview && thumb) { thumb.src = e.target.result; preview.style.display = 'block'; }
+  };
+  reader.readAsDataURL(file);
+}
+
+function rmChatClearImage() {
+  rmChatPendingImage = null;
+  const preview = document.getElementById('rmChatImgPreview');
+  const fileInput = document.getElementById('rmChatFileInput');
+  if (preview) preview.style.display = 'none';
+  if (fileInput) fileInput.value = '';
+}
+
+function rmChatHandleFile(file) { if (file) rmChatSetImage(file); }
+
+function rmChatHandleDrop(e) {
+  const file = e.dataTransfer?.files?.[0];
+  if (file) rmChatSetImage(file);
+}
+
+function rmChatHandlePaste(e) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      rmChatSetImage(item.getAsFile());
+      break;
+    }
+  }
+}
+
+// ── Message rendering ──
+
+function rmChatAddMessage(role, text, ops, imgDataUrl) {
+  const container = document.getElementById('rmChatMessages');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = `rm-chat-msg rm-chat-msg-${role}`;
+  if (imgDataUrl) {
+    const img = document.createElement('img');
+    img.src = imgDataUrl;
+    img.className = 'rm-chat-msg-img';
+    div.appendChild(img);
+  }
+  const bubble = document.createElement('div');
+  bubble.className = 'rm-chat-bubble';
+  bubble.textContent = text;
+  div.appendChild(bubble);
+  if (ops && ops.length) {
+    const opDiv = document.createElement('div');
+    opDiv.className = 'rm-chat-ops';
+    opDiv.textContent = `✓ ${ops.length} change${ops.length > 1 ? 's' : ''} applied`;
+    div.appendChild(opDiv);
+  }
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function rmChatSetThinking(on) {
+  const container = document.getElementById('rmChatMessages');
+  const send = document.getElementById('rmChatSend');
+  if (send) send.disabled = on;
+  if (!container) return;
+  if (on) {
+    const div = document.createElement('div');
+    div.className = 'rm-chat-msg rm-chat-msg-ai';
+    div.id = 'rmChatThinking';
+    const bubble = document.createElement('div');
+    bubble.className = 'rm-chat-bubble thinking';
+    bubble.textContent = 'Thinking...';
+    div.appendChild(bubble);
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  } else {
+    const el = document.getElementById('rmChatThinking');
+    if (el) el.remove();
+  }
+}
+
+// ── Send ──
+
+async function rmSendChat() {
+  const input = document.getElementById('rmChatInput');
+  if (!input || !rmCurrentProject) return;
+  const message = input.value.trim();
+  const pendingImg = rmChatPendingImage;
+  if (!message && !pendingImg) return;
+
+  input.value = '';
+  const displayMsg = message || '(image attached)';
+  rmChatAddMessage('user', displayMsg, null, pendingImg?.dataUrl);
+  rmChatHistory.push({ role: 'user', content: displayMsg });
+  rmChatClearImage();
+  rmChatSetThinking(true);
+
+  try {
+    const body = {
+      message: message || 'I attached an image — please use it as reference or add it to the appropriate scene.',
+      history: rmChatHistory.slice(-8)
+    };
+    if (pendingImg) {
+      body.imageBase64 = pendingImg.dataUrl.split(',')[1];
+      body.imageMime = pendingImg.mime;
+      body.imageFilename = pendingImg.filename;
+    }
+
+    const res = await safeFetch(`/api/reel/projects/${rmCurrentProject.id}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    rmChatSetThinking(false);
+
+    if (!data.ok) throw new Error(data.error || 'Chat failed');
+
+    rmChatAddMessage('ai', data.reply, data.operations);
+    rmChatHistory.push({ role: 'assistant', content: data.reply });
+
+    if (data.project) {
+      rmCurrentProject = data.project;
+      if (rmCurrentStep === 'scenes') rmRenderTimeline();
+      else if (rmCurrentStep === 'customize') rmRenderCustomizeTab(rmCurrentTab);
+      else if (rmCurrentStep === 'preview') rmRenderPreview();
+    }
+  } catch (e) {
+    rmChatSetThinking(false);
+    rmChatAddMessage('ai', 'Sorry, something went wrong: ' + e.message);
+  }
+}
