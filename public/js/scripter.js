@@ -21,10 +21,13 @@ const rickState = {
   teleprompter: {
     open: false,
     sessionId: null,
+    scriptVersionId: null,
+    scriptVersions: [],
     scenes: [],
     clips: [],
     skipped: [],
     activeIndex: 0,
+    editingSceneIndex: null,
     stream: null,
     recorder: null,
     chunks: [],
@@ -43,6 +46,7 @@ const rickState = {
     cameraId: null,
     microphoneId: null,
     switchingDevices: false,
+    switchingVersion: false,
     combining: false,
     output: null,
     outputReady: false,
@@ -1212,15 +1216,19 @@ function scrResetTeleprompter() {
   Object.assign(state, {
     open: false,
     sessionId: null,
+    scriptVersionId: null,
+    scriptVersions: [],
     scenes: [],
     clips: [],
     skipped: [],
     activeIndex: 0,
+    editingSceneIndex: null,
     recorder: null,
     chunks: [],
     startedAt: 0,
     framingDrag: null,
     switchingDevices: false,
+    switchingVersion: false,
     combining: false,
     output: null,
     outputReady: false,
@@ -1229,6 +1237,40 @@ function scrResetTeleprompter() {
   overlay?.classList.remove('open', 'recording', 'output-ready', 'has-output');
   overlay?.setAttribute('aria-hidden', 'true');
   scrRenderProgress();
+}
+
+function scrTeleprompterHasProgress(state = rickState.teleprompter) {
+  return state.clips.some(Boolean) || state.skipped.some(Boolean);
+}
+
+function scrClearTeleprompterProgress(state, sceneCount) {
+  state.clips.forEach((clip) => { if (clip?.url) URL.revokeObjectURL(clip.url); });
+  state.clips = new Array(sceneCount).fill(null);
+  state.skipped = new Array(sceneCount).fill(false);
+}
+
+function scrApplyTeleprompterVersion(data, forceReset = false) {
+  const state = rickState.teleprompter;
+  const scenes = Array.isArray(data.scenes) ? data.scenes : [];
+  const activeSceneId = state.scenes[state.activeIndex]?.id;
+  const sameScenes = state.scenes.length === scenes.length
+    && state.scenes.every((scene, index) => scene.id === scenes[index].id && scene.text === scenes[index].text);
+  if (forceReset || !sameScenes) {
+    scrClearTeleprompterProgress(state, scenes.length);
+    state.editingSceneIndex = null;
+    const matchingIndex = scenes.findIndex((scene) => scene.id === activeSceneId);
+    state.activeIndex = matchingIndex >= 0 ? matchingIndex : 0;
+    state.outputReady = false;
+  }
+  state.scenes = scenes;
+  state.scriptVersionId = data.versionId || null;
+  state.scriptVersions = Array.isArray(data.versions) ? data.versions : [];
+  state.output = data.output || null;
+}
+
+async function scrRequestTeleprompterVersion(sessionId, versionId) {
+  const query = versionId ? `?versionId=${encodeURIComponent(versionId)}` : '';
+  return rickRequest(`/sessions/${encodeURIComponent(sessionId)}/teleprompter${query}`);
 }
 
 async function scrOpenTeleprompter() {
@@ -1256,17 +1298,14 @@ async function scrOpenTeleprompter() {
   scrRenderProgress();
 
   try {
-    const data = await rickRequest(`/sessions/${encodeURIComponent(session.id)}/teleprompter`);
-    const sameScenes = state.scenes.length === data.scenes.length
-      && state.scenes.every((scene, index) => scene.id === data.scenes[index].id && scene.text === data.scenes[index].text);
-    if (!sameScenes) {
-      state.clips.forEach((clip) => { if (clip?.url) URL.revokeObjectURL(clip.url); });
-      state.clips = new Array(data.scenes.length).fill(null);
-      state.skipped = new Array(data.scenes.length).fill(false);
-      state.activeIndex = 0;
+    const visibleVersionId = session.scriptVersionId || session.scriptVersions?.[session.scriptVersions.length - 1]?.id;
+    let requestedVersionId = visibleVersionId;
+    if (state.scriptVersionId && visibleVersionId && state.scriptVersionId !== visibleVersionId && scrTeleprompterHasProgress(state)) {
+      const keepTakes = !window.confirm('Use the script showing in the editor? Existing takes from the other version will be cleared.');
+      if (keepTakes) requestedVersionId = state.scriptVersionId;
     }
-    state.scenes = data.scenes;
-    state.output = data.output || null;
+    const data = await scrRequestTeleprompterVersion(session.id, requestedVersionId);
+    scrApplyTeleprompterVersion(data, Boolean(state.scriptVersionId && state.scriptVersionId !== data.versionId));
     scrRenderTeleprompter();
     const preferences = scrLoadMediaPreferences();
     state.cameraId = state.cameraId || preferences.cameraId;
@@ -1290,6 +1329,7 @@ function scrCloseTeleprompter() {
   }
   state.open = false;
   state.outputReady = false;
+  state.editingSceneIndex = null;
   scrReleaseTeleprompterMedia(state);
   const outputVideo = document.getElementById('rickTeleprompterOutputVideo');
   outputVideo?.pause();
@@ -1400,7 +1440,7 @@ function scrStartFramingPreview() {
 
 function scrFramingLocked() {
   const state = rickState.teleprompter;
-  return !state.stream || state.recorder?.state === 'recording' || state.combining || state.outputReady || state.switchingDevices;
+  return !state.stream || state.recorder?.state === 'recording' || state.combining || state.outputReady || state.switchingDevices || state.switchingVersion;
 }
 
 function scrUpdateFraming(next) {
@@ -1548,7 +1588,7 @@ function scrStartAudioMeter(stream) {
 
 function scrChangeMediaDevices() {
   const state = rickState.teleprompter;
-  if (!state.open || state.recorder?.state === 'recording' || state.switchingDevices) return;
+  if (!state.open || state.recorder?.state === 'recording' || state.switchingDevices || state.switchingVersion) return;
   const cameraId = document.getElementById('rickTeleprompterCamera')?.value;
   const microphoneId = document.getElementById('rickTeleprompterMic')?.value;
   scrPrepareTeleprompterMedia(cameraId, microphoneId);
@@ -1571,6 +1611,66 @@ function scrRenderFramingControls() {
   frame?.classList.toggle('framing-active', state.framing.zoom > 1.001 || Math.abs(state.framing.x) > 0.001 || Math.abs(state.framing.y) > 0.001);
 }
 
+function scrRenderTeleprompterVersionControl() {
+  const state = rickState.teleprompter;
+  const select = document.getElementById('rickTeleprompterVersion');
+  const status = document.getElementById('rickTeleprompterVersionStatus');
+  if (!select) return;
+  select.replaceChildren();
+  state.scriptVersions.forEach((version) => {
+    const option = document.createElement('option');
+    const source = RICK_VERSION_SOURCES[version.source] || version.source || 'script version';
+    option.value = version.id;
+    option.textContent = `v${version.number} - ${source}`;
+    select.append(option);
+  });
+  if (state.scriptVersionId) select.value = state.scriptVersionId;
+  const recording = state.recorder?.state === 'recording';
+  select.disabled = !state.scriptVersions.length || recording || state.combining || state.switchingVersion || state.editingSceneIndex !== null;
+  const active = state.scriptVersions.find((version) => version.id === state.scriptVersionId);
+  if (status) {
+    const source = active ? (RICK_VERSION_SOURCES[active.source] || active.source || 'script version') : '';
+    status.textContent = state.switchingVersion
+      ? 'Loading that script version...'
+      : active
+        ? `Showing v${active.number} - ${source}`
+        : 'Showing the script open when you clicked Record';
+  }
+}
+
+async function scrChangeTeleprompterVersion(versionId) {
+  const state = rickState.teleprompter;
+  if (!state.open || state.switchingVersion || state.combining || state.recorder?.state === 'recording' || state.editingSceneIndex !== null) return;
+  const version = state.scriptVersions.find((item) => item.id === versionId);
+  if (!version || version.id === state.scriptVersionId) return;
+  if (scrTeleprompterHasProgress(state) && !window.confirm(`Switch to v${version.number}? Takes and skipped scenes for this version will start fresh.`)) {
+    scrRenderTeleprompterVersionControl();
+    return;
+  }
+
+  state.switchingVersion = true;
+  scrShowTeleprompterError();
+  scrRenderTeleprompter();
+  try {
+    const data = await scrRequestTeleprompterVersion(state.sessionId, version.id);
+    document.getElementById('rickTeleprompterOutputVideo')?.pause();
+    scrApplyTeleprompterVersion(data, true);
+    state.outputReady = false;
+    state.switchingVersion = false;
+    scrRenderTeleprompter();
+    if (!state.stream) {
+      const cameraId = document.getElementById('rickTeleprompterCamera')?.value || state.cameraId;
+      const microphoneId = document.getElementById('rickTeleprompterMic')?.value || state.microphoneId;
+      await scrPrepareTeleprompterMedia(cameraId, microphoneId);
+    }
+  } catch (error) {
+    scrShowTeleprompterError(error.message);
+  } finally {
+    state.switchingVersion = false;
+    scrRenderTeleprompter();
+  }
+}
+
 function scrRenderTeleprompter() {
   const state = rickState.teleprompter;
   const overlay = document.getElementById('rickTeleprompter');
@@ -1584,10 +1684,12 @@ function scrRenderTeleprompter() {
   const activeScene = state.scenes[state.activeIndex];
   const activeClip = state.clips[state.activeIndex];
   const activeSkipped = Boolean(state.skipped[state.activeIndex]);
+  const editingText = state.editingSceneIndex === state.activeIndex;
 
   overlay.classList.toggle('recording', recording);
   overlay.classList.toggle('output-ready', state.outputReady);
   overlay.classList.toggle('has-output', Boolean(state.output));
+  scrRenderTeleprompterVersionControl();
   scrRenderFramingControls();
   const list = document.getElementById('rickTeleprompterSceneList');
   if (list) {
@@ -1598,7 +1700,7 @@ function scrRenderTeleprompter() {
       if (index === state.activeIndex) button.classList.add('active');
       if (state.clips[index]) button.classList.add('recorded');
       if (state.skipped[index]) button.classList.add('skipped');
-      button.disabled = recording || state.combining;
+      button.disabled = recording || state.combining || state.switchingVersion || editingText;
       const head = rickEl('div', 'rick-scene-item-head');
       head.append(rickEl('strong', '', `Scene ${index + 1}`));
       if (state.clips[index]) head.append(rickEl('span', '', 'Recorded'));
@@ -1611,8 +1713,18 @@ function scrRenderTeleprompter() {
 
   const sceneLabel = document.getElementById('rickTeleprompterSceneLabel');
   const prompt = document.getElementById('rickTeleprompterPromptText');
+  const copyPanel = document.getElementById('rickTeleprompterCopy');
+  const textEditor = document.getElementById('rickTeleprompterTextEditor');
+  const editText = document.getElementById('rickTeleprompterEditText');
   if (sceneLabel) sceneLabel.textContent = activeScene ? `Scene ${state.activeIndex + 1} · ${activeScene.label}` : 'Scene';
   if (prompt) prompt.textContent = activeScene?.text || '';
+  copyPanel?.classList.toggle('editing-text', editingText);
+  if (textEditor) textEditor.hidden = !editingText;
+  if (editText) {
+    editText.disabled = recording || state.combining || state.switchingVersion || state.outputReady || !activeScene || editingText;
+    const editLabel = editText.querySelector('span');
+    if (editLabel) editLabel.textContent = editingText ? 'Editing' : 'Edit';
+  }
   scrScheduleTeleprompterPanelLayout();
   const progressText = document.getElementById('rickTeleprompterProgressText');
   const progressPercent = document.getElementById('rickTeleprompterProgressPercent');
@@ -1627,11 +1739,11 @@ function scrRenderTeleprompter() {
   const recordButton = document.getElementById('rickTeleprompterRecordBtn');
   const recordLabel = recordButton?.querySelector('strong');
   if (recordLabel) recordLabel.textContent = recording ? 'Stop recording' : activeClip ? 'Record again' : activeSkipped ? 'Record this scene' : 'Start recording';
-  if (recordButton) recordButton.disabled = !state.stream || !activeScene || state.combining || state.outputReady || state.switchingDevices;
+  if (recordButton) recordButton.disabled = !state.stream || !activeScene || state.combining || state.outputReady || state.switchingDevices || state.switchingVersion || editingText;
   const cameraSelect = document.getElementById('rickTeleprompterCamera');
   const microphoneSelect = document.getElementById('rickTeleprompterMic');
-  if (cameraSelect) cameraSelect.disabled = recording || state.combining || state.switchingDevices;
-  if (microphoneSelect) microphoneSelect.disabled = recording || state.combining || state.switchingDevices;
+  if (cameraSelect) cameraSelect.disabled = recording || state.combining || state.switchingDevices || state.switchingVersion;
+  if (microphoneSelect) microphoneSelect.disabled = recording || state.combining || state.switchingDevices || state.switchingVersion;
   const mediaStatus = document.getElementById('rickMediaDeviceStatus');
   if (mediaStatus) {
     const cameraName = cameraSelect?.selectedOptions?.[0]?.textContent;
@@ -1643,26 +1755,33 @@ function scrRenderTeleprompter() {
   }
   const previous = document.getElementById('rickPreviousScene');
   const next = document.getElementById('rickNextScene');
-  if (previous) previous.disabled = recording || state.combining || state.activeIndex <= 0;
-  if (next) next.disabled = recording || state.combining || state.activeIndex >= state.scenes.length - 1;
+  if (previous) previous.disabled = recording || state.combining || state.switchingVersion || editingText || state.activeIndex <= 0;
+  if (next) next.disabled = recording || state.combining || state.switchingVersion || editingText || state.activeIndex >= state.scenes.length - 1;
   const retake = document.getElementById('rickRetakeScene');
-  if (retake) retake.disabled = recording || state.combining || !activeClip;
+  if (retake) retake.disabled = recording || state.combining || state.switchingVersion || editingText || !activeClip;
+  const deleteAll = document.getElementById('rickDeleteAllTakes');
+  // Session-scoped, unlike Re-record: live whenever there is anything to clear,
+  // including a take in progress, which it stops first.
+  if (deleteAll) {
+    const anyTakes = recordedCount > 0 || state.skipped.some(Boolean);
+    deleteAll.disabled = state.combining || state.switchingDevices || state.switchingVersion || editingText || !state.scenes.length || !(anyTakes || recording);
+  }
   const rerecord = document.getElementById('rickRerecordBtn');
   // Re-record belongs to the scene the creator selected. Start recording
   // already covers a fresh scene, so this is only live for an existing take
   // or while restarting the take currently in progress.
   if (rerecord) {
-    rerecord.disabled = state.combining || state.switchingDevices || state.outputReady || !activeScene || !(activeClip || recording);
+    rerecord.disabled = state.combining || state.switchingDevices || state.switchingVersion || editingText || state.outputReady || !activeScene || !(activeClip || recording);
     rerecord.title = activeScene ? `Restart scene ${state.activeIndex + 1} and replace only this take` : 'Select a recorded scene to re-record';
   }
   const skip = document.getElementById('rickSkipScene');
   if (skip) {
-    skip.disabled = recording || state.combining || state.outputReady || !activeScene;
+    skip.disabled = recording || state.combining || state.switchingVersion || editingText || state.outputReady || !activeScene;
     skip.textContent = activeSkipped ? 'Include this scene' : 'Skip this scene';
   }
   const combine = document.getElementById('rickCombineVideo');
   if (combine) {
-    combine.disabled = !allComplete || !recordedCount || recording || state.combining || state.outputReady;
+    combine.disabled = !allComplete || !recordedCount || recording || state.combining || state.switchingVersion || editingText || state.outputReady;
     combine.textContent = state.combining ? 'Combining scenes...' : state.outputReady ? 'Video combined' : 'Combine video';
   }
 
@@ -1674,7 +1793,9 @@ function scrRenderTeleprompter() {
   if (activeSkipped) statusText = 'This scene will be left out of the combined video.';
   if (allComplete && recordedCount) statusText = 'Every scene is recorded or skipped. Combine the finished video.';
   if (allComplete && !recordedCount) statusText = 'Record at least one scene before combining the video.';
+  if (editingText) { statusText = 'Edit the words for this scene, then save or cancel.'; headText = 'Editing scene'; }
   if (recording) { statusText = `Recording scene ${state.activeIndex + 1}`; headText = 'Recording'; }
+  if (state.switchingVersion) { statusText = 'Loading the selected script version'; headText = 'Changing script'; }
   if (state.switchingDevices) { statusText = 'Connecting the selected camera and microphone'; headText = 'Changing devices'; }
   if (state.combining) { statusText = 'Combining and formatting your vertical video'; headText = 'Combining'; }
   if (state.outputReady) { statusText = 'Your combined video is ready to preview and download.'; headText = 'Video ready'; }
@@ -1694,7 +1815,7 @@ function scrRenderTeleprompter() {
 
 function scrSelectScene(index) {
   const state = rickState.teleprompter;
-  if (state.recorder?.state === 'recording' || state.combining) return;
+  if (state.recorder?.state === 'recording' || state.combining || state.switchingVersion || state.editingSceneIndex !== null) return;
   if (!Number.isInteger(index) || index < 0 || index >= state.scenes.length) return;
   state.activeIndex = index;
   if (state.outputReady) {
@@ -1709,6 +1830,79 @@ function scrSelectScene(index) {
 
 function scrSelectRelativeScene(offset) {
   scrSelectScene(rickState.teleprompter.activeIndex + offset);
+}
+
+function scrCleanTeleprompterEdit(value) {
+  return String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 6000);
+}
+
+function scrBeginTeleprompterTextEdit() {
+  const state = rickState.teleprompter;
+  const scene = state.scenes[state.activeIndex];
+  if (!scene || state.recorder?.state === 'recording' || state.combining || state.switchingVersion || state.outputReady) return;
+  state.editingSceneIndex = state.activeIndex;
+  const input = document.getElementById('rickTeleprompterTextInput');
+  if (input) input.value = scene.text;
+  scrShowTeleprompterError();
+  scrRenderTeleprompter();
+  requestAnimationFrame(() => {
+    input?.focus();
+    input?.setSelectionRange(input.value.length, input.value.length);
+  });
+}
+
+function scrCancelTeleprompterTextEdit() {
+  const state = rickState.teleprompter;
+  if (state.editingSceneIndex === null) return;
+  state.editingSceneIndex = null;
+  scrShowTeleprompterError();
+  scrRenderTeleprompter();
+}
+
+function scrSaveTeleprompterTextEdit() {
+  const state = rickState.teleprompter;
+  const index = state.editingSceneIndex;
+  const scene = state.scenes[index];
+  const input = document.getElementById('rickTeleprompterTextInput');
+  if (!Number.isInteger(index) || !scene || !input || state.recorder?.state === 'recording' || state.combining) return false;
+  const text = scrCleanTeleprompterEdit(input.value);
+  if (!text) {
+    scrShowTeleprompterError('Enter some text before saving this scene.');
+    input.focus();
+    return false;
+  }
+  if (text === scene.text) {
+    scrCancelTeleprompterTextEdit();
+    return true;
+  }
+  const clip = state.clips[index];
+  if (clip && !confirm(`Save these words and delete the recorded take for scene ${index + 1}?`)) return false;
+  if (clip?.url) URL.revokeObjectURL(clip.url);
+  state.clips[index] = null;
+  state.skipped[index] = false;
+  scene.text = text;
+  scene.wordCount = text.split(/\s+/).filter(Boolean).length;
+  state.editingSceneIndex = null;
+  scrShowTeleprompterError();
+  scrRenderTeleprompter();
+  if (typeof showToast === 'function') showToast(`Scene ${index + 1} text updated`, 'success');
+  return true;
+}
+
+function scrHandleTeleprompterEditKey(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    scrCancelTeleprompterTextEdit();
+  } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    scrSaveTeleprompterTextEdit();
+  }
 }
 
 function scrPreferredRecordingMime() {
@@ -1727,7 +1921,7 @@ function scrToggleRecording() {
 
 function scrStartSceneRecording(options = {}) {
   const state = rickState.teleprompter;
-  if (!state.stream || !state.scenes[state.activeIndex] || state.combining) return;
+  if (!state.stream || !state.scenes[state.activeIndex] || state.combining || state.switchingVersion || state.editingSceneIndex !== null) return;
   const recordingIndex = state.activeIndex;
   const stayOnScene = Boolean(options.stayOnScene || state.clips[recordingIndex]);
   scrShowTeleprompterError();
@@ -1844,6 +2038,43 @@ function scrDiscardActiveRecorder(state = rickState.teleprompter) {
   return true;
 }
 
+/**
+ * Clears every take and returns to scene one. Distinct from
+ * scrRerecordSelectedScene, which only replaces the take you are standing on.
+ *
+ * It deliberately does not start recording. This is a clear-the-decks action,
+ * and opening the camera the instant a destructive confirm is accepted gives no
+ * chance to re-frame. The combined video is left alone: it is a finished
+ * artefact the server still holds, replaced by the next combine.
+ */
+async function scrDeleteAllTakes() {
+  const state = rickState.teleprompter;
+  if (state.combining || state.switchingDevices || !state.scenes.length) return;
+  const recording = state.recorder?.state === 'recording';
+  const hasTakes = state.clips.some(Boolean) || state.skipped.some(Boolean);
+  if (!recording && !hasTakes) return;
+  if (!confirm(recording
+    ? 'Delete every take and start over?\n\nThe take in progress will stop and all recorded takes will be discarded. This cannot be undone.'
+    : 'Delete every take and start over?\n\nAll recorded takes will be discarded. This cannot be undone.')) return;
+
+  scrDiscardActiveRecorder(state);
+  state.clips.forEach((clip) => { if (clip?.url) URL.revokeObjectURL(clip.url); });
+  state.clips = new Array(state.scenes.length).fill(null);
+  state.skipped = new Array(state.scenes.length).fill(false);
+  state.activeIndex = 0;
+  state.outputReady = false;
+  scrShowTeleprompterError();
+  document.getElementById('rickTeleprompterOutputVideo')?.pause();
+  scrRenderTeleprompter();
+
+  // Combining releases the camera, so bring it back ready for the fresh run.
+  if (!state.stream) {
+    const cameraId = document.getElementById('rickTeleprompterCamera')?.value;
+    const microphoneId = document.getElementById('rickTeleprompterMic')?.value;
+    await scrPrepareTeleprompterMedia(cameraId, microphoneId);
+  }
+}
+
 async function scrRerecordSelectedScene() {
   const state = rickState.teleprompter;
   const selectedIndex = state.activeIndex;
@@ -1874,7 +2105,7 @@ async function scrRerecordSelectedScene() {
 
 function scrToggleSkipScene() {
   const state = rickState.teleprompter;
-  if (state.recorder?.state === 'recording' || state.combining || !state.scenes[state.activeIndex]) return;
+  if (state.recorder?.state === 'recording' || state.combining || state.switchingVersion || !state.scenes[state.activeIndex]) return;
   const skipping = !state.skipped[state.activeIndex];
   const clip = state.clips[state.activeIndex];
   if (skipping && clip?.url) URL.revokeObjectURL(clip.url);
@@ -1892,7 +2123,7 @@ function scrToggleSkipScene() {
 async function scrCombineRecording() {
   const state = rickState.teleprompter;
   const incomplete = state.scenes.some((_, index) => !state.clips[index] && !state.skipped[index]);
-  if (state.combining || !state.scenes.length || incomplete || !state.clips.some(Boolean)) return;
+  if (state.combining || state.switchingVersion || !state.scenes.length || incomplete || !state.clips.some(Boolean)) return;
   state.combining = true;
   scrShowTeleprompterError();
   scrRenderTeleprompter();
@@ -1911,6 +2142,7 @@ async function scrCombineRecording() {
   formData.append('recordedIndexes', JSON.stringify(recordedIndexes));
   formData.append('skippedIndexes', JSON.stringify(skippedIndexes));
   formData.append('framings', JSON.stringify(framings));
+  formData.append('scriptVersionId', state.scriptVersionId || '');
   try {
     const data = await rickRequest(`/sessions/${encodeURIComponent(state.sessionId)}/recordings/combine`, {
       method: 'POST',

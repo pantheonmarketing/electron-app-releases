@@ -80,6 +80,18 @@ test('teleprompter scenes are spoken-only deterministic chunks', () => {
   assert.equal(scenes.some((scene) => scene.section === 'caption'), false);
 });
 
+test('teleprompter scenes preserve punctuation and intentional line breaks', () => {
+  const scenes = createRecordingScenes({
+    hook: 'Start here,\nthen pause.\n\nFinish the thought!',
+    body: 'Keep this body.',
+    conclusion: 'Keep this conclusion.',
+    cta: 'Follow, for more.',
+    caption: 'Not recorded.',
+  });
+  assert.equal(scenes[0].text, 'Start here,\nthen pause.\n\nFinish the thought!');
+  assert.equal(scenes[3].text, 'Follow, for more.');
+});
+
 test('recording selection allows skipped scenes while preserving script order', () => {
   assert.deepEqual(validateRecordingSelection([0, 2, 4], [1, 3], 5), {
     recordedIndexes: [0, 2, 4],

@@ -120,3 +120,49 @@ test('version chips are live again after a turn', () => {
   window.scrSetBusy(false);
   assert.deepEqual(chips(window).map((c) => c.disabled), [false, false], 'and must not stay dead afterwards');
 });
+
+test('record mode lists every script version without changing the editor version', async () => {
+  const rick = loadRick(versioned());
+  const { window } = rick;
+  const select = window.document.createElement('select');
+  select.id = 'rickTeleprompterVersion';
+  const status = window.document.createElement('p');
+  status.id = 'rickTeleprompterVersionStatus';
+  window.document.body.append(select, status);
+
+  const state = rick.state().teleprompter;
+  state.open = true;
+  state.sessionId = 'rick-1';
+  state.scriptVersionId = V2.id;
+  state.scriptVersions = [V1, V2];
+  state.stream = {};
+  window.scrRenderTeleprompterVersionControl();
+
+  assert.deepEqual([...select.options].map((option) => option.textContent), [
+    'v1 - the first draft',
+    'v2 - critique improvements',
+  ]);
+  assert.equal(select.value, V2.id);
+  assert.match(status.textContent, /Showing v2/);
+
+  let requestedUrl = '';
+  rick.setFetch(async (url) => {
+    requestedUrl = String(url);
+    return {
+      ok: true,
+      json: async () => ({
+        versionId: V1.id,
+        versionNumber: 1,
+        versions: [V1, V2].map(({ id, number, source, createdAt }) => ({ id, number, source, createdAt })),
+        scenes: [{ id: 'hook-1', section: 'hook', label: 'Hook', text: 'A hook,\nwith a pause.', wordCount: 5 }],
+        output: null,
+      }),
+    };
+  });
+  await window.scrChangeTeleprompterVersion(V1.id);
+
+  assert.match(requestedUrl, /teleprompter\?versionId=script-version-1$/);
+  assert.equal(state.scriptVersionId, V1.id);
+  assert.equal(state.scenes[0].text, 'A hook,\nwith a pause.');
+  assert.equal(rick.state().activeSession.scriptVersionId, V2.id, 'the editor keeps showing v2');
+});

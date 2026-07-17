@@ -537,6 +537,18 @@ function findSessionOr404(req, res) {
   return session;
 }
 
+function resolveRecordingScriptVersion(session, requestedVersionId) {
+  const versions = ensureScriptVersions(session);
+  const requested = cleanText(requestedVersionId, 120);
+  const fallbackId = session.scriptVersionId || versions[versions.length - 1]?.id;
+  const version = versions.find((item) => item.id === (requested || fallbackId));
+  if (!version) throw new Error('That script version is no longer available');
+  return {
+    version,
+    versions: versions.map(({ id, number, source, createdAt }) => ({ id, number, source, createdAt })),
+  };
+}
+
 function missingBriefReply(brief) {
   const missing = [];
   if (!brief.niche) missing.push('what the content is about');
@@ -625,7 +637,18 @@ router.get('/scripter/sessions/:id/teleprompter', (req, res) => {
   if (!session) return;
   if (!session.script) return res.status(400).json({ error: 'Build a script before opening the teleprompter' });
   try {
-    res.json({ scenes: createRecordingScenes(session.script), output: session.recording || null });
+    const { version, versions } = resolveRecordingScriptVersion(session, req.query.versionId);
+    const outputMatchesVersion = session.recording && (
+      session.recording.scriptVersionId === version.id
+      || (!session.recording.scriptVersionId && version.id === session.scriptVersionId)
+    );
+    res.json({
+      scenes: createRecordingScenes(version.script),
+      versionId: version.id,
+      versionNumber: version.number,
+      versions,
+      output: outputMatchesVersion ? session.recording : null,
+    });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -635,14 +658,20 @@ router.post('/scripter/sessions/:id/recordings/combine', (req, res) => {
   const session = findSessionOr404(req, res);
   if (!session) return;
   if (!session.script) return res.status(400).json({ error: 'Build a script before recording it' });
-  let scenes;
-  try { scenes = createRecordingScenes(session.script); }
-  catch (error) { return res.status(400).json({ error: error.message }); }
 
   req.params.projectId = session.id;
   shared.reelUpload.array('scenes', 40)(req, res, async (uploadError) => {
     if (uploadError) return res.status(400).json({ error: uploadError.message });
     const files = req.files || [];
+    let selectedVersion;
+    let scenes;
+    try {
+      selectedVersion = resolveRecordingScriptVersion(session, req.body.scriptVersionId).version;
+      scenes = createRecordingScenes(selectedVersion.script);
+    } catch (error) {
+      removeFiles(files.map((file) => file.path));
+      return res.status(400).json({ error: error.message });
+    }
     let selection;
     try {
       selection = validateRecordingSelection(
@@ -699,6 +728,8 @@ router.post('/scripter/sessions/:id/recordings/combine', (req, res) => {
         url: `/uploads/${session.id}/${outputName}`,
         path: `uploads/${session.id}/${outputName}`,
         filename: outputName,
+        scriptVersionId: selectedVersion.id,
+        scriptVersionNumber: selectedVersion.number,
         sceneCount: scenes.length,
         recordedSceneCount: files.length,
         skippedSceneCount: selection.skippedIndexes.length,

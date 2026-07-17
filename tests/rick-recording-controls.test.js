@@ -157,12 +157,62 @@ test('re-record during recording still asks before discarding', async () => {
   assert.equal(started, 0);
 });
 
+test('delete all takes clears every scene and returns to the first', async () => {
+  const rick = loadRick(makeSession({ script: SCRIPT }));
+  const state = withTakes(rick);
+  state.activeIndex = 1;
+  let started = 0;
+  rick.window.scrStartSceneRecording = () => { started += 1; };
+  rick.window.confirm = () => true;
+
+  await rick.window.scrDeleteAllTakes();
+
+  assert.deepEqual([...state.clips], [null, null, null], 'every take is discarded');
+  assert.deepEqual([...state.skipped], [false, false, false], 'skips reset too');
+  assert.equal(state.activeIndex, 0, 'back to the first scene');
+  assert.equal(state.outputReady, false);
+  // Clearing the decks should not open the camera before the creator re-frames.
+  assert.equal(started, 0, 'starting over must not begin recording on its own');
+});
+
+test('delete all takes stops a take in progress without letting it resurrect', async () => {
+  const rick = loadRick(makeSession({ script: SCRIPT }));
+  const state = withTakes(rick);
+  const recorder = fakeRecorder(state);
+  state.recorder = recorder;
+  state.activeIndex = 1;
+  state.timerId = 999999;
+  rick.window.scrStartSceneRecording = () => {};
+  rick.window.confirm = () => true;
+
+  await rick.window.scrDeleteAllTakes();
+  await settle();
+
+  assert.equal(recorder.stopped, 1, 'the in-flight take is stopped');
+  assert.equal(recorder.onstopCalls, 0, 'onstop must be detached, or the abandoned take returns');
+  assert.equal(state.recorder, null);
+  assert.equal(state.timerId, null, 'its timer must not keep ticking');
+  assert.deepEqual([...state.clips], [null, null, null], 'nothing survives, including the abandoned take');
+});
+
+test('declining the delete all confirmation keeps every take', async () => {
+  const rick = loadRick(makeSession({ script: SCRIPT }));
+  const state = withTakes(rick);
+  rick.window.confirm = () => false;
+
+  await rick.window.scrDeleteAllTakes();
+
+  assert.equal(state.clips.filter(Boolean).length, 2, 'takes must survive a declined confirm');
+  assert.deepEqual([...state.skipped], [false, false, true], 'skips must survive too');
+  assert.equal(state.activeIndex, 2, 'the active scene must not move');
+});
+
 /** Builds the control DOM scrRenderTeleprompter reads, and returns it by id. */
 function withControls(rick) {
   const { document } = rick.window;
   const overlay = document.createElement('div');
   overlay.id = 'rickTeleprompter';
-  const ids = ['rickRerecordBtn', 'rickRetakeScene', 'rickPreviousScene', 'rickNextScene', 'rickSkipScene', 'rickCombineVideo'];
+  const ids = ['rickRerecordBtn', 'rickRetakeScene', 'rickPreviousScene', 'rickNextScene', 'rickSkipScene', 'rickCombineVideo', 'rickDeleteAllTakes'];
   const controls = {};
   for (const id of ids) {
     const button = document.createElement('button');
@@ -173,6 +223,30 @@ function withControls(rick) {
   document.body.append(overlay);
   return controls;
 }
+
+test('delete all takes is offered whenever there is anything to clear, and not before', () => {
+  const rick = loadRick(makeSession({ script: SCRIPT }));
+  const state = withTakes(rick);
+  const controls = withControls(rick);
+
+  rick.window.scrRenderTeleprompter();
+  assert.equal(controls.rickDeleteAllTakes.disabled, false, 'takes exist, so starting over is offered');
+
+  // Mid-take with nothing saved: it stops the take, so it stays live.
+  Object.assign(state, { clips: [null, null, null], skipped: [false, false, false], recorder: { state: 'recording' } });
+  rick.window.scrRenderTeleprompter();
+  assert.equal(controls.rickDeleteAllTakes.disabled, false, 'a take in progress is still something to clear');
+
+  // A fresh session with nothing running: it would be a no-op.
+  state.recorder = null;
+  rick.window.scrRenderTeleprompter();
+  assert.equal(controls.rickDeleteAllTakes.disabled, true, 'nothing to clear means nothing to offer');
+
+  state.combining = true;
+  state.clips = [{ blob: {}, url: '', durationMs: 1000 }, null, null];
+  rick.window.scrRenderTeleprompter();
+  assert.equal(controls.rickDeleteAllTakes.disabled, true, 'never mid-combine');
+});
 
 test('re-record stays live during a take while the other controls lock', () => {
   const rick = loadRick(makeSession({ script: SCRIPT }));

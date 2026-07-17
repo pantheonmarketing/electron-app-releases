@@ -642,6 +642,10 @@
               <div class="rick-teleprompter-copy" id="rickTeleprompterCopy">
                 <div class="rick-teleprompter-copy-head" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'move')" title="Drag to move the script panel">
                   <span class="rick-teleprompter-scene-label" id="rickTeleprompterSceneLabel">Scene</span>
+                  <button type="button" class="rick-teleprompter-edit-text" id="rickTeleprompterEditText" onclick="scrBeginTeleprompterTextEdit()" onpointerdown="event.stopPropagation()" aria-label="Edit text for this scene" title="Edit the words shown for this scene">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+                    <span>Edit</span>
+                  </button>
                   <span class="rick-teleprompter-move-cue" aria-hidden="true">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20M5 5l-3 7 3 7M19 5l3 7-3 7M5 5l7-3 7 3M5 19l7 3 7-3"/></svg>
                     Drag to move
@@ -649,6 +653,13 @@
                   <button type="button" class="rick-teleprompter-copy-reset" onclick="scrResetTeleprompterPanel()" onpointerdown="event.stopPropagation()" aria-label="Reset script panel position and size" title="Reset panel">&#8634;</button>
                 </div>
                 <p id="rickTeleprompterPromptText"></p>
+                <div class="rick-teleprompter-text-editor" id="rickTeleprompterTextEditor" hidden>
+                  <textarea id="rickTeleprompterTextInput" maxlength="6000" aria-label="Scene text" onkeydown="scrHandleTeleprompterEditKey(event)"></textarea>
+                  <div class="rick-teleprompter-text-actions">
+                    <button type="button" onclick="scrCancelTeleprompterTextEdit()">Cancel</button>
+                    <button type="button" class="save" onclick="scrSaveTeleprompterTextEdit()">Save text</button>
+                  </div>
+                </div>
                 <i class="rick-teleprompter-resize nw" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'nw')" aria-hidden="true"></i>
                 <i class="rick-teleprompter-resize ne" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'ne')" aria-hidden="true"></i>
                 <i class="rick-teleprompter-resize sw" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'sw')" aria-hidden="true"></i>
@@ -666,6 +677,13 @@
           </main>
 
           <aside class="rick-teleprompter-controls">
+            <section class="rick-teleprompter-version-controls">
+              <div class="rick-teleprompter-panel-label">Script version</div>
+              <label for="rickTeleprompterVersion">Words shown in the prompt</label>
+              <select id="rickTeleprompterVersion" onchange="scrChangeTeleprompterVersion(this.value)"></select>
+              <p class="rick-media-device-status" id="rickTeleprompterVersionStatus">Showing the script open when you clicked Record</p>
+            </section>
+
             <section>
               <div class="rick-teleprompter-panel-label">Camera and microphone</div>
               <label for="rickTeleprompterCamera">Camera</label>
@@ -703,6 +721,7 @@
             <div class="rick-scene-navigation"><button type="button" id="rickPreviousScene" onclick="scrSelectRelativeScene(-1)">Previous</button><button type="button" id="rickNextScene" onclick="scrSelectRelativeScene(1)">Next</button></div>
             <button type="button" class="rick-retake-scene" id="rickRetakeScene" onclick="scrRetakeScene()">Retake this scene</button>
             <button type="button" class="rick-skip-scene" id="rickSkipScene" onclick="scrToggleSkipScene()">Skip this scene</button>
+            <button type="button" class="rick-delete-all-takes" id="rickDeleteAllTakes" onclick="scrDeleteAllTakes()">Delete all takes and start over</button>
             <button type="button" class="rick-combine-video" id="rickCombineVideo" onclick="scrCombineRecording()">Combine video</button>
             <a class="rick-download-video" id="rickDownloadVideo" download>Download combined video</a>
             <button type="button" class="rick-reel-video" id="rickReelVideo" onclick="scrUseRecordingInReelMaster()">Use in Reel Master</button>
