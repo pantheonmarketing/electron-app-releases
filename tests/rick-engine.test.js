@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  DURATION_PRESETS,
   SCRIPT_VERSION_LIMIT,
   addScriptVersion,
   createSession,
@@ -10,6 +11,7 @@ const {
   sanitizeBrief,
   selectScriptVersion,
   setFunnel,
+  setTargetDuration,
   validateCriticFeedback,
   validateCritiqueSummary,
   validateIdeas,
@@ -29,6 +31,7 @@ test('new sessions start at the brief gate with Jonny-safe conversation state', 
   assert.equal(session.ideas.length, 0);
   assert.equal(session.script, null);
   assert.equal(session.critique, null);
+  assert.equal(session.targetDuration, 'standard');
   assert.match(session.messages[0].text, /what are we creating content about/i);
 });
 
@@ -80,6 +83,23 @@ test('teleprompter scenes are spoken-only deterministic chunks', () => {
   assert.equal(scenes[1].wordCount, 30);
   assert.equal(scenes[2].wordCount, 20);
   assert.equal(scenes.some((scene) => scene.section === 'caption'), false);
+});
+
+test('video duration presets have safe word budgets and default invalid choices to Standard', () => {
+  assert.deepEqual(
+    Object.values(DURATION_PRESETS).map(({ id, seconds, minWords, maxWords }) => ({ id, seconds, minWords, maxWords })),
+    [
+      { id: 'short', seconds: 20, minWords: 40, maxWords: 50 },
+      { id: 'standard', seconds: 40, minWords: 80, maxWords: 100 },
+      { id: 'full', seconds: 60, minWords: 120, maxWords: 140 },
+      { id: 'long', seconds: 90, minWords: 160, maxWords: 220 },
+    ],
+  );
+  const session = createSession();
+  setTargetDuration(session, 'full');
+  assert.equal(session.targetDuration, 'full');
+  setTargetDuration(session, 'unknown');
+  assert.equal(session.targetDuration, 'standard');
 });
 
 test('teleprompter scenes preserve punctuation and intentional line breaks', () => {

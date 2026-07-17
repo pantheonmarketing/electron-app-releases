@@ -412,6 +412,57 @@
 }
 .rick-context-pill strong { color: #c4b5fd; font-weight: 600; }
 
+.rick-duration-strip {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(340px, 560px) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 8px max(28px, calc((100% - 880px) / 2)) 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  border-radius: 11px;
+  background: rgba(124, 58, 237, 0.055);
+}
+.rick-duration-strip-head { display: grid; gap: 2px; min-width: 0; }
+.rick-duration-strip-head strong { color: #ddd6fe; font-size: var(--rick-text-xs); }
+.rick-duration-strip-head span { overflow: hidden; color: #77778b; font-size: var(--rick-text-2xs); text-overflow: ellipsis; white-space: nowrap; }
+.rick-duration-options { display: grid; grid-template-columns: repeat(4, minmax(64px, 1fr)); gap: 5px; }
+.rick-duration-options button {
+  display: grid;
+  gap: 2px;
+  min-height: 38px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #9393a4;
+  background: rgba(255, 255, 255, 0.025);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rick-duration-options button:hover:not(:disabled) { color: #eeeaff; border-color: rgba(167, 139, 250, 0.42); background: rgba(124, 58, 237, 0.12); }
+.rick-duration-options button.active { color: white; border-color: #8b5cf6; background: rgba(124, 58, 237, 0.22); box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.12); }
+.rick-duration-options button:disabled { cursor: default; opacity: 0.48; }
+.rick-duration-options button strong { font-size: var(--rick-text-xs); }
+.rick-duration-options button span { color: #747488; font-size: 9px; white-space: nowrap; }
+.rick-duration-options button.active span { color: #c4b5fd; }
+.rick-duration-fit {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(167, 139, 250, 0.38);
+  border-radius: 8px;
+  color: #ede9fe;
+  background: rgba(124, 58, 237, 0.2);
+  font-family: inherit;
+  font-size: var(--rick-text-2xs);
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rick-duration-fit:hover:not(:disabled) { border-color: #a78bfa; background: rgba(124, 58, 237, 0.38); }
+.rick-duration-fit:disabled { cursor: wait; opacity: 0.5; }
+.rick-duration-fit[hidden] { display: none; }
+
 .rick-messages {
   flex: 1;
   min-height: 0;
@@ -1316,6 +1367,29 @@
 .rick-teleprompter-controls select:focus { border-color: rgba(139, 92, 246, 0.55); }
 .rick-teleprompter-controls select:disabled { cursor: wait; opacity: 0.55; }
 .rick-media-device-status { margin: 9px 0 0; color: #77778b; font-size: var(--rick-text-2xs); line-height: var(--rick-leading-tight); }
+.rick-duration-options.teleprompter { grid-template-columns: repeat(2, 1fr); }
+.rick-duration-options.teleprompter button { min-height: 42px; }
+.rick-duration-fit.teleprompter { width: 100%; margin-top: 9px; }
+.rick-prompt-style-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.rick-prompt-style-options button {
+  display: grid;
+  gap: 3px;
+  min-height: 54px;
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  color: #a4a4b3;
+  background: rgba(255, 255, 255, 0.025);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rick-prompt-style-options button:hover:not(:disabled) { color: #eeeaff; border-color: rgba(167, 139, 250, 0.42); background: rgba(124, 58, 237, 0.1); }
+.rick-prompt-style-options button.active { color: white; border-color: #8b5cf6; background: rgba(124, 58, 237, 0.18); }
+.rick-prompt-style-options button:disabled { cursor: default; opacity: 0.48; }
+.rick-prompt-style-options button strong { font-size: var(--rick-text-xs); }
+.rick-prompt-style-options button span { color: #747488; font-size: var(--rick-text-2xs); line-height: var(--rick-leading-tight); }
+.rick-prompt-style-options button.active span { color: #b9afd8; }
 .rick-scene-layout-options { display: grid; gap: 7px; }
 .rick-scene-layout-options button {
   display: grid;
@@ -1580,6 +1654,8 @@
   .rick-composer-wrap { padding-left: 24px; padding-right: 24px; }
   .rick-thinking,
   .rick-error { margin-left: 24px; margin-right: 24px; }
+  .rick-duration-strip { margin-right: 24px; margin-left: 24px; grid-template-columns: 1fr; }
+  .rick-duration-strip-head { grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
 }
 
 @media (max-width: 1050px) {

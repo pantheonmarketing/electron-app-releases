@@ -6,6 +6,7 @@ const shared = require('../lib/shared');
 const { shellEscape } = require('../lib/helpers');
 const RickStore = require('../lib/rick-store');
 const {
+  DURATION_PRESETS,
   addScriptVersion,
   cleanText,
   createRecordingScenes,
@@ -19,6 +20,7 @@ const {
   selectScriptVersion,
   setFunnel,
   setModel,
+  setTargetDuration,
   setUpdated,
   validateCriticFeedback,
   validateCritiqueSummary,
@@ -241,7 +243,29 @@ const sceneSplitSchema = {
   required: ['scenes'],
 };
 
+const talkingPointsSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    scenes: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 40,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          bullets: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 },
+        },
+        required: ['bullets'],
+      },
+    },
+  },
+  required: ['scenes'],
+};
+
 const NATURAL_SCRIPT_FORMATTING = 'Format every spoken section for easy reading out loud. Use natural punctuation, including commas for short pauses and an ellipsis only when a deliberate longer pause helps delivery. Add intentional line breaks between spoken beats. Do not overuse punctuation.';
+const SCRIPT_DURATION_RULE = 'Follow the targetDuration in the supplied context. The combined spoken Hook, Body, Conclusion, and CTA must stay inside its minWords and maxWords range; the Caption does not count. Keep the idea complete while prioritizing one clear point.';
 
 const criticFeedbackSchema = {
   type: 'object',
@@ -302,7 +326,7 @@ function actionContract(action) {
   if (action === 'script') {
     return {
       schema: scriptSchema,
-      instruction: `Write the selected idea as a complete spoken short-form script with Hook Body Conclusion CTA and Caption. Keep spoken sections free of production directions. ${NATURAL_SCRIPT_FORMATTING} The reply should briefly introduce the finished script and ask whether it brings a personal experience to mind.`,
+      instruction: `Write the selected idea as a complete spoken short-form script with Hook Body Conclusion CTA and Caption. Keep spoken sections free of production directions. ${SCRIPT_DURATION_RULE} ${NATURAL_SCRIPT_FORMATTING} The reply should briefly introduce the finished script and ask whether it brings a personal experience to mind.`,
     };
   }
   if (action === 'critique') {
@@ -320,13 +344,13 @@ function actionContract(action) {
   if (action === 'critique_apply') {
     return {
       schema: scriptSchema,
-      instruction: `Rewrite the complete current script by applying the supplied prioritized critique improvements. Resolve disagreements using the brief selected idea and funnel intent. Return every script field and preserve the core message. Keep spoken sections natural and free of production directions. ${NATURAL_SCRIPT_FORMATTING}`,
+      instruction: `Rewrite the complete current script by applying the supplied prioritized critique improvements. Resolve disagreements using the brief selected idea and funnel intent. Return every script field and preserve the core message. Keep spoken sections natural and free of production directions. ${SCRIPT_DURATION_RULE} ${NATURAL_SCRIPT_FORMATTING}`,
     };
   }
   if (action === 'personalize') {
     return {
       schema: scriptSchema,
-      instruction: `Rewrite the full script around the personal experience in the latest user message. Keep the selected idea and funnel intent recognizable. ${NATURAL_SCRIPT_FORMATTING} The reply should briefly say what changed.`,
+      instruction: `Rewrite the full script around the personal experience in the latest user message. Keep the selected idea and funnel intent recognizable. ${SCRIPT_DURATION_RULE} ${NATURAL_SCRIPT_FORMATTING} The reply should briefly say what changed.`,
     };
   }
   if (action === 'scene_split') {
@@ -335,13 +359,22 @@ function actionContract(action) {
       instruction: 'Split the current Hook, Body, Conclusion, and CTA into short, natural recording beats in that exact order. Preserve every word and punctuation mark exactly; only choose scene boundaries and add a short friendly label for each scene. Aim for roughly 6 to 18 words per scene, keep complete thoughts together, and never add, remove, rewrite, or repeat words.',
     };
   }
+  if (action === 'talking_points') {
+    return {
+      schema: talkingPointsSchema,
+      instruction: 'Turn each supplied recording scene into one to five short talking-point cues in the same order. Each cue should usually be three to eight words, use phrases rather than full scripted sentences, preserve the important facts and examples, and give the speaker enough context to talk naturally from memory. Never invent a claim, number, example, or production direction. Return exactly one result for every supplied scene.',
+    };
+  }
   return {
     schema: scriptSchema,
-    instruction: `Revise the existing script according to the latest instruction. Return every script field. Keep fields outside the requested section unchanged unless a small consistency edit is required. ${NATURAL_SCRIPT_FORMATTING} The reply should briefly describe the revision.`,
+    instruction: `Revise the existing script according to the latest instruction. Return every script field. Keep fields outside the requested section unchanged unless a small consistency edit is required. ${SCRIPT_DURATION_RULE} ${NATURAL_SCRIPT_FORMATTING} The reply should briefly describe the revision.`,
   };
 }
 
 function providerContext(session, action, userInstruction = '') {
+  const targetId = Object.prototype.hasOwnProperty.call(DURATION_PRESETS, session.targetDuration)
+    ? session.targetDuration
+    : 'standard';
   return {
     action,
     funnel: session.funnel,
@@ -350,6 +383,7 @@ function providerContext(session, action, userInstruction = '') {
     selectedIdea: session.selectedIdea,
     currentScript: session.script,
     currentCritique: session.critique || null,
+    targetDuration: DURATION_PRESETS[targetId],
     userInstruction,
     conversation: session.messages.slice(-14).map((message) => ({
       role: message.role,
@@ -571,6 +605,29 @@ function findSessionOr404(req, res) {
   return session;
 }
 
+function validateTalkingPointScenes(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 40) {
+    throw new Error('Choose between 1 and 40 recording scenes');
+  }
+  return value.map((scene, index) => {
+    const text = cleanText(scene?.text, 24000);
+    if (!text) throw new Error(`Scene ${index + 1} has no script text`);
+    return { label: cleanText(scene?.label, 80) || `Scene ${index + 1}`, text };
+  });
+}
+
+function validateTalkingPoints(value, sceneCount) {
+  const scenes = Array.isArray(value?.scenes) ? value.scenes : [];
+  if (scenes.length !== sceneCount) throw new Error('Rick returned talking points for the wrong number of scenes');
+  return scenes.map((scene, index) => {
+    const bullets = Array.isArray(scene?.bullets)
+      ? scene.bullets.map((bullet) => cleanText(bullet, 180)).filter(Boolean).slice(0, 5)
+      : [];
+    if (!bullets.length) throw new Error(`Rick returned no talking points for scene ${index + 1}`);
+    return { bullets };
+  });
+}
+
 function resolveRecordingScriptVersion(session, requestedVersionId) {
   const versions = ensureScriptVersions(session);
   const requested = cleanText(requestedVersionId, 120);
@@ -749,6 +806,30 @@ router.post('/scripter/sessions/:id/teleprompter/scenes', async (req, res) => {
   }
 });
 
+router.post('/scripter/sessions/:id/teleprompter/talking-points', async (req, res) => {
+  const session = findSessionOr404(req, res);
+  if (!session) return;
+  if (!session.script) return res.status(400).json({ error: 'Build a script before opening the teleprompter' });
+  if (busySessions.has(session.id)) return res.status(409).json({ error: 'Rick is already working on this script' });
+
+  busySessions.add(session.id);
+  try {
+    const { version } = resolveRecordingScriptVersion(session, req.body?.versionId);
+    const sourceScenes = validateTalkingPointScenes(req.body?.scenes);
+    const instruction = `Create concise speaking cues for this exact recording plan:\n${JSON.stringify(sourceScenes)}`;
+    const result = await callRick('talking_points', { ...session, script: version.script }, instruction);
+    res.json({
+      versionId: version.id,
+      scenes: validateTalkingPoints(result, sourceScenes.length),
+    });
+  } catch (error) {
+    console.error('[Rick] Talking points failed:', error.message);
+    sendAiFailure(res, error, 'Rick could not make the talking points. Retry in a moment.');
+  } finally {
+    busySessions.delete(session.id);
+  }
+});
+
 router.post('/scripter/sessions/:id/recordings/combine', (req, res) => {
   const session = findSessionOr404(req, res);
   if (!session) return;
@@ -921,6 +1002,18 @@ router.patch('/scripter/sessions/:id/model', (req, res) => {
   }
 });
 
+router.patch('/scripter/sessions/:id/duration', (req, res) => {
+  const session = findSessionOr404(req, res);
+  if (!session) return;
+  try {
+    setTargetDuration(session, req.body.targetDuration);
+    getStore().save(session);
+    res.json({ session: publicSession(session) });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 router.post('/scripter/sessions/:id/message', async (req, res) => {
   const session = findSessionOr404(req, res);
   if (!session) return;
@@ -1009,6 +1102,7 @@ router.post('/scripter/sessions/:id/build', async (req, res) => {
   if (busySessions.has(session.id)) return res.status(409).json({ error: 'Rick is already building something' });
   busySessions.add(session.id);
   try {
+    if (req.body.targetDuration) setTargetDuration(session, req.body.targetDuration);
     // Preserve an existing draft before building a different idea over it.
     // For the first build there is no script yet, so this is a harmless no-op.
     ensureScriptVersions(session);
@@ -1051,13 +1145,14 @@ router.post('/scripter/sessions/:id/revise', async (req, res) => {
   if (busySessions.has(session.id)) return res.status(409).json({ error: 'Rick is already revising the script' });
   busySessions.add(session.id);
   try {
+    if (req.body.targetDuration) setTargetDuration(session, req.body.targetDuration);
     const fullInstruction = section ? `Revise only the ${section} section ${instruction}` : instruction;
     session.messages.push(createMessage('user', 'text', { text: fullInstruction }));
     // Adopt legacy/current wording as v1 before the AI result replaces it.
     ensureScriptVersions(session);
     const result = await callRick('revise', session, fullInstruction);
     session.script = validateScript(result);
-    addScriptVersion(session, 'revision');
+    addScriptVersion(session, req.body.targetDuration ? 'duration' : 'revision');
     session.recording = null;
     session.critique = null;
     session.completed = false;

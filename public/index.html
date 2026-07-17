@@ -579,6 +579,16 @@
       <div class="rick-workspace" id="rickWorkspace">
         <section class="rick-conversation" aria-label="Conversation with Rick">
           <div class="rick-context-strip" id="rickContextStrip"></div>
+          <div class="rick-duration-strip" id="rickDurationStrip" aria-label="Target video length">
+            <div class="rick-duration-strip-head"><strong>Video length</strong><span id="rickDurationStatus">Rick will aim for about 40 seconds</span></div>
+            <div class="rick-duration-options" role="group" aria-label="Choose target video length">
+              <button type="button" data-rick-duration="short" onclick="scrChooseTargetDuration('short')"><strong>20s</strong><span>Super short</span></button>
+              <button type="button" data-rick-duration="standard" onclick="scrChooseTargetDuration('standard')"><strong>40s</strong><span>Standard</span></button>
+              <button type="button" data-rick-duration="full" onclick="scrChooseTargetDuration('full')"><strong>60s</strong><span>Full reel</span></button>
+              <button type="button" data-rick-duration="long" onclick="scrChooseTargetDuration('long')"><strong>1m+</strong><span>Long-form</span></button>
+            </div>
+            <button type="button" class="rick-duration-fit" id="rickDurationFit" onclick="scrFitScriptToDuration()" hidden>Fit current script</button>
+          </div>
           <div class="rick-messages" id="rickMessages" aria-live="polite"></div>
           <div class="rick-thinking" id="rickThinking" aria-live="polite">
             <div class="rick-thinking-avatar">R</div><div><span></span><span></span><span></span></div><p id="rickThinkingText">Rick is cooking</p>
@@ -706,6 +716,27 @@
               <label for="rickTeleprompterVersion">Words shown in the prompt</label>
               <select id="rickTeleprompterVersion" onchange="scrChangeTeleprompterVersion(this.value)"></select>
               <p class="rick-media-device-status" id="rickTeleprompterVersionStatus">Showing the script open when you clicked Record</p>
+            </section>
+
+            <section class="rick-teleprompter-duration-controls">
+              <div class="rick-teleprompter-panel-label">Video length</div>
+              <div class="rick-duration-options teleprompter" role="group" aria-label="Choose target video length for this script">
+                <button type="button" data-rick-duration="short" onclick="scrChooseTargetDuration('short')"><strong>20s</strong><span>Super short</span></button>
+                <button type="button" data-rick-duration="standard" onclick="scrChooseTargetDuration('standard')"><strong>40s</strong><span>Standard</span></button>
+                <button type="button" data-rick-duration="full" onclick="scrChooseTargetDuration('full')"><strong>60s</strong><span>Full reel</span></button>
+                <button type="button" data-rick-duration="long" onclick="scrChooseTargetDuration('long')"><strong>1m+</strong><span>Long-form</span></button>
+              </div>
+              <p class="rick-media-device-status" id="rickTeleprompterDurationStatus">Current script estimate</p>
+              <button type="button" class="rick-duration-fit teleprompter" id="rickTeleprompterDurationFit" onclick="scrFitScriptToDuration(true)" hidden>Fit script</button>
+            </section>
+
+            <section class="rick-prompt-style-controls">
+              <div class="rick-teleprompter-panel-label">Prompt style</div>
+              <div class="rick-prompt-style-options" role="group" aria-label="Choose how much of the script appears while recording">
+                <button type="button" class="active" data-prompt-style="script" onclick="scrSetPromptStyle('script')"><strong>Full script</strong><span>Read it word for word</span></button>
+                <button type="button" data-prompt-style="points" onclick="scrSetPromptStyle('points')"><strong>Talking points</strong><span>Short cues, speak naturally</span></button>
+              </div>
+              <p class="rick-media-device-status" id="rickPromptStyleStatus">Showing every word from your saved script</p>
             </section>
 
             <section class="rick-scene-layout-controls">

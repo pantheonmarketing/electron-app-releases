@@ -517,7 +517,7 @@ The BAD version is a polished tagline. The GOOD version ends on a feeling, not a
 9. **P.S.** (handle one more objection, add human touch, or mic-drop moment)
 10. **Add 2-5 parenthetical asides** throughout
 11. **DO NOT proofread for typos** (leave minor ones in, they build trust)
-12. **AI-detection pass** — re-read and kill anything that sounds written by ChatGPT (see AI-DETECTION TRAPS section)
+12. **AI-detection pass** �� re-read and kill anything that sounds written by ChatGPT (see AI-DETECTION TRAPS section)
 13. **Read it out loud** — if it sounds like a speech or essay, rewrite it as texting
 
 ---
