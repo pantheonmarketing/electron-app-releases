@@ -30,6 +30,9 @@ remotion-project/
 ig-cookies.json
 instagram-tracker-state.json
 student-messages.txt
+rick-sessions.json
+terminal-sessions.json
+user-prefs.json
 
 # Large binaries (bundled during build, not tracked in git)
 bin/win/ffmpeg.exe
