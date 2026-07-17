@@ -353,6 +353,60 @@ async function setTerminalLayout(cols) {
   }
 }
 
+/**
+ * Recent chats — reopen a chat whose pane was closed or that predates a restart.
+ * Live chats already have a pane, so they are shown but not offered for resume.
+ */
+async function openRecentChatsModal() {
+  const modal = document.getElementById('recentChatsModal');
+  const list = document.getElementById('recentChatsList');
+  modal.classList.add('active');
+  list.textContent = 'Loading...';
+  try {
+    const { sessions } = await api.terminalHistory();
+    if (!sessions.length) {
+      list.innerHTML = '<div style="color:#666;font-size:13px;padding:18px 0;text-align:center;">No previous chats yet</div>';
+      return;
+    }
+    list.innerHTML = sessions.map(s => {
+      const when = new Date(s.updatedAt).toLocaleString();
+      const badges = [
+        s.skill ? escHtml(s.skill) : '',
+        s.model ? escHtml(s.model) : '',
+        s.live ? 'open' : '',
+      ].filter(Boolean).join(' · ');
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.name)}</div>
+          <div style="font-size:11px;color:#666;">${when}${badges ? ' · ' + badges : ''}</div>
+        </div>
+        <button class="btn btn-sm ${s.live ? 'btn-ghost' : 'btn-primary'}" onclick="resumeChat('${s.id}')">${s.live ? 'Go to' : 'Resume'}</button>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.textContent = 'Could not load recent chats: ' + e.message;
+  }
+}
+
+function closeRecentChatsModal() {
+  document.getElementById('recentChatsModal').classList.remove('active');
+}
+
+async function resumeChat(sessionId) {
+  try {
+    const { session, error } = await api.resumeTerminal(sessionId);
+    if (error) throw new Error(error);
+    closeRecentChatsModal();
+    switchView('terminals');
+    // refreshTerminals adds the pane and wires SSE for anything newly in memory.
+    await refreshTerminals();
+    document.getElementById(`pane-${session.id}`)?.scrollIntoView({ block: 'nearest' });
+    showToast('Chat resumed', 'success');
+  } catch (e) {
+    showToast('Could not resume chat: ' + e.message, 'error');
+  }
+}
+
 function openNewTerminalModal() {
   const modal = document.getElementById('newTerminalModal');
   document.getElementById('ntName').value = '';

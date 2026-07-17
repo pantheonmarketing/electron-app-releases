@@ -203,6 +203,7 @@
     <div class="terminal-view" id="terminalView">
       <div class="terminal-toolbar">
         <button class="btn btn-primary btn-sm" onclick="openNewTerminalModal()">+ New Terminal</button>
+        <button class="btn btn-ghost btn-sm" onclick="openRecentChatsModal()" title="Reopen a previous chat">🕘 Recent chats</button>
         <div style="flex:1;"></div>
         <span style="color:#666;font-size:12px;">Layout:</span>
         <button class="layout-btn active" data-layout="1" onclick="setTerminalLayout(1)">▣ 1</button>
@@ -1270,6 +1271,18 @@
         Log Out
       </button>
       <button class="btn btn-ghost" onclick="closeSettingsModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Chats Modal -->
+<div class="modal-overlay" id="recentChatsModal">
+  <div class="modal" style="width:520px;">
+    <h2>Recent chats</h2>
+    <p style="color:#777;font-size:12px;margin:0 0 12px;">Reopen a previous chat. Its transcript comes back and Claude picks up where it left off.</p>
+    <div id="recentChatsList" style="max-height:340px;overflow-y:auto;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeRecentChatsModal()">Close</button>
     </div>
   </div>
 </div>

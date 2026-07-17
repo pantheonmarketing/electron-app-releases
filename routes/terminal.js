@@ -9,6 +9,13 @@ router.get('/terminal/sessions', (req, res) => {
   res.json(shared.terminalManager.listSessions());
 });
 
+// Recent chats, including ones whose pane is closed or that predate a restart.
+router.get('/terminal/history', (req, res) => {
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30));
+  try { res.json({ sessions: shared.terminalManager.listRecent(limit) }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/terminal/sessions', (req, res) => {
   let { name, workingDir, skill, model } = req.body;
   // Validate workingDir is actually a directory
@@ -114,6 +121,18 @@ router.get('/terminal/sessions/:id', (req, res) => {
   const session = shared.terminalManager.getSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
+});
+
+// Reopen a chat from history. Safe to call on a live session — it is a no-op.
+router.post('/terminal/sessions/:id/resume', (req, res) => {
+  try { res.json({ ok: true, session: shared.terminalManager.resumeSession(req.params.id) }); }
+  catch (e) { res.status(404).json({ error: e.message }); }
+});
+
+// Closing a pane keeps the chat in history; this erases it for good.
+router.delete('/terminal/history/:id', (req, res) => {
+  try { res.json({ ok: shared.terminalManager.purgeSession(req.params.id) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 router.get('/terminal/sessions/:id/stream', (req, res) => {
