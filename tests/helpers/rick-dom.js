@@ -19,6 +19,10 @@ const FIXTURE = `
     <button data-funnel="bof">BOF</button>
   </div>
   <div class="rick-workspace" id="rickWorkspace">
+    <div class="rick-script-head">
+      <div><div class="rick-eyebrow">Working draft</div><h2>Your script</h2></div>
+      <button class="rick-copy-all">Copy all</button>
+    </div>
     <div id="rickContextStrip"></div>
     <div id="rickMessages"></div>
     <div id="rickThinking"><p id="rickThinkingText"></p></div>
@@ -59,7 +63,7 @@ function makeSession(overrides = {}) {
   return {
     id: 'rick-1', title: 'Test', stage: 'ideas', funnel: 'auto', model: 'auto',
     brief: { niche: 'meal prep', audience: 'nurses', contentType: 'reels' },
-    ideas: [], selectedIdea: null, script: null, critique: null, recording: null,
+    ideas: [], selectedIdea: null, script: null, scriptVersions: [], scriptVersionId: null, critique: null, recording: null,
     completed: false, messages: [], createdAt: '', updatedAt: '',
     ...overrides,
   };

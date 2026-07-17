@@ -41,6 +41,15 @@ test('a new chat persists as a distinct session and never overwrites the previou
   });
 });
 
+test('recent chat history exposes a New Chat action backed by fresh session creation', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf-8');
+  const script = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'terminals.js'), 'utf-8');
+
+  assert.match(html, /onclick="startNewChat\(\)">\+ New Chat<\/button>/);
+  assert.match(script, /function startNewChat\(\)[\s\S]*?openNewTerminalModal\(\)/);
+  assert.match(script, /api\.createTerminal\(\{ name, skill, model, workingDir \}\)/);
+});
+
 test('recent chats list newest first and report which are still live', () => {
   withManager((manager) => {
     const first = manager.createSession({ name: 'Older chat' });

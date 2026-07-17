@@ -639,10 +639,27 @@
                 <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20M5 5l-3 7 3 7M19 5l3 7-3 7M5 5l7-3 7 3M5 19l7 3 7-3"/></svg>Drag to reframe</span>
               </div>
               <div class="rick-recording-badge" id="rickRecordingBadge"><span></span>Recording</div>
-              <div class="rick-teleprompter-copy"><span id="rickTeleprompterSceneLabel">Scene</span><p id="rickTeleprompterPromptText"></p></div>
+              <div class="rick-teleprompter-copy" id="rickTeleprompterCopy">
+                <div class="rick-teleprompter-copy-head" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'move')" title="Drag to move the script panel">
+                  <span class="rick-teleprompter-scene-label" id="rickTeleprompterSceneLabel">Scene</span>
+                  <span class="rick-teleprompter-move-cue" aria-hidden="true">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20M5 5l-3 7 3 7M19 5l3 7-3 7M5 5l7-3 7 3M5 19l7 3 7-3"/></svg>
+                    Drag to move
+                  </span>
+                  <button type="button" class="rick-teleprompter-copy-reset" onclick="scrResetTeleprompterPanel()" onpointerdown="event.stopPropagation()" aria-label="Reset script panel position and size" title="Reset panel">&#8634;</button>
+                </div>
+                <p id="rickTeleprompterPromptText"></p>
+                <i class="rick-teleprompter-resize nw" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'nw')" aria-hidden="true"></i>
+                <i class="rick-teleprompter-resize ne" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'ne')" aria-hidden="true"></i>
+                <i class="rick-teleprompter-resize sw" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'sw')" aria-hidden="true"></i>
+                <i class="rick-teleprompter-resize se" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'se')" aria-hidden="true"></i>
+              </div>
               <div class="rick-camera-controls">
                 <time id="rickTeleprompterTimer">00:00</time>
-                <button type="button" id="rickTeleprompterRecordBtn" onclick="scrToggleRecording()"><span></span><strong>Start recording</strong></button>
+                <div class="rick-camera-actions">
+                  <button type="button" class="rick-rerecord" id="rickRerecordBtn" onclick="scrRerecordSelectedScene()" title="Restart the selected scene and replace only its take">Re-record</button>
+                  <button type="button" id="rickTeleprompterRecordBtn" onclick="scrToggleRecording()"><span></span><strong>Start recording</strong></button>
+                </div>
               </div>
             </div>
             <div class="rick-teleprompter-error" id="rickTeleprompterError" role="alert"></div>
@@ -678,7 +695,7 @@
 
             <section class="rick-recording-progress">
               <div class="rick-teleprompter-panel-label">Session progress</div>
-              <div class="rick-recording-progress-copy"><span id="rickTeleprompterProgressText">0 of 0 scenes</span><strong id="rickTeleprompterProgressPercent">0%</strong></div>
+              <div class="rick-recording-progress-copy"><span id="rickTeleprompterProgressText">0 of 0 scenes</span><span class="rick-total-duration" id="rickTotalDuration" title="Total video recorded across every take">00:00 recorded</span><strong id="rickTeleprompterProgressPercent">0%</strong></div>
               <div class="rick-recording-progress-bar"><i id="rickTeleprompterProgressFill"></i></div>
               <p id="rickTeleprompterStatus">Choose your devices and record the first scene</p>
             </section>

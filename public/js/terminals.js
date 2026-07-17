@@ -26,7 +26,7 @@ function switchView(view) {
   if (view === 'reelmaster') rmInit();
   if (view === 'scripter') scrInit();
   if (view === 'heygen') hgInit();
-  if (view === 'stories') stInit();
+  if (view === 'stories') sInit();
   if (view === 'influencer') icInit();
   if (view === 'giveaway') gvInit();
   if (view === 'scout') scInit();
@@ -424,6 +424,16 @@ function closeRecentChatsModal() {
   document.getElementById('recentChatsModal').classList.remove('active');
 }
 
+/**
+ * Starts the existing fresh-session flow from chat history. This deliberately
+ * does not resume or mutate the selected history entry: submitting the form
+ * calls createTerminal, which creates a new unique terminal session.
+ */
+function startNewChat() {
+  closeRecentChatsModal();
+  openNewTerminalModal();
+}
+
 async function resumeChat(sessionId) {
   try {
     const { session, error } = await api.resumeTerminal(sessionId);
@@ -536,4 +546,3 @@ async function openInTerminal(taskId) {
     showToast('Failed: ' + e.message, 'error');
   }
 }
-

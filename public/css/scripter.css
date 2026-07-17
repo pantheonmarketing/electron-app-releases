@@ -596,7 +596,87 @@
   animation: rickPanelIn 190ms ease both;
 }
 .rick-workspace.has-script .rick-script-panel { display: flex; flex-direction: column; }
-.rick-script-head { justify-content: space-between; min-height: 68px; padding: 0 18px; border-bottom: 1px solid var(--rick-border); }
+.rick-script-head { justify-content: space-between; gap: 10px; min-height: 68px; padding: 0 18px; border-bottom: 1px solid var(--rick-border); }
+
+.rick-funnel-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.rick-funnel-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  color: #d9d9e3;
+  background: rgba(255, 255, 255, 0.028);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 150ms, border-color 150ms, background 150ms, opacity 150ms;
+}
+.rick-funnel-choice:hover:not(:disabled):not(.spent):not(.chosen) {
+  transform: translateY(-1px);
+  border-color: rgba(139, 92, 246, 0.42);
+  background: rgba(139, 92, 246, 0.075);
+}
+.rick-funnel-choice-head { display: flex; align-items: baseline; gap: 6px; }
+.rick-funnel-choice-head strong {
+  color: #c4b5fd;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+}
+.rick-funnel-choice-title { color: #e9e5f2; font-size: 11px; font-weight: 600; }
+.rick-funnel-choice-last {
+  margin-left: auto;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.16);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.rick-funnel-choice-blurb { color: #9a9aab; font-size: 10px; line-height: 1.45; }
+/* The answer stays on screen as a record of the decision. */
+.rick-funnel-choice.chosen { border-color: rgba(139, 92, 246, 0.5); background: rgba(124, 58, 237, 0.16); cursor: default; }
+.rick-funnel-choice.spent { opacity: 0.34; cursor: default; }
+.rick-funnel-choice:disabled { cursor: default; }
+.rick-funnel-choice:disabled:not(.chosen):not(.spent) { opacity: 0.45; }
+
+.rick-funnel.unchosen button { opacity: 0.4; }
+
+.rick-versions {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.rick-versions::-webkit-scrollbar { display: none; }
+.rick-version-chip {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--rick-border);
+  border-radius: 6px;
+  color: #8b8b9f;
+  background: rgba(255, 255, 255, 0.035);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 160ms, border-color 160ms, background 160ms;
+}
+.rick-version-chip:hover:not(:disabled) { color: white; border-color: rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.1); }
+.rick-version-chip.active { color: #ede9fe; border-color: rgba(139, 92, 246, 0.5); background: rgba(124, 58, 237, 0.24); }
+.rick-version-chip:disabled { opacity: 0.4; cursor: default; }
 .rick-eyebrow { margin-bottom: 4px; color: #69697c; font-size: 8px; font-weight: 700; letter-spacing: 0.75px; text-transform: uppercase; }
 .rick-script-head h2,
 .rick-drawer-head h2 { font-size: 15px; }
@@ -788,6 +868,8 @@
   cursor: pointer;
 }
 .rick-critique-actions button.primary { flex: 1; color: white; border-color: #7c3aed; background: linear-gradient(145deg, #8b5cf6, #6d28d9); }
+.rick-critique-actions button.restore { margin-right: auto; color: #aaa8b8; }
+.rick-critique-actions button.restore:hover { color: #ddd9e8; border-color: rgba(255, 255, 255, 0.13); background: rgba(255, 255, 255, 0.065); }
 .rick-critique-panel button:disabled { cursor: default; opacity: 0.42; }
 .rick-script-footer .rick-record-script { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; font-size: 10px; font-weight: 700; letter-spacing: 0.15px; }
 
@@ -943,17 +1025,85 @@
 .rick-framing-overlay > span { position: absolute; top: 14px; right: 14px; display: flex; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 20px; color: #e5e5ec; background: rgba(0, 0, 0, 0.55); font-size: 8px; font-weight: 700; letter-spacing: 0.35px; }
 .rick-teleprompter-copy {
   position: absolute;
-  inset: 17% 8% auto;
-  padding: 17px 15px;
+  inset: auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 15px 15px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 13px;
   background: rgba(3, 3, 8, 0.64);
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(8px);
+  container-type: inline-size;
   text-align: center;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
 }
-.rick-teleprompter-copy span { display: block; margin-bottom: 8px; color: #c4b5fd; font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
-.rick-teleprompter-copy p { margin: 0; color: white; font-family: 'Archivo', 'Segoe UI', sans-serif; font-size: clamp(18px, 2.15vw, 30px); font-weight: 600; line-height: 1.28; text-shadow: 0 3px 9px rgba(0, 0, 0, 0.9); }
+.rick-teleprompter-copy:hover,
+.rick-teleprompter-copy.adjusting { border-color: rgba(196, 181, 253, 0.4); box-shadow: 0 10px 32px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(139, 92, 246, 0.12); }
+.rick-teleprompter-copy-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-height: 35px;
+  margin: 0 -8px 8px;
+  padding: 7px 8px 5px;
+  color: #c4b5fd;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.rick-teleprompter-copy.adjusting .rick-teleprompter-copy-head { cursor: grabbing; }
+.rick-teleprompter-scene-label { overflow: hidden; font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.rick-teleprompter-move-cue { display: flex; align-items: center; gap: 4px; margin-left: auto; color: rgba(229, 229, 236, 0.62); font-size: 7px; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap; }
+.rick-teleprompter-copy-reset {
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #9f9faf;
+  background: rgba(255, 255, 255, 0.04);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.rick-teleprompter-copy-reset:hover { color: white; border-color: rgba(139, 92, 246, 0.45); background: rgba(124, 58, 237, 0.16); }
+.rick-teleprompter-copy p {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: white;
+  font-family: 'Archivo', 'Segoe UI', sans-serif;
+  font-size: clamp(15px, 7cqw, 30px);
+  font-weight: 600;
+  line-height: 1.28;
+  text-shadow: 0 3px 9px rgba(0, 0, 0, 0.9);
+}
+.rick-teleprompter-resize { position: absolute; z-index: 2; width: 22px; height: 22px; color: rgba(229, 229, 236, 0.7); touch-action: none; }
+.rick-teleprompter-resize::after { position: absolute; width: 9px; height: 9px; content: ''; transition: color 140ms ease, width 140ms ease, height 140ms ease; }
+.rick-teleprompter-copy:hover .rick-teleprompter-resize::after,
+.rick-teleprompter-copy.adjusting .rick-teleprompter-resize::after { width: 11px; height: 11px; color: #c4b5fd; }
+.rick-teleprompter-resize.nw { top: 0; left: 0; cursor: nwse-resize; }
+.rick-teleprompter-resize.ne { top: 0; right: 0; cursor: nesw-resize; }
+.rick-teleprompter-resize.sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.rick-teleprompter-resize.se { right: 0; bottom: 0; cursor: nwse-resize; }
+.rick-teleprompter-resize.nw::after { top: 4px; left: 4px; border-top: 2px solid currentColor; border-left: 2px solid currentColor; }
+.rick-teleprompter-resize.ne::after { top: 4px; right: 4px; border-top: 2px solid currentColor; border-right: 2px solid currentColor; }
+.rick-teleprompter-resize.sw::after { bottom: 4px; left: 4px; border-bottom: 2px solid currentColor; border-left: 2px solid currentColor; }
+.rick-teleprompter-resize.se::after { right: 4px; bottom: 4px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; }
+.rick-panel-adjusting,
+.rick-panel-adjusting * { user-select: none !important; }
 .rick-recording-badge {
   position: absolute;
   top: 16px;
@@ -980,6 +1130,21 @@
 .rick-camera-controls button strong { font-size: 9px; }
 .rick-teleprompter.recording .rick-camera-controls button > span { border-radius: 2px; }
 .rick-camera-controls button:disabled { opacity: 0.4; cursor: default; }
+/* Keeps Re-record beside Record while the bar stays space-between. */
+.rick-camera-actions { display: flex; align-items: center; gap: 8px; }
+/* Outranks `.rick-camera-controls button` so restarting does not wear the
+   red record treatment; it is not the record action. */
+.rick-camera-controls .rick-rerecord {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #e5e5ec;
+  background: rgba(0, 0, 0, 0.62);
+  font-size: 9px;
+  font-weight: 700;
+}
+.rick-camera-controls .rick-rerecord:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(0, 0, 0, 0.78);
+}
 .rick-teleprompter-error { display: none; width: min(440px, 90%); margin-top: 10px; padding: 8px 10px; border: 1px solid rgba(248, 113, 113, 0.24); border-radius: 8px; color: #fca5a5; background: rgba(127, 29, 29, 0.18); font-size: 9px; text-align: center; }
 .rick-teleprompter-error.visible { display: block; }
 
@@ -1014,6 +1179,8 @@
 .rick-audio-level i { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #34d399, #a3e635); transition: width 80ms linear; }
 .rick-recording-progress-copy { justify-content: space-between; gap: 10px; color: #8d8d9e; font-size: 9px; }
 .rick-recording-progress-copy strong { color: #e8e8ef; }
+/* Tabular figures stop the total jittering as the seconds tick over. */
+.rick-total-duration { color: #c4b5fd; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rick-recording-progress-bar { height: 5px; margin: 9px 0; overflow: hidden; border-radius: 5px; background: rgba(255, 255, 255, 0.07); }
 .rick-recording-progress-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: #34d399; transition: width 180ms ease; }
 .rick-recording-progress p { margin: 0; color: #66667a; font-size: 9px; line-height: 1.5; }
@@ -1129,6 +1296,7 @@
   .rick-script-panel { flex-basis: 330px; }
   .rick-teleprompter-workspace { grid-template-columns: 150px minmax(300px, 1fr) 250px; }
   .rick-teleprompter-controls { padding: 16px; }
+  .rick-teleprompter-move-cue { font-size: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

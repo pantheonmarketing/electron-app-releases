@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const RickStore = require('../lib/rick-store');
-const { storeScriptVersion } = require('../lib/rick-engine');
+const { addScriptVersion } = require('../lib/rick-engine');
 
 test('session store creates updates lists and deletes persistent sessions', () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rick-store-'));
@@ -23,10 +23,10 @@ test('session store creates updates lists and deletes persistent sessions', () =
       cta: 'Original CTA',
       caption: 'Original caption',
     };
-    storeScriptVersion(session, 'critique');
+    addScriptVersion(session, 'original');
     store.save(session);
     assert.equal(store.get(session.id).title, 'Updated session');
-    assert.equal(store.get(session.id).scriptHistory[0].script.hook, 'Original hook');
+    assert.equal(store.get(session.id).scriptVersions[0].script.hook, 'Original hook');
     assert.equal(store.list()[0].stage, 'ideas');
 
     assert.equal(store.delete(session.id), true);

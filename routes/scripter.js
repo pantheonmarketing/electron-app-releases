@@ -6,17 +6,19 @@ const shared = require('../lib/shared');
 const { shellEscape } = require('../lib/helpers');
 const RickStore = require('../lib/rick-store');
 const {
+  addScriptVersion,
   cleanText,
   createRecordingScenes,
   createMessage,
+  ensureScriptVersions,
+  funnelChoicesFor,
   isBriefReady,
   publicSession,
-  restoreLatestScriptVersion,
   sanitizeBrief,
+  selectScriptVersion,
   setFunnel,
   setModel,
   setUpdated,
-  storeScriptVersion,
   validateCriticFeedback,
   validateCritiqueSummary,
   validateIdeas,
@@ -257,7 +259,10 @@ function actionContract(action) {
   if (action === 'brief') {
     return {
       schema: briefSchema,
-      instruction: 'Extract and update the niche audience and content type from the full conversation. Preserve known details. If any field is unclear set ready false return zero ideas and ask one direct question for the missing detail. If all three are clear set ready true and return exactly 10 one-line hook ideas.',
+      // Ideas are not written here any more: they depend on the funnel stage,
+      // which the user is asked for once the brief is complete. Writing them
+      // now would only produce ten ideas aimed at nothing in particular.
+      instruction: 'Extract and update the niche audience and content type from the full conversation. Preserve known details. Always return zero ideas. If any field is unclear set ready false and ask one direct question for the missing detail. If all three are clear set ready true and confirm the brief back in one short line without asking another question.',
     };
   }
   if (action === 'ideas') {
@@ -739,6 +744,42 @@ router.patch('/scripter/sessions/:id/funnel', (req, res) => {
   }
 });
 
+/**
+ * Answers the funnel question and writes the ideas for that stage in one turn,
+ * because choosing the stage is only meaningful when it changes the ideas.
+ * Nothing is saved if the ideas fail, so Retry replays the same choice safely.
+ */
+router.post('/scripter/sessions/:id/funnel/choose', async (req, res) => {
+  const session = findSessionOr404(req, res);
+  if (!session) return;
+  if (!isBriefReady(session.brief)) return res.status(400).json({ error: 'Tell Rick the topic audience and content type first' });
+  if (busySessions.has(session.id)) return res.status(409).json({ error: 'Rick is already working on this session' });
+  try {
+    setFunnel(session, req.body.funnel);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+  busySessions.add(session.id);
+  try {
+    const result = await callRick('ideas', session, `The user chose the ${session.funnel} funnel stage`);
+    session.ideas = validateIdeas(result);
+    session.selectedIdea = null;
+    session.stage = 'ideas';
+    session.messages.push(createMessage('assistant', 'ideas', {
+      text: cleanText(result.reply, 800) || 'Nice this has some heat Pick the idea you want to build',
+      ideas: session.ideas,
+    }));
+    setUpdated(session);
+    getStore().save(session);
+    res.json({ session: publicSession(session) });
+  } catch (error) {
+    console.error('[Rick] Funnel choice failed:', error.message);
+    sendAiFailure(res, error, 'Rick could not write the ideas for that stage. Retry and it usually goes through.');
+  } finally {
+    busySessions.delete(session.id);
+  }
+});
+
 router.patch('/scripter/sessions/:id/model', (req, res) => {
   const session = findSessionOr404(req, res);
   if (!session) return;
@@ -764,16 +805,24 @@ router.post('/scripter/sessions/:id/message', async (req, res) => {
       const result = await callRick('brief', session, message);
       session.brief = sanitizeBrief({ ...session.brief, ...result });
       if (isBriefReady(session.brief) && result.ready) {
-        let ideas;
-        try { ideas = validateIdeas(result.ideas); }
-        catch (_) { ideas = validateIdeas(await callRick('ideas', session, message)); }
-        session.ideas = ideas;
-        session.stage = 'ideas';
         session.title = session.brief.niche.slice(0, 54) || session.title;
-        session.messages.push(createMessage('assistant', 'ideas', {
-          text: cleanText(result.reply, 800) || 'Nice this has some heat Pick the idea you want to build',
-          ideas,
-        }));
+        if (session.funnel) {
+          // Already chosen from the header, so do not ask the same thing twice.
+          session.ideas = validateIdeas(await callRick('ideas', session, message));
+          session.stage = 'ideas';
+          session.messages.push(createMessage('assistant', 'ideas', {
+            text: 'Nice this has some heat Pick the idea you want to build',
+            ideas: session.ideas,
+          }));
+        } else {
+          // The brief is settled but the ideas are not written yet: what makes
+          // a good idea depends entirely on what the video is meant to do, so
+          // the user picks that first.
+          session.messages.push(createMessage('assistant', 'funnel', {
+            text: cleanText(result.reply, 800) || `Got it: ${session.brief.niche} for ${session.brief.audience}`,
+            funnelChoices: funnelChoicesFor(session, getStore().list()),
+          }));
+        }
       } else {
         session.messages.push(createMessage('assistant', 'text', {
           text: cleanText(result.reply, 1000) || missingBriefReply(session.brief),
@@ -794,8 +843,13 @@ router.post('/scripter/sessions/:id/message', async (req, res) => {
           text: 'Nice this one is ready Copy it or keep refining whenever you want',
         }));
       } else {
+        // Capture the draft that is currently visible before replacing it.
+        // This is especially important for sessions created before versions
+        // existed: their current script must become v1, not the rewrite.
+        ensureScriptVersions(session);
         const result = await callRick('personalize', session, message);
         session.script = validateScript(result);
+        addScriptVersion(session, 'personalized');
         session.recording = null;
         session.critique = null;
         session.completed = false;
@@ -826,6 +880,9 @@ router.post('/scripter/sessions/:id/build', async (req, res) => {
   if (busySessions.has(session.id)) return res.status(409).json({ error: 'Rick is already building something' });
   busySessions.add(session.id);
   try {
+    // Preserve an existing draft before building a different idea over it.
+    // For the first build there is no script yet, so this is a harmless no-op.
+    ensureScriptVersions(session);
     session.selectedIdea = { index, text: session.ideas[index] };
     session.stage = 'script';
     session.messages.push(createMessage('user', 'text', {
@@ -833,6 +890,9 @@ router.post('/scripter/sessions/:id/build', async (req, res) => {
     }));
     const result = await callRick('script', session, session.ideas[index]);
     session.script = validateScript(result);
+    // Building another idea appends rather than resetting, so the earlier
+    // script stays reachable from the version picker.
+    addScriptVersion(session, session.scriptVersions?.length ? 'rebuild' : 'original');
     session.recording = null;
     session.critique = null;
     session.stage = 'personalize';
@@ -864,8 +924,11 @@ router.post('/scripter/sessions/:id/revise', async (req, res) => {
   try {
     const fullInstruction = section ? `Revise only the ${section} section ${instruction}` : instruction;
     session.messages.push(createMessage('user', 'text', { text: fullInstruction }));
+    // Adopt legacy/current wording as v1 before the AI result replaces it.
+    ensureScriptVersions(session);
     const result = await callRick('revise', session, fullInstruction);
     session.script = validateScript(result);
+    addScriptVersion(session, 'revision');
     session.recording = null;
     session.critique = null;
     session.completed = false;
@@ -923,9 +986,11 @@ router.post('/scripter/sessions/:id/critique/apply', async (req, res) => {
       disagreements: session.critique.disagreements,
     });
     const result = await callRick('critique_apply', session, instruction);
-    const improvedScript = validateScript(result);
-    storeScriptVersion(session, 'critique');
-    session.script = improvedScript;
+    // The pre-critique script is already a version, so only the improved one
+    // needs adding. The user reaches the old wording from the version picker.
+    ensureScriptVersions(session);
+    session.script = validateScript(result);
+    addScriptVersion(session, 'critique');
     session.recording = null;
     session.critique.applied = true;
     session.critique.appliedAt = new Date().toISOString();
@@ -955,19 +1020,28 @@ router.post('/scripter/sessions/:id/critique/skip', (req, res) => {
   res.json({ session: publicSession(session) });
 });
 
-router.post('/scripter/sessions/:id/critique/restore', (req, res) => {
+/**
+ * Switches which stored version is the working draft. Nothing is written over
+ * and no AI call is made, so moving between versions is free and reversible.
+ */
+router.post('/scripter/sessions/:id/script/version', (req, res) => {
   const session = findSessionOr404(req, res);
   if (!session) return;
   if (busySessions.has(session.id)) return res.status(409).json({ error: 'Rick is already working on this script' });
-  const restoredVersion = restoreLatestScriptVersion(session);
-  if (!restoredVersion) return res.status(400).json({ error: 'No previous script version is available' });
-  session.recording = null;
-  session.critique = null;
-  session.completed = false;
-  session.messages.push(createMessage('assistant', 'script', {
-    text: 'Restored the script from before the latest critique changes',
-    script: session.script,
-  }));
+  const current = session.scriptVersionId;
+  const version = selectScriptVersion(session, req.body.versionId);
+  if (!version) return res.status(400).json({ error: 'That script version is no longer available' });
+  if (version.id !== current) {
+    // A recording and a critique both describe the words they were made from,
+    // so they do not survive a switch to different words.
+    session.recording = null;
+    session.critique = null;
+    session.completed = false;
+    session.messages.push(createMessage('assistant', 'script', {
+      text: `Switched to v${version.number} of the script`,
+      script: session.script,
+    }));
+  }
   setUpdated(session);
   getStore().save(session);
   res.json({ session: publicSession(session) });

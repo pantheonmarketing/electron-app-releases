@@ -35,6 +35,10 @@ const rickState = {
     frameTimerId: null,
     framingDrag: null,
     framing: { zoom: 1, x: 0, y: 0 },
+    scriptPanel: null,
+    scriptPanelInteraction: null,
+    scriptPanelLayoutFrame: null,
+    scriptPanelResizeHandler: null,
     mediaRequest: 0,
     cameraId: null,
     microphoneId: null,
@@ -380,15 +384,22 @@ function scrRenderProgress() {
   lines.forEach((line, index) => line.classList.toggle('complete', index < activeIndex));
 }
 
-// The stage is choosable from the first question onward. Picking one early just
-// tells Rick the intent before the ideas exist; Auto decides only if left alone.
+/**
+ * The header is where the chosen stage is shown and changed, not where it is
+ * decided. Until the funnel question has been answered in the conversation
+ * there is nothing to change, and a live Auto button here would be a way to
+ * skip the choice without ever making it.
+ */
 function scrRenderFunnel() {
   const session = rickState.activeSession;
   const control = document.getElementById('rickFunnel');
   if (!control) return;
+  const chosen = Boolean(session.funnel);
+  control.classList.toggle('unchosen', !chosen);
   control.querySelectorAll('button').forEach((button) => {
     button.classList.toggle('active', button.dataset.funnel === session.funnel);
-    button.disabled = rickState.busy;
+    button.disabled = rickState.busy || !chosen;
+    button.title = chosen ? '' : 'Rick asks this once your brief is done';
   });
 }
 
@@ -423,6 +434,9 @@ function scrRenderMessages() {
     if (message.type === 'ideas' && Array.isArray(message.ideas)) {
       content.append(scrCreateIdeas(message.ideas));
     }
+    if (message.type === 'funnel' && Array.isArray(message.funnelChoices)) {
+      content.append(scrCreateFunnelChoices(message.funnelChoices));
+    }
     if (message.type === 'script') {
       content.append(rickEl('div', 'rick-inline-script', 'The latest draft is open in the script panel'));
     }
@@ -430,6 +444,42 @@ function scrRenderMessages() {
     container.append(row);
   });
   requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+}
+
+/**
+ * The funnel question, answered in the conversation rather than from a toggle
+ * in the header. The acronym and its meaning sit on the same card so the
+ * vocabulary is learned by using it, not looked up.
+ */
+function scrCreateFunnelChoices(choices) {
+  const session = rickState.activeSession;
+  const grid = rickEl('div', 'rick-funnel-choices');
+  choices.forEach((choice) => {
+    const card = rickEl('button', 'rick-funnel-choice');
+    card.type = 'button';
+    card.dataset.funnelChoice = choice.id;
+    card.disabled = rickState.busy;
+    // Answered choices stay on screen as a record of the decision.
+    const answered = Boolean(session?.funnel);
+    card.classList.toggle('chosen', answered && session.funnel === choice.id);
+    card.classList.toggle('spent', answered && session.funnel !== choice.id);
+    card.setAttribute('aria-label', `${choice.label}: ${choice.title}. ${choice.blurb}`);
+
+    const head = rickEl('span', 'rick-funnel-choice-head');
+    head.append(rickEl('strong', '', choice.label));
+    head.append(rickEl('span', 'rick-funnel-choice-title', choice.title));
+    if (choice.last) head.append(rickEl('span', 'rick-funnel-choice-last', 'Last time'));
+    card.append(head, rickEl('span', 'rick-funnel-choice-blurb', choice.blurb));
+    card.addEventListener('click', () => scrChooseFunnel(choice.id));
+    grid.append(card);
+  });
+  return grid;
+}
+
+async function scrChooseFunnel(funnel) {
+  const session = rickState.activeSession;
+  if (!session || rickState.busy || session.funnel) return;
+  await scrRunOperation({ kind: 'funnelChoice', sessionId: session.id, payload: { funnel } });
 }
 
 function scrCreateIdeas(ideas) {
@@ -448,6 +498,52 @@ function scrCreateIdeas(ideas) {
   return grid;
 }
 
+const RICK_VERSION_SOURCES = {
+  original: 'the first draft',
+  rebuild: 'built from another idea',
+  personalized: 'your personal experience',
+  revision: 'a revision',
+  critique: 'critique improvements',
+};
+
+/**
+ * Version chips live in the panel header rather than the scrolling body so they
+ * stay reachable while reading a long script. Built here instead of in
+ * index.html to keep the markup owned by whoever renders it.
+ */
+function scrRenderScriptVersions(session) {
+  const head = document.querySelector('.rick-script-head');
+  if (!head) return;
+  let strip = head.querySelector('[data-rick-versions]');
+  const versions = session.scriptVersions || [];
+  // Show v1 immediately. Besides making versioning discoverable, this makes
+  // it unambiguous which wording is open before the first revision creates v2.
+  if (!versions.length) {
+    strip?.remove();
+    return;
+  }
+  if (!strip) {
+    strip = rickEl('div', 'rick-versions');
+    strip.dataset.rickVersions = 'true';
+    strip.setAttribute('role', 'group');
+    strip.setAttribute('aria-label', 'Script versions');
+    head.insertBefore(strip, head.querySelector('.rick-copy-all'));
+  }
+  strip.replaceChildren();
+  versions.forEach((version) => {
+    const current = version.id === session.scriptVersionId;
+    const chip = rickEl('button', 'rick-version-chip', `v${version.number}`);
+    chip.type = 'button';
+    chip.disabled = rickState.busy;
+    chip.classList.toggle('active', current);
+    chip.setAttribute('aria-pressed', current ? 'true' : 'false');
+    const from = RICK_VERSION_SOURCES[version.source] || version.source;
+    chip.title = current ? `v${version.number}, showing now (${from})` : `Open v${version.number} (${from})`;
+    chip.addEventListener('click', () => scrSelectScriptVersion(version.id));
+    strip.append(chip);
+  });
+}
+
 function scrRenderScript() {
   const session = rickState.activeSession;
   const workspace = document.getElementById('rickWorkspace');
@@ -455,6 +551,7 @@ function scrRenderScript() {
   workspace.classList.toggle('has-script', Boolean(session.script));
   content.replaceChildren();
   scrRenderCritiqueTrigger(session);
+  scrRenderScriptVersions(session);
   if (!session.script) return;
   if (rickState.funnelRewrite?.sessionId === session.id) {
     content.append(scrCreateFunnelRewrite(rickState.funnelRewrite.funnel));
@@ -499,7 +596,7 @@ function scrCreateCritiquePanel(session) {
   if (!session.critique || rickState.critiqueChooserSessionId === session.id) {
     return scrCreateCritiqueChooser(session);
   }
-  return scrCreateCritiqueResults(session.critique);
+  return scrCreateCritiqueResults(session);
 }
 
 function scrCreateCritiqueChooser(session) {
@@ -540,7 +637,8 @@ function scrCreateCritiqueChooser(session) {
   return panel;
 }
 
-function scrCreateCritiqueResults(critique) {
+function scrCreateCritiqueResults(session) {
+  const critique = session.critique;
   const panel = rickEl('section', `rick-critique-panel results${critique.applied ? ' applied' : ''}`);
   const head = rickEl('div', 'rick-critique-head');
   const title = rickEl('div');
@@ -590,6 +688,8 @@ function scrCreateCritiqueResults(critique) {
     apply.addEventListener('click', scrApplyCritique);
     actions.append(apply);
   }
+  // Going back to the pre-critique wording is the version picker's job now, so
+  // there is no separate restore action to keep in step.
   const skip = rickEl('button', '', critique.applied ? 'Done' : 'Skip');
   skip.type = 'button';
   skip.disabled = rickState.busy;
@@ -669,6 +769,8 @@ function scrOperationRequest(operation) {
   if (operation.kind === 'critique') return { path: `${base}/critique`, body: { criticCount: operation.payload.criticCount } };
   if (operation.kind === 'critiqueApply') return { path: `${base}/critique/apply`, body: {} };
   if (operation.kind === 'critiqueSkip') return { path: `${base}/critique/skip`, body: {} };
+  if (operation.kind === 'scriptVersion') return { path: `${base}/script/version`, body: { versionId: operation.payload.versionId } };
+  if (operation.kind === 'funnelChoice') return { path: `${base}/funnel/choose`, body: { funnel: operation.payload.funnel } };
   return {
     path: `${base}/revise`,
     body: { section: operation.payload.section, instruction: operation.payload.instruction },
@@ -682,6 +784,8 @@ function scrBusyLabel(operation) {
   if (operation.kind === 'critique') return `Rick is gathering ${operation.payload.criticCount} independent ${operation.payload.criticCount === 1 ? 'critique' : 'critiques'}`;
   if (operation.kind === 'critiqueApply') return 'Rick is applying the strongest improvements';
   if (operation.kind === 'critiqueSkip') return 'Closing the critique';
+  if (operation.kind === 'scriptVersion') return `Opening v${operation.payload.number}`;
+  if (operation.kind === 'funnelChoice') return 'Rick is finding angles for that stage';
   const stage = rickState.activeSession?.stage;
   if (stage === 'brief') return 'Rick is reading the room';
   if (stage === 'ideas') return 'Rick is finding hotter angles';
@@ -706,7 +810,7 @@ async function scrRunOperation(operation) {
       body: JSON.stringify(request.body),
     });
     rickState.activeSession = data.session;
-    if (operation.kind === 'critique' || operation.kind === 'critiqueSkip') {
+    if (operation.kind === 'critique' || operation.kind === 'critiqueSkip' || operation.kind === 'scriptVersion') {
       rickState.critiqueChooserSessionId = null;
     }
     // Both produce a script that already reflects the current stage.
@@ -816,6 +920,18 @@ async function scrSkipCritique() {
   await scrRunOperation({ kind: 'critiqueSkip', sessionId: session.id, payload: {} });
 }
 
+async function scrSelectScriptVersion(versionId) {
+  const session = rickState.activeSession;
+  if (!session || rickState.busy || session.scriptVersionId === versionId) return;
+  const version = (session.scriptVersions || []).find((item) => item.id === versionId);
+  if (!version) return;
+  await scrRunOperation({
+    kind: 'scriptVersion',
+    sessionId: session.id,
+    payload: { versionId, number: version.number },
+  });
+}
+
 async function scrSetFunnel(funnel) {
   const session = rickState.activeSession;
   if (!session || rickState.busy || session.funnel === funnel) return;
@@ -883,12 +999,189 @@ function scrFormatRecordingTime(milliseconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+function scrGetTeleprompterPanelSafeArea(frameWidth, frameHeight) {
+  const width = Math.max(0, Number(frameWidth) || 0);
+  const height = Math.max(0, Number(frameHeight) || 0);
+  const sideInset = Math.min(12, width * 0.04);
+  const topInset = Math.min(54, height * 0.16);
+  const bottomInset = Math.min(70, height * 0.2);
+  const right = Math.max(sideInset, width - sideInset);
+  const bottom = Math.max(topInset, height - bottomInset);
+  const availableWidth = Math.max(0, right - sideInset);
+  const availableHeight = Math.max(0, bottom - topInset);
+  return {
+    left: sideInset,
+    top: topInset,
+    right,
+    bottom,
+    minWidth: Math.min(220, availableWidth),
+    minHeight: Math.min(110, availableHeight),
+    availableWidth,
+    availableHeight,
+  };
+}
+
+function scrConstrainTeleprompterPanelGeometry(geometry = {}, frameWidth, frameHeight) {
+  const safe = scrGetTeleprompterPanelSafeArea(frameWidth, frameHeight);
+  const finite = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+  const clamp = (value, min, max) => Math.max(min, Math.min(Math.max(min, max), value));
+  const width = clamp(finite(geometry.width, safe.availableWidth * 0.84), safe.minWidth, safe.availableWidth);
+  const height = clamp(finite(geometry.height, safe.availableHeight * 0.3), safe.minHeight, safe.availableHeight);
+  return {
+    x: clamp(finite(geometry.x, (Number(frameWidth) - width) / 2), safe.left, safe.right - width),
+    y: clamp(finite(geometry.y, Number(frameHeight) * 0.17), safe.top, safe.bottom - height),
+    width,
+    height,
+  };
+}
+
+function scrTeleprompterPanelPixels(frame) {
+  const state = rickState.teleprompter;
+  const frameWidth = frame.clientWidth;
+  const frameHeight = frame.clientHeight;
+  const saved = state.scriptPanel;
+  const geometry = saved ? {
+    x: saved.x * frameWidth,
+    y: saved.y * frameHeight,
+    width: saved.width * frameWidth,
+    height: saved.height * frameHeight,
+  } : {
+    x: frameWidth * 0.08,
+    y: frameHeight * 0.17,
+    width: frameWidth * 0.84,
+    height: Math.min(220, frameHeight * 0.3),
+  };
+  return scrConstrainTeleprompterPanelGeometry(geometry, frameWidth, frameHeight);
+}
+
+function scrStoreTeleprompterPanelGeometry(geometry, frame) {
+  const frameWidth = frame.clientWidth;
+  const frameHeight = frame.clientHeight;
+  if (!frameWidth || !frameHeight) return;
+  rickState.teleprompter.scriptPanel = {
+    x: geometry.x / frameWidth,
+    y: geometry.y / frameHeight,
+    width: geometry.width / frameWidth,
+    height: geometry.height / frameHeight,
+  };
+}
+
+function scrSetTeleprompterPanelGeometry(geometry, frame = document.getElementById('rickCameraFrame')) {
+  const panel = document.getElementById('rickTeleprompterCopy');
+  if (!frame || !panel || !frame.clientWidth || !frame.clientHeight) return null;
+  const constrained = scrConstrainTeleprompterPanelGeometry(geometry, frame.clientWidth, frame.clientHeight);
+  panel.style.left = `${constrained.x}px`;
+  panel.style.top = `${constrained.y}px`;
+  panel.style.width = `${constrained.width}px`;
+  panel.style.height = `${constrained.height}px`;
+  scrStoreTeleprompterPanelGeometry(constrained, frame);
+  return constrained;
+}
+
+function scrApplyTeleprompterPanelLayout() {
+  const state = rickState.teleprompter;
+  const frame = document.getElementById('rickCameraFrame');
+  if (!state.open || !frame?.clientWidth || !frame?.clientHeight) return;
+  scrSetTeleprompterPanelGeometry(scrTeleprompterPanelPixels(frame), frame);
+}
+
+function scrScheduleTeleprompterPanelLayout() {
+  const state = rickState.teleprompter;
+  if (!state.open) return;
+  if (state.scriptPanelLayoutFrame) cancelAnimationFrame(state.scriptPanelLayoutFrame);
+  state.scriptPanelLayoutFrame = requestAnimationFrame(() => {
+    state.scriptPanelLayoutFrame = null;
+    scrApplyTeleprompterPanelLayout();
+  });
+  if (!state.scriptPanelResizeHandler) {
+    state.scriptPanelResizeHandler = () => scrScheduleTeleprompterPanelLayout();
+    window.addEventListener('resize', state.scriptPanelResizeHandler);
+  }
+}
+
+function scrStartTeleprompterPanelInteraction(event, mode) {
+  if (event.button !== undefined && event.button !== 0) return;
+  const state = rickState.teleprompter;
+  const frame = document.getElementById('rickCameraFrame');
+  const panel = document.getElementById('rickTeleprompterCopy');
+  if (!state.open || state.outputReady || !frame || !panel) return;
+  const geometry = scrSetTeleprompterPanelGeometry(scrTeleprompterPanelPixels(frame), frame);
+  if (!geometry) return;
+  event.preventDefault();
+  event.stopPropagation();
+  scrEndTeleprompterPanelInteraction();
+  state.scriptPanelInteraction = {
+    mode,
+    pointerX: event.clientX,
+    pointerY: event.clientY,
+    geometry,
+  };
+  panel.classList.add('adjusting');
+  document.documentElement.classList.add('rick-panel-adjusting');
+  window.addEventListener('pointermove', scrMoveTeleprompterPanelInteraction, { passive: false });
+  window.addEventListener('pointerup', scrEndTeleprompterPanelInteraction);
+  window.addEventListener('pointercancel', scrEndTeleprompterPanelInteraction);
+}
+
+function scrMoveTeleprompterPanelInteraction(event) {
+  const state = rickState.teleprompter;
+  const interaction = state.scriptPanelInteraction;
+  const frame = document.getElementById('rickCameraFrame');
+  if (!interaction || !frame) return;
+  event.preventDefault();
+  const dx = event.clientX - interaction.pointerX;
+  const dy = event.clientY - interaction.pointerY;
+  const start = interaction.geometry;
+  const next = { ...start };
+  if (interaction.mode === 'move') {
+    next.x += dx;
+    next.y += dy;
+  } else {
+    const safe = scrGetTeleprompterPanelSafeArea(frame.clientWidth, frame.clientHeight);
+    const clamp = (value, min, max) => Math.max(min, Math.min(Math.max(min, max), value));
+    if (interaction.mode.includes('w')) {
+      const right = start.x + start.width;
+      next.width = clamp(start.width - dx, safe.minWidth, right - safe.left);
+      next.x = right - next.width;
+    }
+    if (interaction.mode.includes('e')) {
+      next.width = clamp(start.width + dx, safe.minWidth, safe.right - start.x);
+    }
+    if (interaction.mode.includes('n')) {
+      const bottom = start.y + start.height;
+      next.height = clamp(start.height - dy, safe.minHeight, bottom - safe.top);
+      next.y = bottom - next.height;
+    }
+    if (interaction.mode.includes('s')) {
+      next.height = clamp(start.height + dy, safe.minHeight, safe.bottom - start.y);
+    }
+  }
+  scrSetTeleprompterPanelGeometry(next, frame);
+}
+
+function scrEndTeleprompterPanelInteraction() {
+  const state = rickState.teleprompter;
+  if (!state.scriptPanelInteraction) return;
+  state.scriptPanelInteraction = null;
+  document.getElementById('rickTeleprompterCopy')?.classList.remove('adjusting');
+  document.documentElement.classList.remove('rick-panel-adjusting');
+  window.removeEventListener('pointermove', scrMoveTeleprompterPanelInteraction);
+  window.removeEventListener('pointerup', scrEndTeleprompterPanelInteraction);
+  window.removeEventListener('pointercancel', scrEndTeleprompterPanelInteraction);
+}
+
+function scrResetTeleprompterPanel() {
+  rickState.teleprompter.scriptPanel = null;
+  scrScheduleTeleprompterPanelLayout();
+}
+
 function scrReleaseTeleprompterMedia(state = rickState.teleprompter) {
   if (state.audioFrame) cancelAnimationFrame(state.audioFrame);
   state.audioFrame = null;
   if (state.frameTimerId) clearInterval(state.frameTimerId);
   state.frameTimerId = null;
   state.framingDrag = null;
+  scrEndTeleprompterPanelInteraction();
   if (state.audioContext) state.audioContext.close().catch(() => {});
   state.audioContext = null;
   if (state.stream) state.stream.getTracks().forEach((track) => track.stop());
@@ -907,6 +1200,8 @@ function scrResetTeleprompter() {
   state.mediaRequest += 1;
   clearInterval(state.timerId);
   state.timerId = null;
+  if (state.scriptPanelLayoutFrame) cancelAnimationFrame(state.scriptPanelLayoutFrame);
+  state.scriptPanelLayoutFrame = null;
   if (state.recorder && state.recorder.state !== 'inactive') {
     state.recorder.ondataavailable = null;
     state.recorder.onstop = null;
@@ -954,6 +1249,7 @@ async function scrOpenTeleprompter() {
   const overlay = document.getElementById('rickTeleprompter');
   overlay?.classList.add('open');
   overlay?.setAttribute('aria-hidden', 'false');
+  scrScheduleTeleprompterPanelLayout();
   const title = document.getElementById('rickTeleprompterTitle');
   if (title) title.textContent = session.selectedIdea?.text || session.title || 'Record your script';
   scrShowTeleprompterError();
@@ -1317,12 +1613,16 @@ function scrRenderTeleprompter() {
   const prompt = document.getElementById('rickTeleprompterPromptText');
   if (sceneLabel) sceneLabel.textContent = activeScene ? `Scene ${state.activeIndex + 1} · ${activeScene.label}` : 'Scene';
   if (prompt) prompt.textContent = activeScene?.text || '';
+  scrScheduleTeleprompterPanelLayout();
   const progressText = document.getElementById('rickTeleprompterProgressText');
   const progressPercent = document.getElementById('rickTeleprompterProgressPercent');
   const progressFill = document.getElementById('rickTeleprompterProgressFill');
   if (progressText) progressText.textContent = `${completedCount} of ${state.scenes.length} complete${skippedCount ? ` · ${skippedCount} skipped` : ''}`;
   if (progressPercent) progressPercent.textContent = `${percent}%`;
   if (progressFill) progressFill.style.width = `${percent}%`;
+  const totalDuration = document.getElementById('rickTotalDuration');
+  // Every clip change re-renders, so this stays current without its own hook.
+  if (totalDuration) totalDuration.textContent = `${scrFormatRecordingTime(scrTotalRecordedMs(state))} recorded`;
 
   const recordButton = document.getElementById('rickTeleprompterRecordBtn');
   const recordLabel = recordButton?.querySelector('strong');
@@ -1347,6 +1647,14 @@ function scrRenderTeleprompter() {
   if (next) next.disabled = recording || state.combining || state.activeIndex >= state.scenes.length - 1;
   const retake = document.getElementById('rickRetakeScene');
   if (retake) retake.disabled = recording || state.combining || !activeClip;
+  const rerecord = document.getElementById('rickRerecordBtn');
+  // Re-record belongs to the scene the creator selected. Start recording
+  // already covers a fresh scene, so this is only live for an existing take
+  // or while restarting the take currently in progress.
+  if (rerecord) {
+    rerecord.disabled = state.combining || state.switchingDevices || state.outputReady || !activeScene || !(activeClip || recording);
+    rerecord.title = activeScene ? `Restart scene ${state.activeIndex + 1} and replace only this take` : 'Select a recorded scene to re-record';
+  }
   const skip = document.getElementById('rickSkipScene');
   if (skip) {
     skip.disabled = recording || state.combining || state.outputReady || !activeScene;
@@ -1417,11 +1725,13 @@ function scrToggleRecording() {
   scrStartSceneRecording();
 }
 
-function scrStartSceneRecording() {
+function scrStartSceneRecording(options = {}) {
   const state = rickState.teleprompter;
   if (!state.stream || !state.scenes[state.activeIndex] || state.combining) return;
+  const recordingIndex = state.activeIndex;
+  const stayOnScene = Boolean(options.stayOnScene || state.clips[recordingIndex]);
   scrShowTeleprompterError();
-  state.skipped[state.activeIndex] = false;
+  state.skipped[recordingIndex] = false;
   const mimeType = scrPreferredRecordingMime();
   try {
     let recorder;
@@ -1452,17 +1762,21 @@ function scrStartSceneRecording() {
         scrRenderTeleprompter();
         return;
       }
-      const previous = state.clips[state.activeIndex];
+      const previous = state.clips[recordingIndex];
       if (previous?.url) URL.revokeObjectURL(previous.url);
-      state.clips[state.activeIndex] = {
+      state.clips[recordingIndex] = {
         blob,
         url: URL.createObjectURL(blob),
         durationMs: Date.now() - state.startedAt,
         framing: { ...state.framing },
       };
-      const nextIndex = state.clips.findIndex((clip, index) => index > state.activeIndex && !clip && !state.skipped[index]);
-      const wrappedIndex = nextIndex === -1 ? state.clips.findIndex((clip, index) => !clip && !state.skipped[index]) : nextIndex;
-      if (wrappedIndex >= 0) state.activeIndex = wrappedIndex;
+      if (stayOnScene) {
+        state.activeIndex = recordingIndex;
+      } else {
+        const nextIndex = state.clips.findIndex((clip, index) => index > recordingIndex && !clip && !state.skipped[index]);
+        const wrappedIndex = nextIndex === -1 ? state.clips.findIndex((clip, index) => !clip && !state.skipped[index]) : nextIndex;
+        if (wrappedIndex >= 0) state.activeIndex = wrappedIndex;
+      }
       scrRenderTeleprompter();
     };
     recorder.start(250);
@@ -1493,6 +1807,69 @@ function scrRetakeScene() {
     const microphoneId = document.getElementById('rickTeleprompterMic')?.value;
     scrPrepareTeleprompterMedia(cameraId, microphoneId);
   }
+}
+
+/**
+ * Total video recorded across every take. Skipped scenes contribute nothing,
+ * so this is what the combined video will actually run to.
+ */
+function scrTotalRecordedMs(state = rickState.teleprompter) {
+  return state.clips.reduce((total, clip) => total + (clip?.durationMs || 0), 0);
+}
+
+/**
+ * Stops an in-flight take and throws it away.
+ *
+ * The handlers come off before stop() because MediaRecorder fires onstop
+ * asynchronously, and that handler writes the finished clip into
+ * state.clips[activeIndex]. Left attached, an abandoned take would land back in
+ * the state a restart had just cleared. Mirrors scrResetTeleprompter.
+ */
+function scrDiscardActiveRecorder(state = rickState.teleprompter) {
+  const recorder = state.recorder;
+  if (!recorder) return false;
+  if (recorder.state !== 'inactive') {
+    recorder.ondataavailable = null;
+    recorder.onstop = null;
+    recorder.onerror = null;
+    try { recorder.stop(); } catch (_) {}
+  }
+  state.recorder = null;
+  state.chunks = [];
+  clearInterval(state.timerId);
+  state.timerId = null;
+  // onstop normally resets the readout; it is not going to run.
+  const timer = document.getElementById('rickTeleprompterTimer');
+  if (timer) timer.textContent = '00:00';
+  return true;
+}
+
+async function scrRerecordSelectedScene() {
+  const state = rickState.teleprompter;
+  const selectedIndex = state.activeIndex;
+  const selectedScene = state.scenes[selectedIndex];
+  if (state.combining || state.switchingDevices || state.outputReady || !selectedScene) return;
+  const recording = state.recorder?.state === 'recording';
+  const selectedClip = state.clips[selectedIndex];
+  if (!recording && !selectedClip) return;
+  if (!confirm(recording
+    ? `Re-record scene ${selectedIndex + 1}?\n\nThe current take will stop and restart from this scene.`
+    : `Re-record scene ${selectedIndex + 1}?\n\nOnly this scene's take will be replaced.`)) return;
+
+  scrDiscardActiveRecorder(state);
+  state.activeIndex = selectedIndex;
+  state.outputReady = false;
+  scrShowTeleprompterError();
+  document.getElementById('rickTeleprompterOutputVideo')?.pause();
+  scrRenderTeleprompter();
+
+  // Combining releases the camera, so the stream may need rebuilding first.
+  if (!state.stream) {
+    const cameraId = document.getElementById('rickTeleprompterCamera')?.value;
+    const microphoneId = document.getElementById('rickTeleprompterMic')?.value;
+    await scrPrepareTeleprompterMedia(cameraId, microphoneId);
+  }
+  scrStartSceneRecording({ stayOnScene: true });
 }
 
 function scrToggleSkipScene() {
@@ -1604,7 +1981,7 @@ function scrSetBusy(busy, label = 'Rick is cooking') {
   if (send) send.disabled = busy;
   // Every control a render can stamp with `disabled = rickState.busy` must be
   // listed here, or it stays dead after a turn that re-rendered while busy.
-  document.querySelectorAll('#rickFunnel button, .rick-idea-card, .rick-script-section button, .rick-critique-panel button, .rick-funnel-rewrite button, [data-rick-critique-trigger], .rick-error-retry').forEach((button) => { button.disabled = busy; });
+  document.querySelectorAll('#rickFunnel button, .rick-idea-card, .rick-script-section button, .rick-critique-panel button, .rick-funnel-rewrite button, .rick-version-chip, .rick-funnel-choice, [data-rick-critique-trigger], .rick-error-retry').forEach((button) => { button.disabled = busy; });
 }
 
 function scrShowError(message) {

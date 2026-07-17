@@ -79,7 +79,7 @@ test('critique routes validate critic count and skip without changing the script
   }
 });
 
-test('applying critique improvements stores the prior script and restore brings it back', async () => {
+test('applying critique keeps the prior script as a version the user can return to', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rick-critique-restore-'));
   const previous = {
     BASE_DIR: shared.BASE_DIR,
@@ -154,20 +154,32 @@ test('applying critique improvements stores the prior script and restore brings 
     assert.equal(applied.status, 200);
     const appliedPayload = await applied.json();
     assert.equal(appliedPayload.session.script.hook, 'The improved hook');
-    assert.equal(appliedPayload.session.scriptHistory.length, 1);
-    assert.deepEqual(appliedPayload.session.scriptHistory[0].script, originalScript);
-    assert.equal(appliedPayload.session.scriptHistory[0].source, 'critique');
+    // The pre-critique wording is adopted as v1, the improved script becomes v2.
+    const versions = appliedPayload.session.scriptVersions;
+    assert.equal(versions.length, 2);
+    assert.deepEqual(versions[0].script, originalScript);
+    assert.equal(versions[0].number, 1);
+    assert.equal(versions[1].source, 'critique');
+    assert.equal(appliedPayload.session.scriptVersionId, versions[1].id, 'the improved script is showing');
 
-    const restored = await fetch(`${origin}/api/scripter/sessions/${session.id}/critique/restore`, {
+    const switched = await fetch(`${origin}/api/scripter/sessions/${session.id}/script/version`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: '{}',
+      body: JSON.stringify({ versionId: versions[0].id }),
     });
-    assert.equal(restored.status, 200);
-    const restoredPayload = await restored.json();
-    assert.deepEqual(restoredPayload.session.script, originalScript);
-    assert.deepEqual(restoredPayload.session.scriptHistory, []);
-    assert.equal(restoredPayload.session.critique, null);
+    assert.equal(switched.status, 200);
+    const switchedPayload = await switched.json();
+    assert.deepEqual(switchedPayload.session.script, originalScript, 'v1 is back');
+    // Switching is lossless, so the improved version is still reachable.
+    assert.equal(switchedPayload.session.scriptVersions.length, 2);
+    assert.deepEqual(switchedPayload.session.scriptVersions[1].script, {
+      hook: 'The improved hook',
+      body: 'The improved body',
+      conclusion: 'The improved conclusion',
+      cta: 'The improved call to action',
+      caption: 'The improved caption.',
+    });
+    assert.equal(switchedPayload.session.critique, null);
     assert.deepEqual(store.get(session.id).script, originalScript);
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
@@ -183,7 +195,7 @@ test('applying critique improvements stores the prior script and restore brings 
   }
 });
 
-test('restore rejects sessions without script history and leaves the script unchanged', async () => {
+test('selecting an unknown version is rejected and leaves the script unchanged', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rick-critique-no-history-'));
   const previous = {
     BASE_DIR: shared.BASE_DIR,
@@ -208,7 +220,7 @@ test('restore rejects sessions without script history and leaves the script unch
       cta: 'Current CTA',
       caption: 'Current caption',
     };
-    delete session.scriptHistory;
+    delete session.scriptVersions;
     store.save(session);
     const originalScript = structuredClone(session.script);
 
@@ -220,13 +232,13 @@ test('restore rejects sessions without script history and leaves the script unch
     });
     const origin = `http://127.0.0.1:${server.address().port}`;
 
-    const response = await fetch(`${origin}/api/scripter/sessions/${session.id}/critique/restore`, {
+    const response = await fetch(`${origin}/api/scripter/sessions/${session.id}/script/version`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: '{}',
+      body: JSON.stringify({ versionId: 'script-version-does-not-exist' }),
     });
     assert.equal(response.status, 400);
-    assert.match((await response.json()).error, /no previous script version/i);
+    assert.match((await response.json()).error, /no longer available/i);
     assert.deepEqual(store.get(session.id).script, originalScript);
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));

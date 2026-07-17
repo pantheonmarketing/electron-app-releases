@@ -47,24 +47,41 @@ test('every control a render disables while busy is re-enabled by scrSetBusy', (
   assert.deepEqual(stuck, [], `these controls stayed disabled after the turn: ${stuck.join(', ')}`);
 });
 
-test('a funnel stage can be chosen during the brief questions', async () => {
-  const session = makeSession({ stage: 'brief' });
-  const rick = loadRick(session);
-  const { window } = rick;
-  let patched = null;
+test('the header cannot be used to skip the funnel question', () => {
+  // Before the question is answered there is nothing to change, and a live Auto
+  // button here would let someone bypass the choice without ever making it.
+  const rick = loadRick(makeSession({ stage: 'brief', funnel: null }));
+  rick.window.scrRenderFunnel();
 
+  assert.deepEqual(rick.funnelButtons().map((b) => b.disabled), [true, true, true, true]);
+  assert.equal(rick.window.document.getElementById('rickFunnel').classList.contains('unchosen'), true);
+});
+
+test('the header becomes live once a stage has been chosen', () => {
+  const rick = loadRick(makeSession({ stage: 'ideas', funnel: 'tof' }));
+  rick.window.scrRenderFunnel();
+
+  assert.deepEqual(rick.funnelButtons().map((b) => b.disabled), [false, false, false, false]);
+  assert.deepEqual(
+    rick.funnelButtons().filter((b) => b.classList.contains('active')).map((b) => b.dataset.funnel),
+    ['tof'],
+  );
+});
+
+test('changing the stage from the header still works after the choice', async () => {
+  const session = makeSession({ stage: 'ideas', funnel: 'tof' });
+  const rick = loadRick(session);
+  let patched = null;
   rick.setFetch(async (url, options) => {
     patched = { url: String(url), body: JSON.parse(options.body) };
-    return { ok: true, json: async () => ({ session: { ...session, funnel: 'tof' } }) };
+    return { ok: true, json: async () => ({ session: { ...session, funnel: 'bof' } }) };
   });
 
-  await window.scrSetFunnel('tof');
+  await rick.window.scrSetFunnel('bof');
 
-  assert.ok(patched, 'choosing a stage during the brief must not be silently swallowed');
   assert.match(patched.url, /\/funnel$/);
-  assert.equal(patched.body.funnel, 'tof');
-  assert.equal(rick.state().activeSession.funnel, 'tof');
-  assert.equal(rick.funnelButtons().find((b) => b.dataset.funnel === 'tof').classList.contains('active'), true);
+  assert.equal(patched.body.funnel, 'bof');
+  assert.equal(rick.state().activeSession.funnel, 'bof');
 });
 
 test('changing the stage under a finished script offers a rewrite instead of acting alone', async () => {
