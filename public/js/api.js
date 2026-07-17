@@ -110,6 +110,7 @@ const api = {
   async deleteTerminal(id) { return (await safeFetch(`/api/terminal/sessions/${id}`, { method:'DELETE' })).json(); },
   async terminalHistory() { return (await safeFetch('/api/terminal/history')).json(); },
   async resumeTerminal(id) { return (await safeFetch(`/api/terminal/sessions/${id}/resume`, { method:'POST' })).json(); },
+  async deleteTerminalHistory(id) { return (await safeFetch(`/api/terminal/history/${id}`, { method:'DELETE' })).json(); },
   async attachTerminal(taskId) { return (await safeFetch(`/api/tasks/${taskId}/attach-terminal`, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })).json(); },
 };
 

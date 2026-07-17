@@ -2,6 +2,7 @@
 
 let terminalSessions = {}; // id → { eventSource, outputEl }
 let terminalLayout = 1;
+let recentChatsCache = []; // last fetched history, for delete confirmation copy
 
 let currentView = 'board';
 
@@ -358,12 +359,18 @@ async function setTerminalLayout(cols) {
  * Live chats already have a pane, so they are shown but not offered for resume.
  */
 async function openRecentChatsModal() {
-  const modal = document.getElementById('recentChatsModal');
+  document.getElementById('recentChatsModal').classList.add('active');
+  await renderRecentChats();
+}
+
+/** Re-fetches the history so the list reflects deletes without closing the modal. */
+async function renderRecentChats() {
   const list = document.getElementById('recentChatsList');
-  modal.classList.add('active');
+  if (!list) return;
   list.textContent = 'Loading...';
   try {
     const { sessions } = await api.terminalHistory();
+    recentChatsCache = sessions;
     if (!sessions.length) {
       list.innerHTML = '<div style="color:#666;font-size:13px;padding:18px 0;text-align:center;">No previous chats yet</div>';
       return;
@@ -375,16 +382,41 @@ async function openRecentChatsModal() {
         s.model ? escHtml(s.model) : '',
         s.live ? 'open' : '',
       ].filter(Boolean).join(' · ');
-      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid rgba(255,255,255,0.06);">
+      return `<div class="recent-chat-row" data-chat-id="${escHtml(s.id)}" style="display:flex;align-items:center;gap:8px;padding:9px 4px;border-bottom:1px solid rgba(255,255,255,0.06);">
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.name)}</div>
           <div style="font-size:11px;color:#666;">${when}${badges ? ' · ' + badges : ''}</div>
         </div>
         <button class="btn btn-sm ${s.live ? 'btn-ghost' : 'btn-primary'}" onclick="resumeChat('${s.id}')">${s.live ? 'Go to' : 'Resume'}</button>
+        <button class="btn btn-sm btn-ghost recent-chat-delete" onclick="deleteChatHistory('${s.id}')"
+          title="Delete this chat permanently" aria-label="Delete chat: ${escHtml(s.name)}">🗑</button>
       </div>`;
     }).join('');
   } catch (e) {
     list.textContent = 'Could not load recent chats: ' + e.message;
+  }
+}
+
+/**
+ * Erases one saved chat. This is the only way to remove history now that
+ * closing a pane keeps the chat, so it always confirms first.
+ */
+async function deleteChatHistory(sessionId) {
+  const chat = (recentChatsCache || []).find(s => s.id === sessionId);
+  const name = chat ? chat.name : 'this chat';
+  const warning = chat && chat.live
+    ? `Delete "${name}" permanently?\n\nIt is still open — this ends the session and closes its pane.`
+    : `Delete "${name}" permanently?\n\nIts transcript and Claude's memory of it cannot be recovered.`;
+  if (!confirm(warning)) return;
+  try {
+    const result = await api.deleteTerminalHistory(sessionId);
+    if (result && result.error) throw new Error(result.error);
+    // A live chat also loses its pane, so drop it from the grid.
+    if (terminalSessions[sessionId]) removeTerminalPane(sessionId);
+    await renderRecentChats();
+    showToast('Chat deleted', 'info');
+  } catch (e) {
+    showToast('Could not delete chat: ' + e.message, 'error');
   }
 }
 
