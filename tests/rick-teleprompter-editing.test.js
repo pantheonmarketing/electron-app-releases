@@ -109,3 +109,90 @@ test('text editing cannot open during a recording', () => {
 
   assert.equal(state.editingSceneIndex, null);
 });
+
+test('deleting the selected scene removes its take and renumbers what remains', () => {
+  const session = makeSession({ script: structuredClone(SCRIPT) });
+  const rick = loadRick(session);
+  const { state, overlay } = withEditor(rick);
+  state.clips[0] = { blob: {}, url: 'blob:deleted-scene', durationMs: 4000 };
+  state.clips[1] = { blob: {}, url: 'blob:kept-scene', durationMs: 5000 };
+  const revoked = [];
+  rick.window.URL.revokeObjectURL = (url) => revoked.push(url);
+  rick.window.confirm = () => true;
+
+  rick.window.scrRenderTeleprompter();
+  assert.equal(overlay.querySelectorAll('.rick-scene-delete').length, 2);
+  assert.equal(overlay.querySelector('.rick-scene-row.active .rick-scene-delete').getAttribute('aria-label'), 'Delete scene 1');
+  assert.equal(rick.window.scrDeleteTeleprompterScene(0), true);
+
+  assert.equal(state.scenes.length, 1);
+  assert.equal(state.scenes[0].text, 'Original body text');
+  assert.equal(state.clips.length, 1);
+  assert.equal(state.clips[0].url, 'blob:kept-scene');
+  assert.deepEqual(revoked, ['blob:deleted-scene']);
+  assert.match(overlay.querySelector('#rickTeleprompterSceneList').textContent, /Scene 1/);
+  assert.doesNotMatch(overlay.querySelector('#rickTeleprompterSceneList').textContent, /Scene 2/);
+  assert.deepEqual(rick.state().activeSession.script, SCRIPT, 'deleting a recording scene does not rewrite the saved script');
+});
+
+test('the last recording scene cannot be deleted', () => {
+  const rick = loadRick(makeSession({ script: structuredClone(SCRIPT) }));
+  const { state } = withEditor(rick);
+  state.scenes = [structuredClone(SCENES[0])];
+  state.clips = [null];
+  state.skipped = [false];
+  rick.window.confirm = () => true;
+
+  assert.equal(rick.window.scrDeleteTeleprompterScene(0), false);
+  assert.equal(state.scenes.length, 1);
+});
+
+test('merging recorded scenes joins their text and clears only those takes', () => {
+  const session = makeSession({ script: structuredClone(SCRIPT) });
+  const rick = loadRick(session);
+  const { state, overlay } = withEditor(rick);
+  state.clips[0] = { blob: {}, url: 'blob:first-take', durationMs: 4000 };
+  state.clips[1] = { blob: {}, url: 'blob:second-take', durationMs: 5000 };
+  const revoked = [];
+  rick.window.URL.revokeObjectURL = (url) => revoked.push(url);
+
+  rick.window.scrRenderTeleprompter();
+  assert.equal(overlay.querySelector('.rick-scene-row.active .rick-scene-merge').getAttribute('aria-label'), 'Merge scene 1 with scene 2');
+  rick.window.confirm = () => false;
+  assert.equal(rick.window.scrMergeTeleprompterScene(0, 'next'), false);
+  assert.equal(state.scenes.length, 2, 'declining keeps both scenes and takes');
+
+  rick.window.confirm = () => true;
+  assert.equal(rick.window.scrMergeTeleprompterScene(0, 'next'), true);
+  assert.equal(state.scenes.length, 1);
+  assert.equal(state.scenes[0].text, 'Original hook text\n\nOriginal body text');
+  assert.equal(state.clips.length, 1);
+  assert.equal(state.clips[0], null);
+  assert.deepEqual(revoked, ['blob:first-take', 'blob:second-take']);
+  assert.match(overlay.querySelector('#rickTeleprompterSceneList').textContent, /Scene 1/);
+  assert.doesNotMatch(overlay.querySelector('#rickTeleprompterSceneList').textContent, /Scene 2/);
+  assert.deepEqual(rick.state().activeSession.script, SCRIPT, 'merging recording scenes does not rewrite the saved script');
+});
+
+test('selecting the last scene merges it with the previous scene and renumbers the list', () => {
+  const rick = loadRick(makeSession({ script: structuredClone(SCRIPT) }));
+  const { state, overlay } = withEditor(rick);
+  state.scenes = Array.from({ length: 10 }, (_, index) => ({
+    id: `easy-${index + 1}`,
+    section: 'easy',
+    label: `Beat ${index + 1}`,
+    text: `Words for scene ${index + 1}.`,
+    wordCount: 4,
+  }));
+  state.clips = new Array(10).fill(null);
+  state.skipped = new Array(10).fill(false);
+  state.activeIndex = 9;
+  state.sceneLayout = 'easy';
+
+  assert.equal(rick.window.scrMergeTeleprompterScene(9, 'previous'), true);
+  assert.equal(state.scenes.length, 9);
+  assert.equal(state.activeIndex, 8);
+  assert.equal(state.scenes[8].text, 'Words for scene 9.\n\nWords for scene 10.');
+  assert.match(overlay.querySelector('#rickTeleprompterSceneList').textContent, /Scene 9/);
+  assert.doesNotMatch(overlay.querySelector('#rickTeleprompterSceneList').textContent, /Scene 10/);
+});

@@ -14,6 +14,8 @@ const {
   validateCritiqueSummary,
   validateIdeas,
   validateRecordingFramings,
+  validateAiRecordingScenes,
+  validateRecordingScenes,
   validateRecordingSelection,
   validateScript,
 } = require('../lib/rick-engine');
@@ -90,6 +92,38 @@ test('teleprompter scenes preserve punctuation and intentional line breaks', () 
   });
   assert.equal(scenes[0].text, 'Start here,\nthen pause.\n\nFinish the thought!');
   assert.equal(scenes[3].text, 'Follow, for more.');
+});
+
+test('custom recording scenes are cleaned and counted without changing their text', () => {
+  const scenes = validateRecordingScenes([
+    { label: 'Opening beat', text: 'Start here,\nthen pause.' },
+    { label: 'Second beat', text: 'Now finish the thought...' },
+  ]);
+  assert.equal(scenes[0].text, 'Start here,\nthen pause.');
+  assert.equal(scenes[0].wordCount, 4);
+  assert.equal(scenes[1].id, 'custom-2');
+  assert.throws(() => validateRecordingScenes([]), /between 1 and 40/i);
+});
+
+test('AI scene splitting may move boundaries but may not rewrite the script', () => {
+  const script = {
+    hook: 'Start here, then pause.',
+    body: 'Make the first point. Then make the second.',
+    conclusion: 'That is the lesson.',
+    cta: 'Follow for more.',
+  };
+  const scenes = validateAiRecordingScenes({ scenes: [
+    { label: 'Start', text: 'Start here, then pause.' },
+    { label: 'Point one', text: 'Make the first point.' },
+    { label: 'Point two', text: 'Then make the second.' },
+    { label: 'Lesson', text: 'That is the lesson.' },
+    { label: 'Action', text: 'Follow for more.' },
+  ] }, script);
+  assert.equal(scenes.length, 5);
+  assert.equal(scenes[0].id, 'easy-1');
+  assert.throws(() => validateAiRecordingScenes({ scenes: [
+    { label: 'Changed', text: 'Start here, then stop.' },
+  ] }, script), /changed the script/i);
 });
 
 test('recording selection allows skipped scenes while preserving script order', () => {

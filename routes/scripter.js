@@ -14,6 +14,7 @@ const {
   funnelChoicesFor,
   isBriefReady,
   publicSession,
+  recordingScriptText,
   sanitizeBrief,
   selectScriptVersion,
   setFunnel,
@@ -22,7 +23,10 @@ const {
   validateCriticFeedback,
   validateCritiqueSummary,
   validateIdeas,
+  validateImportedScript,
   validateRecordingFramings,
+  validateAiRecordingScenes,
+  validateRecordingScenes,
   validateRecordingSelection,
   validateScript,
 } = require('../lib/rick-engine');
@@ -215,6 +219,30 @@ const scriptSchema = {
   required: ['reply', 'hook', 'body', 'conclusion', 'cta', 'caption'],
 };
 
+const sceneSplitSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    scenes: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 40,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          label: { type: 'string' },
+          text: { type: 'string' },
+        },
+        required: ['label', 'text'],
+      },
+    },
+  },
+  required: ['scenes'],
+};
+
+const NATURAL_SCRIPT_FORMATTING = 'Format every spoken section for easy reading out loud. Use natural punctuation, including commas for short pauses and an ellipsis only when a deliberate longer pause helps delivery. Add intentional line breaks between spoken beats. Do not overuse punctuation.';
+
 const criticFeedbackSchema = {
   type: 'object',
   additionalProperties: false,
@@ -274,7 +302,7 @@ function actionContract(action) {
   if (action === 'script') {
     return {
       schema: scriptSchema,
-      instruction: 'Write the selected idea as a complete spoken short-form script with Hook Body Conclusion CTA and Caption. Keep spoken sections free of production directions and use minimal punctuation. The reply should briefly introduce the finished script and ask whether it brings a personal experience to mind.',
+      instruction: `Write the selected idea as a complete spoken short-form script with Hook Body Conclusion CTA and Caption. Keep spoken sections free of production directions. ${NATURAL_SCRIPT_FORMATTING} The reply should briefly introduce the finished script and ask whether it brings a personal experience to mind.`,
     };
   }
   if (action === 'critique') {
@@ -292,18 +320,24 @@ function actionContract(action) {
   if (action === 'critique_apply') {
     return {
       schema: scriptSchema,
-      instruction: 'Rewrite the complete current script by applying the supplied prioritized critique improvements. Resolve disagreements using the brief selected idea and funnel intent. Return every script field and preserve the core message. Keep spoken sections natural with minimal punctuation and no production directions.',
+      instruction: `Rewrite the complete current script by applying the supplied prioritized critique improvements. Resolve disagreements using the brief selected idea and funnel intent. Return every script field and preserve the core message. Keep spoken sections natural and free of production directions. ${NATURAL_SCRIPT_FORMATTING}`,
     };
   }
   if (action === 'personalize') {
     return {
       schema: scriptSchema,
-      instruction: 'Rewrite the full script around the personal experience in the latest user message. Keep the selected idea and funnel intent recognizable. The reply should briefly say what changed.',
+      instruction: `Rewrite the full script around the personal experience in the latest user message. Keep the selected idea and funnel intent recognizable. ${NATURAL_SCRIPT_FORMATTING} The reply should briefly say what changed.`,
+    };
+  }
+  if (action === 'scene_split') {
+    return {
+      schema: sceneSplitSchema,
+      instruction: 'Split the current Hook, Body, Conclusion, and CTA into short, natural recording beats in that exact order. Preserve every word and punctuation mark exactly; only choose scene boundaries and add a short friendly label for each scene. Aim for roughly 6 to 18 words per scene, keep complete thoughts together, and never add, remove, rewrite, or repeat words.',
     };
   }
   return {
     schema: scriptSchema,
-    instruction: 'Revise the existing script according to the latest instruction. Return every script field. Keep fields outside the requested section unchanged unless a small consistency edit is required. The reply should briefly describe the revision.',
+    instruction: `Revise the existing script according to the latest instruction. Return every script field. Keep fields outside the requested section unchanged unless a small consistency edit is required. ${NATURAL_SCRIPT_FORMATTING} The reply should briefly describe the revision.`,
   };
 }
 
@@ -504,7 +538,7 @@ const AI_ERROR_RULES = [
   { test: /fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|EAI_AGAIN/i, message: 'Could not reach the AI provider. Check your internet connection then retry.' },
   { test: /ENOENT|spawn|not recognized|command not found/i, message: 'The local AI could not start. Check it is installed and signed in then retry.' },
   { test: /exited with code|local ai/i, message: 'The local AI stopped before finishing. Check it is signed in then retry.' },
-  { test: /unreadable response|exactly 10 ideas|duplicate ideas|incomplete script|production directions|incomplete critic|incomplete critique/i, message: 'Rick sent back an answer in the wrong shape. Retry usually clears it up.' },
+  { test: /unreadable response|exactly 10 ideas|duplicate ideas|incomplete script|production directions|incomplete critic|incomplete critique|changed the script while splitting|recording scenes/i, message: 'Rick sent back an answer in the wrong shape. Retry usually clears it up.' },
 ];
 
 /**
@@ -627,6 +661,37 @@ router.post('/scripter/sessions', (req, res) => {
   res.status(201).json({ session: publicSession(session) });
 });
 
+router.post('/scripter/sessions/:id/import-script', (req, res) => {
+  const session = findSessionOr404(req, res);
+  if (!session) return;
+  if (busySessions.has(session.id)) return res.status(409).json({ error: 'Rick is already working on this session' });
+  try {
+    ensureScriptVersions(session);
+    const script = validateImportedScript(req.body?.text);
+    const suppliedTitle = cleanText(req.body?.title, 80);
+    const firstLine = cleanText(script.importedText.split('\n').find(Boolean), 80);
+    const title = suppliedTitle || firstLine || 'Imported script';
+    session.script = script;
+    addScriptVersion(session, 'imported');
+    session.title = title;
+    session.selectedIdea = { index: null, text: title };
+    session.stage = 'personalize';
+    session.recording = null;
+    session.critique = null;
+    session.completed = false;
+    session.messages.push(createMessage('user', 'text', { text: `Imported script · ${title}` }));
+    session.messages.push(createMessage('assistant', 'script', {
+      text: 'Your script is loaded word for word and ready for the teleprompter',
+      script,
+    }));
+    setUpdated(session);
+    getStore().save(session);
+    res.json({ session: publicSession(session) });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 router.get('/scripter/sessions/:id', (req, res) => {
   const session = findSessionOr404(req, res);
   if (session) res.json({ session: publicSession(session) });
@@ -644,6 +709,7 @@ router.get('/scripter/sessions/:id/teleprompter', (req, res) => {
     );
     res.json({
       scenes: createRecordingScenes(version.script),
+      fullText: recordingScriptText(version.script),
       versionId: version.id,
       versionNumber: version.number,
       versions,
@@ -651,6 +717,35 @@ router.get('/scripter/sessions/:id/teleprompter', (req, res) => {
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/scripter/sessions/:id/teleprompter/scenes', async (req, res) => {
+  const session = findSessionOr404(req, res);
+  if (!session) return;
+  if (!session.script) return res.status(400).json({ error: 'Build a script before opening the teleprompter' });
+  if (busySessions.has(session.id)) return res.status(409).json({ error: 'Rick is already working on this script' });
+  if (cleanText(req.body?.layout, 20) !== 'easy') return res.status(400).json({ error: 'Choose the Easy-read scene layout' });
+
+  busySessions.add(session.id);
+  try {
+    const { version, versions } = resolveRecordingScriptVersion(session, req.body?.versionId);
+    const result = await callRick('scene_split', { ...session, script: version.script }, 'Create short Easy-read recording scenes without changing the script.');
+    const scenes = validateAiRecordingScenes(result, version.script);
+    res.json({
+      scenes,
+      fullText: recordingScriptText(version.script),
+      layout: 'easy',
+      versionId: version.id,
+      versionNumber: version.number,
+      versions,
+      output: null,
+    });
+  } catch (error) {
+    console.error('[Rick] Easy-read scene split failed:', error.message);
+    sendAiFailure(res, error, 'Rick could not split that script into Easy-read scenes. Retry in a moment.');
+  } finally {
+    busySessions.delete(session.id);
   }
 });
 
@@ -667,7 +762,9 @@ router.post('/scripter/sessions/:id/recordings/combine', (req, res) => {
     let scenes;
     try {
       selectedVersion = resolveRecordingScriptVersion(session, req.body.scriptVersionId).version;
-      scenes = createRecordingScenes(selectedVersion.script);
+      scenes = req.body.scenePlan
+        ? validateRecordingScenes(JSON.parse(String(req.body.scenePlan)))
+        : createRecordingScenes(selectedVersion.script);
     } catch (error) {
       removeFiles(files.map((file) => file.path));
       return res.status(400).json({ error: error.message });
@@ -730,6 +827,7 @@ router.post('/scripter/sessions/:id/recordings/combine', (req, res) => {
         filename: outputName,
         scriptVersionId: selectedVersion.id,
         scriptVersionNumber: selectedVersion.number,
+        sceneLayout: ['standard', 'easy', 'custom', 'continuous'].includes(String(req.body.sceneLayout)) ? String(req.body.sceneLayout) : 'standard',
         sceneCount: scenes.length,
         recordedSceneCount: files.length,
         skippedSceneCount: selection.skippedIndexes.length,

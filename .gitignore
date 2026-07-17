@@ -20,6 +20,12 @@ schedules.json.bak
 .rcedit-cache/
 .superdesign/
 
+# Local agent/browser workspace files
+.bridge/
+.bridgespace/
+.claude/settings.local.json
+msedge_*.png
+
 user-env.json
 heygen-config.json
 
@@ -33,6 +39,7 @@ student-messages.txt
 rick-sessions.json
 terminal-sessions.json
 user-prefs.json
+story-projects/
 
 # Large binaries (bundled during build, not tracked in git)
 bin/win/ffmpeg.exe

@@ -18,6 +18,7 @@ test('a chat revision updates the script verbatim and creates the next version',
   const previousOpenAiKey = process.env.OPENAI_API_KEY;
   const nativeFetch = global.fetch;
   let server;
+  let providerRequest;
   try {
     process.env.OPENAI_API_KEY = 'test-key';
     shared.BASE_DIR = tempRoot;
@@ -44,6 +45,7 @@ test('a chat revision updates the script verbatim and creates the next version',
 
     global.fetch = async (url, options) => {
       if (String(url) === 'https://api.openai.com/v1/responses') {
+        providerRequest = JSON.parse(options.body);
         return new Response(JSON.stringify({ output_text: JSON.stringify(revisedResult) }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -90,6 +92,9 @@ test('a chat revision updates the script verbatim and creates the next version',
     assert.deepEqual(payload.session.scriptVersions[1].script, payload.session.script);
     assert.equal(payload.session.scriptVersionId, payload.session.scriptVersions[1].id);
     assert.deepEqual(store.get(session.id).script, payload.session.script);
+    assert.match(providerRequest.instructions, /natural punctuation/i);
+    assert.match(providerRequest.input[0].content[0].text, /intentional line breaks/i);
+    assert.match(providerRequest.input[0].content[0].text, /ellipsis/i);
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
     global.fetch = nativeFetch;

@@ -612,14 +612,19 @@ function startServer() {
     const { readSchedules } = require('./lib/scheduler');
     const schedData = readSchedules();
     const activeSchedules = schedData.schedules.filter(s => s.enabled).length;
-    if (activeSchedules > 0) {
+    const schedulerDisabled = process.env.DISABLE_SCHEDULER === '1';
+    if (activeSchedules > 0 && !schedulerDisabled) {
       console.log(`  🕐 Scheduler: ${activeSchedules} active schedule${activeSchedules > 1 ? 's' : ''}`);
     }
 
-    // Run scheduler tick every 60 seconds
-    setInterval(runSchedulerTick, 60 * 1000);
-    // Boot catch-up after 10s delay
-    setTimeout(runSchedulerTick, 10000);
+    if (schedulerDisabled) {
+      console.log('  ○ Scheduler disabled for this development session');
+    } else {
+      // Run scheduler tick every 60 seconds
+      setInterval(runSchedulerTick, 60 * 1000);
+      // Boot catch-up after 10s delay
+      setTimeout(runSchedulerTick, 10000);
+    }
 
     console.log('');
   });

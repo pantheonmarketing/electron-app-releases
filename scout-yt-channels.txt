@@ -1,8 +1,9 @@
 # Scout YouTube channels — updated 2026-03-09
-# 5 channels
+# 6 channels
 
 @mreflow
 @LiamOttley
 @nicksaraev
 @nicksaraevdaily
 @AllAboutAI
+@GregIsenberg

@@ -551,6 +551,7 @@
           <button class="rick-new-chat" onclick="scrNewSession()" title="Start a new chat with Rick">
             <span aria-hidden="true">+</span> New chat
           </button>
+          <button class="rick-import-script-btn" onclick="scrOpenScriptImporter()" title="Load your own script from text or a file">Import script</button>
           <button class="rick-sessions-btn" onclick="scrOpenSessions()">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
             Sessions
@@ -616,8 +617,27 @@
             <button type="button" class="rick-teleprompter-back" onclick="scrCloseTeleprompter()" aria-label="Back to script">&larr;</button>
             <div><span>Record mode</span><h2 id="rickTeleprompterTitle">Record your script</h2></div>
           </div>
-          <div class="rick-teleprompter-head-status"><span id="rickTeleprompterHeadDot"></span><strong id="rickTeleprompterHeadStatus">Camera setup</strong></div>
+          <div class="rick-teleprompter-head-actions">
+            <button type="button" class="rick-change-recording-mode" id="rickChangeRecordingMode" onclick="scrShowRecordingModeChooser()">Change mode</button>
+            <div class="rick-teleprompter-head-status"><span id="rickTeleprompterHeadDot"></span><strong id="rickTeleprompterHeadStatus">Choose a mode</strong></div>
+          </div>
         </header>
+
+        <section class="rick-recording-mode-chooser" id="rickRecordingModeChooser" aria-labelledby="rickRecordingModeTitle">
+          <div class="rick-recording-mode-card-wrap">
+            <span>Choose how you want to record</span>
+            <h3 id="rickRecordingModeTitle">One script two ways to deliver it</h3>
+            <p>Pick the flow that feels natural today. Your last choice is highlighted but both are always available.</p>
+            <div class="rick-recording-mode-cards">
+              <button type="button" data-recording-mode="scenes" onclick="scrChooseRecordingMode('scenes')">
+                <i>01</i><strong>Scene by scene</strong><span>Record in smaller pieces and combine the best takes</span><em>Standard · Easy-read · Custom</em>
+              </button>
+              <button type="button" data-recording-mode="continuous" onclick="scrChooseRecordingMode('continuous')">
+                <i>02</i><strong>Read all at once</strong><span>Read the full script in one take with smooth auto-scroll</span><em>Speed · Countdown · Display controls</em>
+              </button>
+            </div>
+          </div>
+        </section>
 
         <div class="rick-teleprompter-workspace">
           <aside class="rick-teleprompter-scenes" aria-label="Recording scenes">
@@ -652,9 +672,12 @@
                   </span>
                   <button type="button" class="rick-teleprompter-copy-reset" onclick="scrResetTeleprompterPanel()" onpointerdown="event.stopPropagation()" aria-label="Reset script panel position and size" title="Reset panel">&#8634;</button>
                 </div>
-                <p id="rickTeleprompterPromptText"></p>
+                <div class="rick-teleprompter-prompt-window" id="rickTeleprompterPromptWindow" onwheel="scrHandleContinuousManualScroll(event)">
+                  <div class="rick-teleprompter-focus-line" id="rickTeleprompterFocusLine" aria-hidden="true"></div>
+                  <p id="rickTeleprompterPromptText"></p>
+                </div>
                 <div class="rick-teleprompter-text-editor" id="rickTeleprompterTextEditor" hidden>
-                  <textarea id="rickTeleprompterTextInput" maxlength="6000" aria-label="Scene text" onkeydown="scrHandleTeleprompterEditKey(event)"></textarea>
+                  <textarea id="rickTeleprompterTextInput" maxlength="24000" aria-label="Prompt text" onkeydown="scrHandleTeleprompterEditKey(event)"></textarea>
                   <div class="rick-teleprompter-text-actions">
                     <button type="button" onclick="scrCancelTeleprompterTextEdit()">Cancel</button>
                     <button type="button" class="save" onclick="scrSaveTeleprompterTextEdit()">Save text</button>
@@ -665,6 +688,7 @@
                 <i class="rick-teleprompter-resize sw" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'sw')" aria-hidden="true"></i>
                 <i class="rick-teleprompter-resize se" onpointerdown="scrStartTeleprompterPanelInteraction(event, 'se')" aria-hidden="true"></i>
               </div>
+              <div class="rick-teleprompter-countdown" id="rickTeleprompterCountdown" aria-live="assertive"></div>
               <div class="rick-camera-controls">
                 <time id="rickTeleprompterTimer">00:00</time>
                 <div class="rick-camera-actions">
@@ -682,6 +706,44 @@
               <label for="rickTeleprompterVersion">Words shown in the prompt</label>
               <select id="rickTeleprompterVersion" onchange="scrChangeTeleprompterVersion(this.value)"></select>
               <p class="rick-media-device-status" id="rickTeleprompterVersionStatus">Showing the script open when you clicked Record</p>
+            </section>
+
+            <section class="rick-scene-layout-controls">
+              <div class="rick-teleprompter-panel-label">Scene layout</div>
+              <div class="rick-scene-layout-options" role="group" aria-label="Choose how the script is divided into recording scenes">
+                <button type="button" class="active" data-scene-layout="standard" onclick="scrSetSceneLayout('standard')"><strong>Standard</strong><span>Hook, body, conclusion, CTA</span></button>
+                <button type="button" data-scene-layout="easy" onclick="scrSetSceneLayout('easy')"><strong>Easy-read</strong><span>Short AI-made speaking beats</span></button>
+                <button type="button" data-scene-layout="custom" onclick="scrSetSceneLayout('custom')"><strong>Custom</strong><span>Choose your own breaks</span></button>
+              </div>
+              <p class="rick-media-device-status" id="rickSceneLayoutStatus">Standard scene layout</p>
+            </section>
+
+            <section class="rick-continuous-controls" id="rickContinuousControls" hidden>
+              <div class="rick-teleprompter-panel-label">Scrolling teleprompter</div>
+              <div class="rick-continuous-speed-head"><label for="rickContinuousWpm">Reading speed</label><output id="rickContinuousWpmValue" for="rickContinuousWpm">130 WPM</output></div>
+              <input type="range" id="rickContinuousWpm" min="60" max="240" step="5" value="130" oninput="scrSetContinuousPreference('wpm', this.value)">
+              <div class="rick-continuous-presets" aria-label="Reading speed presets">
+                <button type="button" onclick="scrSetContinuousPreference('wpm', 90)">Slow</button>
+                <button type="button" onclick="scrSetContinuousPreference('wpm', 130)">Natural</button>
+                <button type="button" onclick="scrSetContinuousPreference('wpm', 170)">Fast</button>
+              </div>
+              <p class="rick-media-device-status" id="rickContinuousEstimate">Estimated read time 00:00</p>
+              <label for="rickContinuousProgress">Reading position</label>
+              <input type="range" id="rickContinuousProgress" min="0" max="1000" step="1" value="0" oninput="scrScrubContinuousPrompt(this.value)">
+              <div class="rick-continuous-inline-actions">
+                <button type="button" onclick="scrJumpContinuousPrompt(-5)">Jump back 5s</button>
+                <button type="button" onclick="scrResetContinuousPrompt()">Start again</button>
+              </div>
+              <div class="rick-continuous-setting-grid">
+                <label for="rickContinuousFontSize">Text size<select id="rickContinuousFontSize" onchange="scrSetContinuousPreference('fontSize', this.value)"><option value="28">Small</option><option value="42" selected>Medium</option><option value="54">Large</option><option value="64">Extra large</option></select></label>
+                <label for="rickContinuousLineHeight">Line spacing<select id="rickContinuousLineHeight" onchange="scrSetContinuousPreference('lineHeight', this.value)"><option value="1.25">Compact</option><option value="1.5" selected>Normal</option><option value="1.8">Relaxed</option></select></label>
+                <label for="rickContinuousCountdownSetting">Countdown<select id="rickContinuousCountdownSetting" onchange="scrSetContinuousPreference('countdown', this.value)"><option value="0">Off</option><option value="3" selected>3 seconds</option><option value="5">5 seconds</option><option value="10">10 seconds</option></select></label>
+                <label for="rickContinuousOpacity">Prompt opacity<select id="rickContinuousOpacity" onchange="scrSetContinuousPreference('opacity', this.value)"><option value="0.4">40%</option><option value="0.6">60%</option><option value="0.75" selected>75%</option><option value="0.9">90%</option><option value="0.95">95%</option></select></label>
+              </div>
+              <label class="rick-continuous-toggle"><input type="checkbox" id="rickContinuousMirror" onchange="scrSetContinuousPreference('mirror', this.checked)"><span>Mirror prompt text</span></label>
+              <label class="rick-continuous-toggle"><input type="checkbox" id="rickContinuousFocusGuide" checked onchange="scrSetContinuousPreference('focusGuide', this.checked)"><span>Show center focus guide</span></label>
+              <label class="rick-continuous-toggle"><input type="checkbox" id="rickContinuousAutoStop" checked onchange="scrSetContinuousPreference('autoStop', this.checked)"><span>Auto-stop two seconds after the last line</span></label>
+              <p class="rick-continuous-shortcuts">Space or → pause · ← jump back · ↑ ↓ change speed</p>
             </section>
 
             <section>
@@ -727,7 +789,46 @@
             <button type="button" class="rick-reel-video" id="rickReelVideo" onclick="scrUseRecordingInReelMaster()">Use in Reel Master</button>
           </aside>
         </div>
+
+        <div class="rick-scene-builder-backdrop" id="rickSceneBuilder" hidden onclick="scrCloseSceneBuilder(event)">
+          <section class="rick-scene-builder" role="dialog" aria-modal="true" aria-labelledby="rickSceneBuilderTitle" onclick="event.stopPropagation()">
+            <header>
+              <div><span>Custom scene layout</span><h3 id="rickSceneBuilderTitle">Choose your scene breaks</h3></div>
+              <button type="button" onclick="scrCloseSceneBuilder()" aria-label="Close custom scene builder">&times;</button>
+            </header>
+            <p>Put a blank line wherever you want a new recording scene. Your script words stay the same.</p>
+            <textarea id="rickSceneBuilderText" maxlength="24000" aria-label="Script divided into scenes" oninput="scrUpdateCustomSceneCount()" onkeydown="scrHandleSceneBuilderKey(event)"></textarea>
+            <footer>
+              <span id="rickSceneBuilderCount" aria-live="polite">0 scenes</span>
+              <div><button type="button" onclick="scrCloseSceneBuilder()">Cancel</button><button type="button" class="primary" id="rickUseCustomScenes" onclick="scrApplyCustomSceneLayout()">Use these scenes</button></div>
+            </footer>
+          </section>
+        </div>
       </section>
+
+      <div class="rick-script-import-backdrop" id="rickScriptImporter" hidden onclick="scrCloseScriptImporter(event)">
+        <section class="rick-script-import" role="dialog" aria-modal="true" aria-labelledby="rickScriptImportTitle" onclick="event.stopPropagation()">
+          <header>
+            <div><span>Your own words</span><h3 id="rickScriptImportTitle">Import a script</h3></div>
+            <button type="button" onclick="scrCloseScriptImporter()" aria-label="Close script importer">&times;</button>
+          </header>
+          <p>Paste your script or load a plain-text file. Rick keeps the wording exactly as supplied.</p>
+          <div class="rick-script-dropzone" id="rickScriptDropzone" ondragover="scrHandleScriptImportDrag(event)" ondragleave="scrHandleScriptImportDrag(event)" ondrop="scrHandleScriptImportDrop(event)">
+            <input type="file" id="rickScriptFile" accept=".txt,.md,text/plain,text/markdown" onchange="scrLoadScriptFile(this.files[0])" hidden>
+            <strong>Drop a .txt or .md file here</strong>
+            <span>or</span>
+            <button type="button" onclick="document.getElementById('rickScriptFile').click()">Choose a file</button>
+          </div>
+          <div class="rick-script-import-divider"><span>or paste the script</span></div>
+          <label for="rickScriptImportName">Script name <small>optional</small></label>
+          <input type="text" id="rickScriptImportName" maxlength="80" placeholder="My imported script">
+          <div class="rick-script-import-text-head"><label for="rickScriptImportText">Script text</label><button type="button" onclick="scrPasteScriptFromClipboard()">Paste from clipboard</button></div>
+          <textarea id="rickScriptImportText" maxlength="24000" placeholder="Paste the words you want to read..." oninput="scrUpdateScriptImportState()"></textarea>
+          <div class="rick-script-import-meta"><span id="rickScriptImportCount">0 words · 0 characters</span><span>Maximum 3,200 words and 24,000 characters</span></div>
+          <div class="rick-script-import-error" id="rickScriptImportError" role="alert"></div>
+          <footer><button type="button" onclick="scrCloseScriptImporter()">Cancel</button><button type="button" class="primary" id="rickUseImportedScript" onclick="scrImportScript()" disabled>Use this script</button></footer>
+        </section>
+      </div>
     </div>
   </div><!-- /view-rick -->
 
